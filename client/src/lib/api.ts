@@ -1,7 +1,9 @@
 import axios from 'axios'
 
 const client = axios.create({
-  baseURL: `${(import.meta as any).env?.VITE_API_URL || 'http://localhost:3099'}/api`,
+  baseURL: (import.meta as any).env?.VITE_API_URL
+    ? `${(import.meta as any).env.VITE_API_URL}/api`
+    : '/api',
 })
 
 // Attach bearer token
