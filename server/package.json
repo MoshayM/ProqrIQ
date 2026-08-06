@@ -24,6 +24,7 @@
     "multer":              "^1.4.5-lts.1",
     "p-limit":             "^5.0.0",
     "pdf-parse":           "^1.1.1",
+    "@simplewebauthn/server": "^9.0.0",
     "zod":                 "^3.23.8"
   },
   "devDependencies": {

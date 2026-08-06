@@ -112,4 +112,11 @@ export const api = {
     read:    (id: string) => client.patch(`/notifications/${id}/read`).then(d),
     readAll: ()           => client.patch('/notifications/read-all').then(d),
   },
+  passkey: {
+    authOptions:     (email?: string) => client.post('/auth/passkey/auth/options', { email }).then(d),
+    authVerify:      (body: unknown)  => client.post('/auth/passkey/auth/verify', body).then(d),
+    registerOptions: ()               => client.post('/auth/passkey/register/options').then(d),
+    registerVerify:  (body: unknown)  => client.post('/auth/passkey/register/verify', body).then(d),
+    credentials:     ()               => client.get('/auth/passkey/credentials').then(d),
+  },
 }

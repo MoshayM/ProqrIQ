@@ -16,6 +16,7 @@ interface AuthContextValue {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
+  loginWithToken: (token: string, profile: Profile) => void
   logout: () => Promise<void>
   hasRole: (roles: string[]) => boolean
 }
@@ -67,6 +68,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(profile)
   }, [])
 
+  const loginWithToken = useCallback((newToken: string, profile: Profile) => {
+    localStorage.setItem('aq_token', newToken)
+    setToken(newToken)
+    setUser(profile)
+  }, [])
+
   const logout = useCallback(async () => {
     try {
       await api.auth.logout()
@@ -95,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        loginWithToken,
         logout,
         hasRole,
       }}

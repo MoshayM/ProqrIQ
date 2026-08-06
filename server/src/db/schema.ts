@@ -420,6 +420,30 @@ export const regionalRates = sqliteTable('regional_rates', {
   updated_at:             text('updated_at').$defaultFn(() => new Date().toISOString()),
 })
 
+// ─── passkey_credentials ──────────────────────────────────────────────────────
+
+export const passkeyCredentials = sqliteTable('passkey_credentials', {
+  id:           text('id').primaryKey(),
+  user_id:      text('user_id').notNull().references(() => users.id),
+  public_key:   text('public_key').notNull(),
+  counter:      integer('counter').notNull().default(0),
+  device_type:  text('device_type'),
+  backed_up:    integer('backed_up', { mode: 'boolean' }).default(false),
+  transports:   text('transports'),
+  created_at:   text('created_at').$defaultFn(() => new Date().toISOString()),
+  last_used_at: text('last_used_at'),
+})
+
+// ─── passkey_challenges ───────────────────────────────────────────────────────
+
+export const passkeyChallenges = sqliteTable('passkey_challenges', {
+  id:         text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  challenge:  text('challenge').notNull(),
+  user_id:    text('user_id').references(() => users.id),
+  expires_at: text('expires_at').notNull(),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+})
+
 // ─── Indexes ──────────────────────────────────────────────────────────────────
 
 export const quotationsParentIdx = index('idx_quotations_parent').on(quotations.parent_quotation_id)

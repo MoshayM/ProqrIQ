@@ -11,3 +11,7 @@ export const MAX_FILE_SIZE = 50 * 1024 * 1024  // 50MB
 export const CONFIDENCE_GATE = 70
 export const MARGIN_PCT = 16
 export const MAX_ASSEMBLY_DEPTH = 3
+
+export const RP_ID     = process.env.RP_ID     || 'localhost'
+export const RP_ORIGIN = process.env.RP_ORIGIN || `http://localhost:${PORT}`
+export const RP_NAME   = 'ProqrIQ'
