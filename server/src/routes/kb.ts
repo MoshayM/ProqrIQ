@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth, requireRole } from '../middleware/auth'
-import { kbUpload } from '../middleware/upload'
+import { kbUpload, saveUploadedFile } from '../middleware/upload'
 import {
   db,
   kbDocuments,
@@ -107,11 +107,13 @@ router.post(
         ? JSON.parse(req.body.commodity_tags)
         : []
 
+      const savedPath = await saveUploadedFile(file, 'kb')
+
       await db.insert(kbDocuments).values({
         id,
-        filename: file.filename,
+        filename: savedPath.split('/').pop() ?? file.originalname,
         original_name: file.originalname,
-        file_path: file.path,
+        file_path: savedPath,
         file_size_bytes: file.size,
         mime_type: file.mimetype,
         chunk_count: 0,
@@ -123,7 +125,7 @@ router.post(
       })
 
       // Fire-and-forget ingestion
-      ingestDocument(id, file.path, commodityTags).catch(err => {
+      ingestDocument(id, savedPath, commodityTags).catch(err => {
         console.error(`KB ingestion failed for doc ${id}:`, err)
       })
 

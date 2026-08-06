@@ -19,3 +19,6 @@ credentials.txt
 playwright-report/
 test-results/
 tests/.auth/
+
+.vercel
+.env*

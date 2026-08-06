@@ -2,16 +2,8 @@ import multer, { FileFilterCallback } from 'multer'
 import path from 'path'
 import fs from 'fs'
 import { Request, Response, NextFunction } from 'express'
-import { MAX_FILE_SIZE, DRAWING_UPLOAD_PATH, KB_UPLOAD_PATH, BULK_MAX_ITEMS } from '../config'
-
-// ─── Ensure upload directories exist ─────────────────────────────────────────
-
-const projectRoot = path.resolve(__dirname, '../../..')
-const drawingDir  = path.join(projectRoot, 'data/uploads/drawings')
-const kbDir       = path.join(projectRoot, 'data/uploads/kb')
-
-fs.mkdirSync(drawingDir, { recursive: true })
-fs.mkdirSync(kbDir, { recursive: true })
+import { MAX_FILE_SIZE, BULK_MAX_ITEMS } from '../config'
+import { put } from '@vercel/blob'
 
 // ─── MIME type sets ───────────────────────────────────────────────────────────
 
@@ -26,25 +18,10 @@ const KB_MIME_TYPES = new Set([
   'application/pdf',
 ])
 
-// ─── Storage configs ──────────────────────────────────────────────────────────
+// ─── Storage configs (memory storage — works in both local and cloud) ─────────
 
-const drawingStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, drawingDir),
-  filename:    (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
-    const ext    = path.extname(file.originalname)
-    cb(null, `${unique}${ext}`)
-  },
-})
-
-const kbStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, kbDir),
-  filename:    (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
-    const ext    = path.extname(file.originalname)
-    cb(null, `${unique}${ext}`)
-  },
-})
+const drawingStorage = multer.memoryStorage()
+const kbStorage = multer.memoryStorage()
 
 // ─── File filters ─────────────────────────────────────────────────────────────
 
@@ -167,4 +144,37 @@ export function bulkDrawingUpload(req: Request, res: Response, next: NextFunctio
  */
 export function kbUpload(req: Request, res: Response, next: NextFunction): void {
   kbMulter.single('file')(req, res, (err) => handleMulterError(err, req, res, next))
+}
+
+// ─── Cloud/local file persistence helper ─────────────────────────────────────
+
+const IS_CLOUD = !!process.env.TURSO_DATABASE_URL
+
+/**
+ * In production: uploads buffer to Vercel Blob, returns the public URL.
+ * In development: saves buffer to disk, returns the relative path.
+ */
+export async function saveUploadedFile(
+  file: Express.Multer.File,
+  folder: 'drawings' | 'kb',
+): Promise<string> {
+  const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
+  const ext    = path.extname(file.originalname)
+  const name   = `${unique}${ext}`
+
+  if (IS_CLOUD) {
+    const blob = await put(`${folder}/${name}`, file.buffer, {
+      access: 'public',
+      contentType: file.mimetype,
+    })
+    return blob.url
+  } else {
+    const dir  = folder === 'drawings'
+      ? path.resolve(__dirname, '../../../data/uploads/drawings')
+      : path.resolve(__dirname, '../../../data/uploads/kb')
+    fs.mkdirSync(dir, { recursive: true })
+    const dest = path.join(dir, name)
+    fs.writeFileSync(dest, file.buffer)
+    return `uploads/${folder}/${name}`
+  }
 }

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth, requireRole } from '../middleware/auth'
-import { bulkDrawingUpload } from '../middleware/upload'
+import { bulkDrawingUpload, saveUploadedFile } from '../middleware/upload'
 import {
   db,
   costingBatches,
@@ -100,11 +100,11 @@ router.post(
         batchName = req.body.name ?? `Batch ${now}`
         sharedParams = req.body.shared_params ? JSON.parse(req.body.shared_params) : {}
         overrides = req.body.overrides ? JSON.parse(req.body.overrides) : {}
-        itemsFromFiles = files.map(f => ({
+        itemsFromFiles = await Promise.all(files.map(async f => ({
           part_name: f.originalname.replace(/\.[^.]+$/, ''),
-          source_file_path: f.path,
+          source_file_path: await saveUploadedFile(f, 'drawings'),
           source_file_name: f.originalname,
-        }))
+        })))
 
         if (itemsFromFiles.length === 0) {
           return res.status(400).json({

@@ -1,5 +1,7 @@
 import fs from 'fs'
 import path from 'path'
+import https from 'https'
+import http from 'http'
 import { db, kbChunks, kbDocuments, kbEntries } from '../db/index'
 import { eq, and, isNotNull } from 'drizzle-orm'
 
@@ -93,13 +95,26 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 
 // ─── Document ingestion ───────────────────────────────────────────────────────
 
+/** Fetch a file by URL (http/https) into a Buffer. */
+async function fetchUrl(url: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const get = url.startsWith('https') ? https.get : http.get
+    get(url, (res) => {
+      const chunks: Buffer[] = []
+      res.on('data', (c: Buffer) => chunks.push(c))
+      res.on('end', () => resolve(Buffer.concat(chunks)))
+      res.on('error', reject)
+    }).on('error', reject)
+  })
+}
+
 export async function ingestDocument(
   documentId: string,
   filePath: string,
   commodityTags: string[],
 ): Promise<number> {
-  const absPath = path.resolve(filePath)
-  const ext = path.extname(absPath).toLowerCase()
+  const isUrl = filePath.startsWith('http://') || filePath.startsWith('https://')
+  const ext = path.extname(isUrl ? new URL(filePath).pathname : filePath).toLowerCase()
 
   let text = ''
 
@@ -107,11 +122,13 @@ export async function ingestDocument(
     // Dynamic require so the module doesn't fail if pdf-parse is not installed
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
-    const buf = fs.readFileSync(absPath)
+    const buf = isUrl ? await fetchUrl(filePath) : fs.readFileSync(path.resolve(filePath))
     const parsed = await pdfParse(buf)
     text = parsed.text
   } else {
-    text = fs.readFileSync(absPath, 'utf-8')
+    text = isUrl
+      ? (await fetchUrl(filePath)).toString('utf-8')
+      : fs.readFileSync(path.resolve(filePath), 'utf-8')
   }
 
   const chunks = chunkText(text)
