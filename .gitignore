@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.env
+.env.local
+server/.env
+client/.env.local
+data/autoquote.db
+data/autoquote.db-shm
+data/autoquote.db-wal
+data/uploads/drawings/*
+data/uploads/kb/*
+!data/uploads/drawings/.gitkeep
+!data/uploads/kb/.gitkeep
+
+# Sensitive files
+credentials.txt
+
+# Test output
+playwright-report/
+test-results/
+tests/.auth/

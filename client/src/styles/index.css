@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { --brand: #e85c1a; --navy: #1e2d4e; }
+  body { @apply bg-gray-50 text-gray-900 font-sans antialiased; font-family: 'Inter', sans-serif; }
+  .font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+}
+@layer components {
+  .table-navy-header { @apply bg-[#1e2d4e] text-white font-semibold; }
+  .table-total-row   { @apply bg-[#e85c1a] text-white font-bold; }
+  .table-category-row{ @apply bg-[#1e2d4e] text-white font-bold text-sm; }
+  .card-base         { @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6; }
+  .btn-primary       { @apply bg-[#e85c1a] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#d04f12] transition-colors; }
+  .btn-secondary     { @apply bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-colors; }
+  .btn-navy          { @apply bg-[#1e2d4e] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#162240] transition-colors; }
+}

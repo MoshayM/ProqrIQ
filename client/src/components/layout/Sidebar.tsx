@@ -1,0 +1,154 @@
+import { NavLink, useNavigate } from 'react-router-dom'
+import {
+  LayoutDashboard,
+  FileText,
+  Plus,
+  Layers,
+  Package,
+  BookOpen,
+  Globe,
+  Settings,
+  LogOut,
+  Bell,
+} from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
+import { cn } from '../../lib/utils'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../lib/api'
+import type { Notification } from '@shared/types'
+
+export function Sidebar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const { data: notifs } = useQuery<Notification[]>({
+    queryKey: ['notifications'],
+    queryFn: () => api.notifications.list(),
+    refetchInterval: 30_000,
+  })
+
+  const unread = notifs?.filter((n) => !n.is_read).length ?? 0
+
+  const navItems = [
+    { to: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
+    { to: '/quotes',      label: 'All Quotes',   icon: FileText },
+    { to: '/quotes/new',  label: 'New Quote',    icon: Plus },
+    { to: '/bulk',        label: 'Bulk Costing', icon: Layers },
+    { to: '/assemblies',  label: 'Assemblies',   icon: Package },
+  ]
+
+  const adminItems = [
+    { to: '/kb',             label: 'KB Manager',     icon: BookOpen },
+    { to: '/regional-rates', label: 'Regional Rates', icon: Globe },
+  ]
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
+
+  return (
+    <aside className="w-64 bg-[#1e2d4e] text-white flex flex-col h-screen fixed left-0 top-0 z-30">
+      {/* Brand */}
+      <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">ProqrIQ</h1>
+          <p className="text-xs text-white/50 mt-0.5">Cost Engineering</p>
+        </div>
+        <NavLink
+          to="/notifications"
+          className="relative p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          aria-label="Notifications"
+        >
+          <Bell className="w-5 h-5 text-white/70" />
+          {unread > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-[#e85c1a] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
+        </NavLink>
+      </div>
+
+      {/* Main nav */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {navItems.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                isActive
+                  ? 'bg-[#e85c1a] text-white'
+                  : 'text-white/70 hover:bg-white/10 hover:text-white',
+              )
+            }
+          >
+            <Icon className="w-4 h-4 shrink-0" />
+            {label}
+          </NavLink>
+        ))}
+
+        {/* Admin section */}
+        {user?.role === 'admin' && (
+          <>
+            <div className="px-3 pt-5 pb-1 text-xs font-semibold text-white/40 uppercase tracking-wider">
+              Admin
+            </div>
+            {adminItems.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                    isActive
+                      ? 'bg-[#e85c1a] text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
+                  )
+                }
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {label}
+              </NavLink>
+            ))}
+          </>
+        )}
+      </nav>
+
+      {/* Bottom section */}
+      <div className="px-3 pb-4 space-y-0.5 border-t border-white/10 pt-3">
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+              isActive ? 'bg-[#e85c1a] text-white' : 'text-white/70 hover:bg-white/10 hover:text-white',
+            )
+          }
+        >
+          <Settings className="w-4 h-4" />
+          Settings
+        </NavLink>
+
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          Sign out
+        </button>
+
+        {/* User profile chip */}
+        <div className="mt-2 px-3 py-2.5 rounded-lg bg-white/5">
+          <p className="text-sm font-medium text-white truncate">
+            {user?.full_name ?? user?.email ?? 'Unknown user'}
+          </p>
+          <p className="text-xs text-white/50 capitalize mt-0.5">
+            {user?.role?.replace('_', ' ')}
+          </p>
+        </div>
+      </div>
+    </aside>
+  )
+}

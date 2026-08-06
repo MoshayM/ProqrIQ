@@ -1,0 +1,13 @@
+export const PORT = Number(process.env.PORT) || 3099
+export const JWT_SECRET = process.env.JWT_SECRET || 'autoquote-dev-secret-32-chars-min'
+export const NODE_ENV = process.env.NODE_ENV || 'development'
+export const BULK_CONCURRENCY = 4
+export const BULK_MAX_ITEMS = 50
+export const BULK_AI_BUDGET_PER_HOUR = 300
+export const DB_PATH = './data/autoquote.db'
+export const DRAWING_UPLOAD_PATH = './data/uploads/drawings/'
+export const KB_UPLOAD_PATH = './data/uploads/kb/'
+export const MAX_FILE_SIZE = 50 * 1024 * 1024  // 50MB
+export const CONFIDENCE_GATE = 70
+export const MARGIN_PCT = 16
+export const MAX_ASSEMBLY_DEPTH = 3
