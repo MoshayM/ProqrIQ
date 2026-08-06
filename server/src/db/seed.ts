@@ -10,9 +10,16 @@ const dbPath = path.resolve(__dirname, '../../../data/autoquote.db')
 async function main() {
   console.log('Seeding ProqrIQ database...')
 
-  const sqliteClient = createClient({ url: `file:${dbPath}` })
-  await sqliteClient.execute('PRAGMA journal_mode = WAL')
-  await sqliteClient.execute('PRAGMA foreign_keys = ON')
+  const isTurso = !!process.env.TURSO_DATABASE_URL
+  const sqliteClient = createClient(
+    isTurso
+      ? { url: process.env.TURSO_DATABASE_URL!, authToken: process.env.TURSO_AUTH_TOKEN }
+      : { url: `file:${dbPath}` }
+  )
+  if (!isTurso) {
+    await sqliteClient.execute('PRAGMA journal_mode = WAL')
+    await sqliteClient.execute('PRAGMA foreign_keys = ON')
+  }
 
   const db = drizzle(sqliteClient, { schema })
 
