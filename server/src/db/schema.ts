@@ -18,7 +18,9 @@ export const users = sqliteTable('users', {
                    enum: ['admin', 'engineer', 'cost_analyst', 'ceo'],
                  }).notNull().default('engineer'),
   is_active:     integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  avatar_url:    text('avatar_url'),
   created_at:    text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:    text('updated_at').$defaultFn(() => new Date().toISOString()),
   last_login:    text('last_login'),
 })
 

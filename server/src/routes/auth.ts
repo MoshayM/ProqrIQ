@@ -8,6 +8,7 @@ import {
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server'
 import { requireAuth } from '../middleware/auth'
+import { avatarUpload, saveUploadedFile } from '../middleware/upload'
 import { db, users, auditLog, passkeyCredentials, passkeyChallenges } from '../db/index'
 import { eq, lt, and } from 'drizzle-orm'
 import { JWT_SECRET, RP_ID, RP_ORIGIN, RP_NAME } from '../config'
@@ -70,6 +71,69 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
 // POST /auth/logout
 router.post('/logout', requireAuth, (_req: Request, res: Response) => {
   return res.json({ success: true })
+})
+
+// ─── profile management (requireAuth) ────────────────────────────────────────
+
+// PATCH /auth/profile — update display name
+router.patch('/profile', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id: userId } = (req as any).user
+    const { full_name } = req.body
+    if (!full_name || typeof full_name !== 'string' || !full_name.trim()) {
+      return res.status(422).json({ success: false, error: 'full_name is required', error_code: 'VALIDATION_FAILED' })
+    }
+    await db.update(users).set({ full_name: full_name.trim(), updated_at: new Date().toISOString() }).where(eq(users.id, userId))
+    const [updated] = await db.select().from(users).where(eq(users.id, userId))
+    const { password_hash: _ph, ...profile } = updated
+    await db.insert(auditLog).values({ user_id: userId, action: 'profile_updated', entity_type: 'user', entity_id: userId })
+    return res.json({ success: true, data: { user: profile } })
+  } catch (err) {
+    console.error('Profile update error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
+  }
+})
+
+// PATCH /auth/password — change own password
+router.patch('/password', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id: userId } = (req as any).user
+    const { old_password, new_password } = req.body
+    if (!old_password || !new_password) {
+      return res.status(422).json({ success: false, error: 'old_password and new_password are required', error_code: 'VALIDATION_FAILED' })
+    }
+    if (new_password.length < 8) {
+      return res.status(422).json({ success: false, error: 'New password must be at least 8 characters', error_code: 'VALIDATION_FAILED' })
+    }
+    const [user] = await db.select().from(users).where(eq(users.id, userId))
+    const valid = await bcrypt.compare(old_password, user.password_hash)
+    if (!valid) return res.status(401).json({ success: false, error: 'Current password is incorrect', error_code: 'AUTH_INVALID' })
+    const hash = await bcrypt.hash(new_password, 12)
+    await db.update(users).set({ password_hash: hash, updated_at: new Date().toISOString() }).where(eq(users.id, userId))
+    await db.insert(auditLog).values({ user_id: userId, action: 'password_changed', entity_type: 'user', entity_id: userId })
+    return res.json({ success: true })
+  } catch (err) {
+    console.error('Password change error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
+  }
+})
+
+// POST /auth/avatar — upload profile picture
+router.post('/avatar', requireAuth, avatarUpload, async (req: Request, res: Response) => {
+  try {
+    const { id: userId } = (req as any).user
+    const file = req.file
+    if (!file) return res.status(400).json({ success: false, error: 'No file provided', error_code: 'VALIDATION_FAILED' })
+    const avatarUrl = await saveUploadedFile(file, 'avatars')
+    await db.update(users).set({ avatar_url: avatarUrl, updated_at: new Date().toISOString() }).where(eq(users.id, userId))
+    const [updated] = await db.select().from(users).where(eq(users.id, userId))
+    const { password_hash: _ph, ...profile } = updated
+    await db.insert(auditLog).values({ user_id: userId, action: 'avatar_updated', entity_type: 'user', entity_id: userId })
+    return res.json({ success: true, data: { user: profile } })
+  } catch (err) {
+    console.error('Avatar upload error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
+  }
 })
 
 // ─── passkey — registration (requireAuth) ─────────────────────────────────────

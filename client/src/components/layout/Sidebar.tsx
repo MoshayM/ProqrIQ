@@ -5,9 +5,7 @@ import {
   Plus,
   Layers,
   Package,
-  BookOpen,
-  Globe,
-  Settings,
+  UserCircle,
   LogOut,
   Bell,
 } from 'lucide-react'
@@ -37,10 +35,6 @@ export function Sidebar() {
     { to: '/assemblies',  label: 'Assemblies',   icon: Package },
   ]
 
-  const adminItems = [
-    { to: '/kb',             label: 'KB Manager',     icon: BookOpen },
-    { to: '/regional-rates', label: 'Regional Rates', icon: Globe },
-  ]
 
   const handleLogout = async () => {
     await logout()
@@ -89,37 +83,12 @@ export function Sidebar() {
           </NavLink>
         ))}
 
-        {/* Admin section */}
-        {user?.role === 'admin' && (
-          <>
-            <div className="px-3 pt-5 pb-1 text-xs font-semibold text-white/40 uppercase tracking-wider">
-              Admin
-            </div>
-            {adminItems.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-                    isActive
-                      ? 'bg-[#e85c1a] text-white'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white',
-                  )
-                }
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </NavLink>
-            ))}
-          </>
-        )}
       </nav>
 
       {/* Bottom section */}
       <div className="px-3 pb-4 space-y-0.5 border-t border-white/10 pt-3">
         <NavLink
-          to="/settings"
+          to="/account"
           className={({ isActive }) =>
             cn(
               'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
@@ -127,8 +96,8 @@ export function Sidebar() {
             )
           }
         >
-          <Settings className="w-4 h-4" />
-          Settings
+          <UserCircle className="w-4 h-4" />
+          Account
         </NavLink>
 
         <button
@@ -140,14 +109,23 @@ export function Sidebar() {
         </button>
 
         {/* User profile chip */}
-        <div className="mt-2 px-3 py-2.5 rounded-lg bg-white/5">
-          <p className="text-sm font-medium text-white truncate">
-            {user?.full_name ?? user?.email ?? 'Unknown user'}
-          </p>
-          <p className="text-xs text-white/50 capitalize mt-0.5">
-            {user?.role?.replace('_', ' ')}
-          </p>
-        </div>
+        <NavLink to="/account" className="mt-2 flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+          {user?.avatar_url ? (
+            <img src={user.avatar_url} alt={user.full_name ?? 'Avatar'} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-[#e85c1a] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-white truncate">
+              {user?.full_name ?? user?.email ?? 'Unknown user'}
+            </p>
+            <p className="text-xs text-white/50 capitalize mt-0.5">
+              {user?.role?.replace('_', ' ')}
+            </p>
+          </div>
+        </NavLink>
       </div>
     </aside>
   )

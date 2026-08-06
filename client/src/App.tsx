@@ -14,6 +14,7 @@ import Assemblies from './pages/Assemblies'
 import KBManager from './pages/KBManager'
 import RegionalRates from './pages/RegionalRates'
 import Settings from './pages/Settings'
+import Account from './pages/Account'
 
 // ─── Route guards ─────────────────────────────────────────────────────────────
 
@@ -126,29 +127,17 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/kb"
+        path="/account"
         element={
           <ProtectedLayout>
-            <KBManager />
+            <Account />
           </ProtectedLayout>
         }
       />
-      <Route
-        path="/regional-rates"
-        element={
-          <ProtectedLayout>
-            <RegionalRates />
-          </ProtectedLayout>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedLayout>
-            <Settings />
-          </ProtectedLayout>
-        }
-      />
+      {/* Legacy redirects */}
+      <Route path="/kb"             element={<Navigate to="/account?tab=kb"     replace />} />
+      <Route path="/regional-rates" element={<Navigate to="/account?tab=rates"  replace />} />
+      <Route path="/settings"       element={<Navigate to="/account?tab=admin"  replace />} />
 
       {/* Root redirect */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -33,9 +33,12 @@ const pl = <T = any>(res: { data: { data: { data: T[] } } }): T[] => res.data.da
 
 export const api = {
   auth: {
-    login:  (email: string, password: string) => client.post('/auth/login', { email, password }).then(d),
-    me:     ()                                => client.get('/auth/me').then(d),
-    logout: ()                                => client.post('/auth/logout').then(d),
+    login:         (email: string, password: string) => client.post('/auth/login', { email, password }).then(d),
+    me:            ()                                => client.get('/auth/me').then(d),
+    logout:        ()                                => client.post('/auth/logout').then(d),
+    updateProfile: (data: unknown)                   => client.patch('/auth/profile', data).then(d),
+    changePassword:(data: unknown)                   => client.patch('/auth/password', data).then(d),
+    uploadAvatar:  (formData: FormData)              => client.post('/auth/avatar', formData).then(d),
   },
   users: {
     list:   ()                          => client.get('/users').then(d),

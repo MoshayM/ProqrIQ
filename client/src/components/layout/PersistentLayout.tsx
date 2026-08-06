@@ -50,32 +50,11 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    to: '/kb',
-    label: 'Knowledge Base',
-    adminOnly: true,
+    to: '/account',
+    label: 'Account',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-      </svg>
-    ),
-  },
-  {
-    to: '/regional-rates',
-    label: 'Regional Rates',
-    adminOnly: true,
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    to: '/settings',
-    label: 'Settings',
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
       </svg>
     ),
   },
@@ -171,16 +150,30 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
         {/* User footer */}
         <div className="border-t border-white/10 p-3">
           <div className={cn('flex items-center gap-3', collapsed && 'justify-center')}>
-            <div className="w-8 h-8 rounded-full bg-[#e85c1a] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-              {user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
-            </div>
+            <button
+              onClick={() => navigate('/account')}
+              className="flex-shrink-0 focus:outline-none"
+              title="My account"
+            >
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.full_name ?? 'Avatar'}
+                  className="w-8 h-8 rounded-full object-cover ring-2 ring-white/20"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#e85c1a] flex items-center justify-center text-white text-sm font-bold ring-2 ring-white/20">
+                  {user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
+                </div>
+              )}
+            </button>
             {!collapsed && (
-              <div className="flex-1 min-w-0">
+              <button onClick={() => navigate('/account')} className="flex-1 min-w-0 text-left">
                 <p className="text-sm font-medium text-white truncate">
                   {user?.full_name ?? user?.email}
                 </p>
                 <p className="text-xs text-blue-200 capitalize">{user?.role?.replace('_', ' ')}</p>
-              </div>
+              </button>
             )}
             {!collapsed && (
               <button

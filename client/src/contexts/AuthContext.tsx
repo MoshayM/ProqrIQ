@@ -19,6 +19,7 @@ interface AuthContextValue {
   loginWithToken: (token: string, profile: Profile) => void
   logout: () => Promise<void>
   hasRole: (roles: string[]) => boolean
+  updateUser: (updates: Partial<Profile>) => void
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -94,6 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user],
   )
 
+  const updateUser = useCallback((updates: Partial<Profile>) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev))
+  }, [])
+
   return (
     <AuthContext.Provider
       value={{
@@ -105,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loginWithToken,
         logout,
         hasRole,
+        updateUser,
       }}
     >
       {children}

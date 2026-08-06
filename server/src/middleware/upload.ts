@@ -120,6 +120,17 @@ function handleMulterError(
   next(err)
 }
 
+const AVATAR_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+
+const avatarMulter = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (AVATAR_MIME_TYPES.has(file.mimetype)) cb(null, true)
+    else cb(Object.assign(new Error('Only image files allowed (JPEG, PNG, WEBP, GIF)'), { error_code: 'INVALID_FILE_TYPE' }) as unknown as null, false)
+  },
+  limits: { fileSize: 5 * 1024 * 1024 },
+})
+
 // ─── Exported middleware ──────────────────────────────────────────────────────
 
 /**
@@ -146,6 +157,14 @@ export function kbUpload(req: Request, res: Response, next: NextFunction): void 
   kbMulter.single('file')(req, res, (err) => handleMulterError(err, req, res, next))
 }
 
+/**
+ * Single avatar image upload. Field name: 'avatar'.
+ * Accepts: JPEG, PNG, WEBP, GIF. Max: 5MB.
+ */
+export function avatarUpload(req: Request, res: Response, next: NextFunction): void {
+  avatarMulter.single('avatar')(req, res, (err) => handleMulterError(err, req, res, next))
+}
+
 // ─── Cloud/local file persistence helper ─────────────────────────────────────
 
 const IS_CLOUD = !!process.env.TURSO_DATABASE_URL
@@ -156,7 +175,7 @@ const IS_CLOUD = !!process.env.TURSO_DATABASE_URL
  */
 export async function saveUploadedFile(
   file: Express.Multer.File,
-  folder: 'drawings' | 'kb',
+  folder: 'drawings' | 'kb' | 'avatars',
 ): Promise<string> {
   const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
   const ext    = path.extname(file.originalname)
@@ -171,7 +190,9 @@ export async function saveUploadedFile(
   } else {
     const dir  = folder === 'drawings'
       ? path.resolve(__dirname, '../../../data/uploads/drawings')
-      : path.resolve(__dirname, '../../../data/uploads/kb')
+      : folder === 'kb'
+      ? path.resolve(__dirname, '../../../data/uploads/kb')
+      : path.resolve(__dirname, '../../../data/uploads/avatars')
     fs.mkdirSync(dir, { recursive: true })
     const dest = path.join(dir, name)
     fs.writeFileSync(dest, file.buffer)
