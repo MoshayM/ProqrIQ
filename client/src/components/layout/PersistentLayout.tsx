@@ -165,6 +165,22 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
           </button>
         </div>
 
+        {/* Cmd+K hint */}
+        {!collapsed && (
+          <div className="px-3 pb-2 flex-shrink-0">
+            <button
+              onClick={() => {
+                const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })
+                window.dispatchEvent(event)
+              }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 text-xs text-white/40 hover:text-white/60 hover:bg-white/5 transition-colors"
+            >
+              <span className="flex-1 text-left">Quick search…</span>
+              <kbd className="font-mono text-[10px] bg-white/10 px-1.5 py-0.5 rounded">⌘K</kbd>
+            </button>
+          </div>
+        )}
+
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-2 space-y-0.5 px-2">
           {visibleItems.map((item) => (

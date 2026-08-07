@@ -1,556 +1,407 @@
-import React, { useState, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
-import { toast } from 'sonner';
+import React, { useState, useRef } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { format } from 'date-fns'
+import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ArrowLeft,
-  CheckCircle,
-  XCircle,
-  Send,
-  Archive,
-  RotateCcw,
-  Download,
-  FileText,
-  Loader2,
-} from 'lucide-react';
-import { api } from '../../lib/api';
-import { useAuth } from '../../hooks/useAuth';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import Tab1Overview from './tabs/Tab1Overview';
-import Tab2Process from './tabs/Tab2Process';
-import Tab3Logistics from './tabs/Tab3Logistics';
-import Tab4Assumptions from './tabs/Tab4Assumptions';
-import Tab5History from './tabs/Tab5History';
+  ArrowLeft, CheckCircle, XCircle, Send, Archive, RotateCcw, Download, FileText, Loader2,
+} from 'lucide-react'
+import { api } from '../../lib/api'
+import { useAuth } from '../../hooks/useAuth'
+import { Button } from '../../components/ui/button'
+import { Badge } from '../../components/ui/badge'
+import { Skeleton, SkeletonText } from '../../components/ui/skeleton'
+import { cn } from '../../lib/utils'
+import Tab1Overview from './tabs/Tab1Overview'
+import Tab2Process from './tabs/Tab2Process'
+import Tab3Logistics from './tabs/Tab3Logistics'
+import Tab4Assumptions from './tabs/Tab4Assumptions'
+import Tab5History from './tabs/Tab5History'
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
-
-type QuoteStatus = 'draft' | 'in_review' | 'pending_approval' | 'approved' | 'archived';
-type QuoteType = 'individual' | 'assembly' | 'component';
+type QuoteStatus = 'draft' | 'in_review' | 'pending_approval' | 'approved' | 'archived'
+type QuoteType   = 'individual' | 'assembly' | 'component'
 
 interface Quotation {
-  id: string;
-  status: QuoteStatus;
-  quote_type: QuoteType;
-  confidence_score: number | null;
-  cost_eur: number | null;
-  final_price_eur: number | null;
-  margin_pct: number | null;
-  one_time_cost_eur: number | null;
-  created_at: string;
-  updated_at: string;
+  id: string; status: QuoteStatus; quote_type: QuoteType
+  confidence_score: number | null; cost_eur: number | null
+  final_price_eur: number | null; margin_pct: number | null
+  one_time_cost_eur: number | null; created_at: string; updated_at: string
   part: {
-    id: string;
-    name: string;
-    part_number: string | null;
-    commodity_type: string;
-    material: string | null;
-    primary_process: string | null;
-    dimensions: Record<string, number> | null;
-    weight_kg: number | null;
-  };
-  kb_coverage_pct: number | null;
-  ai_reasoning: string | null;
-  routing_path: string[] | null;
-  volume_sensitivity: Record<string, number> | null;
-}
-
-// ─── Badge helpers ─────────────────────────────────────────────────────────────
-
-function statusLabel(status: QuoteStatus): string {
-  switch (status) {
-    case 'draft':            return 'Draft';
-    case 'in_review':        return 'In Review';
-    case 'pending_approval': return 'Pending Approval';
-    case 'approved':         return 'Approved';
-    case 'archived':         return 'Archived';
+    id: string; name: string; part_number: string | null; commodity_type: string
+    material: string | null; primary_process: string | null
+    dimensions: Record<string, number> | null; weight_kg: number | null
   }
+  kb_coverage_pct: number | null; ai_reasoning: string | null
+  routing_path: string[] | null; volume_sensitivity: Record<string, number> | null
 }
 
-type BadgeVariant = 'default' | 'success' | 'warning' | 'danger' | 'info';
-
-function statusVariant(status: QuoteStatus): BadgeVariant {
-  switch (status) {
-    case 'draft':            return 'default';
-    case 'in_review':        return 'info';
-    case 'pending_approval': return 'warning';
-    case 'approved':         return 'success';
-    case 'archived':         return 'default';
-  }
+const STATUS_CONFIG: Record<QuoteStatus, { label: string; badge: 'default' | 'success' | 'warning' | 'danger' | 'info' }> = {
+  draft:            { label: 'Draft',           badge: 'default' },
+  in_review:        { label: 'In Review',       badge: 'info' },
+  pending_approval: { label: 'Pending Approval', badge: 'warning' },
+  approved:         { label: 'Approved',        badge: 'success' },
+  archived:         { label: 'Archived',        badge: 'default' },
 }
 
-function confidenceVariant(score: number | null): BadgeVariant {
-  if (score === null) return 'default';
-  if (score >= 80) return 'success';
-  if (score >= 60) return 'warning';
-  return 'danger';
+function confidenceVariant(s: number | null): 'default' | 'success' | 'warning' | 'danger' {
+  if (s === null) return 'default'
+  if (s >= 80) return 'success'
+  if (s >= 60) return 'warning'
+  return 'danger'
 }
 
-// ─── Tabs config ──────────────────────────────────────────────────────────────
+const TABS = ['Overview', 'Process', 'Logistics', 'Assumptions', 'History'] as const
 
-const TABS = ['Overview', 'Process', 'Logistics', 'Assumptions', 'History'] as const;
+// ─── Modals ───────────────────────────────────────────────────────────────────
 
-// ─── ApproveModal ─────────────────────────────────────────────────────────────
-
-interface ApproveModalProps {
-  onConfirm: (notes: string) => void;
-  onCancel: () => void;
-  loading: boolean;
-}
-
-function ApproveModal({ onConfirm, onCancel, loading }: ApproveModalProps) {
-  const [notes, setNotes] = useState('');
+function ConfirmModal({ title, description, confirmLabel, confirmVariant, onConfirm, onCancel, loading }: {
+  title: string; description: string; confirmLabel: string
+  confirmVariant: 'primary' | 'danger'; onConfirm: (notes: string) => void
+  onCancel: () => void; loading: boolean
+}) {
+  const [notes, setNotes] = useState('')
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Approve Quote</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          This quote will be marked as approved. You can add a note below.
-        </p>
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl"
+      >
+        <h2 className="text-lg font-semibold text-[#0f1729] mb-1">{title}</h2>
+        <p className="text-sm text-[#9aa3b2] mb-4">{description}</p>
         <textarea
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={e => setNotes(e.target.value)}
           placeholder="Add a note (optional)"
-          rows={4}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e85c1a] resize-none mb-4"
+          rows={3}
+          className="w-full border border-[#e5e8ef] rounded-xl px-3 py-2 text-sm text-[#0f1729] focus:outline-none focus:ring-2 focus:ring-navy resize-none mb-4 placeholder:text-[#9aa3b2]"
         />
-        <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onCancel} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => onConfirm(notes)}
-            disabled={loading}
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-            Approve
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onCancel} disabled={loading}>Cancel</Button>
+          <Button variant={confirmVariant} loading={loading} onClick={() => onConfirm(notes)}>
+            {confirmLabel}
           </Button>
         </div>
-      </div>
-    </div>
-  );
+      </motion.div>
+    </motion.div>
+  )
 }
 
-// ─── RejectModal ──────────────────────────────────────────────────────────────
+// ─── Loading skeleton ─────────────────────────────────────────────────────────
 
-interface RejectModalProps {
-  onConfirm: (notes: string) => void;
-  onCancel: () => void;
-  loading: boolean;
-}
-
-function RejectModal({ onConfirm, onCancel, loading }: RejectModalProps) {
-  const [notes, setNotes] = useState('');
+function QuoteDetailSkeleton() {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Reject Quote</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          This quote will be rejected and the team notified. Please provide a reason.
-        </p>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Add a note (optional)"
-          rows={4}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e85c1a] resize-none mb-4"
-        />
-        <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onCancel} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={() => onConfirm(notes)}
-            disabled={loading}
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-            Reject
-          </Button>
+    <div className="page-content space-y-6">
+      <Skeleton variant="line" height="14px" width="80px" />
+      <div className="space-y-3">
+        <Skeleton variant="line" height="32px" width="300px" />
+        <Skeleton variant="line" height="14px" width="120px" />
+        <div className="flex gap-2">
+          {[80, 100, 70].map(w => <Skeleton key={w} variant="line" height="22px" style={{ width: w }} className="rounded-full" />)}
         </div>
+        <Skeleton variant="line" height="40px" width="180px" />
+      </div>
+      <div className="flex gap-2">
+        {[100, 100, 80, 110].map((w, i) => <Skeleton key={i} height="36px" style={{ width: w }} className="rounded-lg" />)}
+      </div>
+      <div className="bg-white rounded-xl border border-[#e5e8ef] p-6">
+        <SkeletonText lines={6} />
       </div>
     </div>
-  );
+  )
 }
 
-// ─── QuoteDetail ──────────────────────────────────────────────────────────────
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function QuoteDetail() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
 
-  const [activeTab, setActiveTab] = useState(0);
-  const [showApproveModal, setShowApproveModal] = useState(false);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isApproving, setIsApproving] = useState(false);
-  const [isRejecting, setIsRejecting] = useState(false);
-  const [isArchiving, setIsArchiving] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [activeTab, setActiveTab]           = useState(0)
+  const [showApproveModal, setShowApproveModal] = useState(false)
+  const [showRejectModal, setShowRejectModal]   = useState(false)
+  const [isSubmitting, setIsSubmitting]     = useState(false)
+  const [isApproving, setIsApproving]       = useState(false)
+  const [isRejecting, setIsRejecting]       = useState(false)
+  const [isArchiving, setIsArchiving]       = useState(false)
+  const [isRestoring, setIsRestoring]       = useState(false)
+  const [isExporting, setIsExporting]       = useState(false)
 
-  const downloadAnchorRef = useRef<HTMLAnchorElement>(null);
+  const downloadAnchorRef = useRef<HTMLAnchorElement>(null)
 
-  // ── Data fetch ────────────────────────────────────────────────────────────
-  const {
-    data: quotation,
-    isLoading,
-    isError,
-  } = useQuery<Quotation>({
+  const { data: quotation, isLoading, isError } = useQuery<Quotation>({
     queryKey: ['quote', id],
     queryFn: () => api.quotes.get(id!),
     enabled: !!id,
     retry: false,
-  });
+  })
 
-  // ── Loading state ─────────────────────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-[#e85c1a]" />
-      </div>
-    );
-  }
+  if (isLoading) return <QuoteDetailSkeleton />
 
-  // ── Error / not found ─────────────────────────────────────────────────────
   if (isError || !quotation) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="bg-white rounded-lg border border-gray-200 p-8 max-w-sm w-full text-center shadow-sm">
-          <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">Quote not found</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            This quote may have been deleted or you don't have permission to view it.
-          </p>
+      <div className="page-content flex items-center justify-center min-h-[50vh]">
+        <div className="bg-white rounded-2xl border border-[#e5e8ef] p-10 max-w-sm w-full text-center shadow-sm">
+          <FileText className="h-10 w-10 text-[#9aa3b2] mx-auto mb-3" />
+          <h2 className="text-lg font-semibold text-[#0f1729] mb-2">Quote not found</h2>
+          <p className="text-sm text-[#9aa3b2] mb-6">This quote may have been deleted or you don't have permission to view it.</p>
           <Link to="/quotes">
-            <Button variant="secondary" size="sm">
-              <ArrowLeft className="h-4 w-4" />
-              Back to All Quotes
-            </Button>
+            <Button variant="secondary" size="sm" iconLeft={<ArrowLeft className="h-4 w-4" />}>Back to All Quotes</Button>
           </Link>
         </div>
       </div>
-    );
+    )
   }
 
-  // ── Derived state ─────────────────────────────────────────────────────────
-  const role = user?.role;
-  const isArchived = quotation.status === 'archived';
+  const role = user?.role
+  const isArchived = quotation.status === 'archived'
+  const statusCfg  = STATUS_CONFIG[quotation.status]
 
-  async function invalidateQueries() {
-    await queryClient.invalidateQueries({ queryKey: ['quote', id] });
-    await queryClient.invalidateQueries({ queryKey: ['quotes'] });
+  async function invalidateAll() {
+    await queryClient.invalidateQueries({ queryKey: ['quote', id] })
+    await queryClient.invalidateQueries({ queryKey: ['quotes'] })
   }
-
-  // ── Actions ───────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
-    setIsSubmitting(true);
-    try {
-      await api.quotes.submit(id!);
-      await invalidateQueries();
-      toast.success('Quote submitted for review.');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to submit quote.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    setIsSubmitting(true)
+    try { await api.quotes.submit(id!); await invalidateAll(); toast.success('Submitted for review') }
+    catch (err: unknown) { toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to submit') }
+    finally { setIsSubmitting(false) }
   }
 
   async function handleApproveConfirm(notes: string) {
-    setIsApproving(true);
-    try {
-      await api.quotes.approve(id!, { notes });
-      await invalidateQueries();
-      toast.success('Quote approved.');
-      setShowApproveModal(false);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to approve quote.');
-    } finally {
-      setIsApproving(false);
-    }
+    setIsApproving(true)
+    try { await api.quotes.approve(id!, { notes }); await invalidateAll(); toast.success('Quote approved'); setShowApproveModal(false) }
+    catch (err: unknown) { toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to approve') }
+    finally { setIsApproving(false) }
   }
 
   async function handleRejectConfirm(notes: string) {
-    setIsRejecting(true);
-    try {
-      await api.quotes.reject(id!, { notes });
-      await invalidateQueries();
-      toast.error('Quote rejected.');
-      setShowRejectModal(false);
-      navigate('/quotes');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to reject quote.');
-    } finally {
-      setIsRejecting(false);
-    }
+    setIsRejecting(true)
+    try { await api.quotes.reject(id!, { notes }); await invalidateAll(); toast.info('Quote rejected'); setShowRejectModal(false); navigate('/quotes') }
+    catch (err: unknown) { toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to reject') }
+    finally { setIsRejecting(false) }
   }
 
   async function handleArchive() {
-    setIsArchiving(true);
-    try {
-      await api.quotes.softDelete(id!);
-      await invalidateQueries();
-      toast.success('Quote archived.');
-      navigate('/quotes');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to archive quote.');
-    } finally {
-      setIsArchiving(false);
-    }
+    setIsArchiving(true)
+    try { await api.quotes.softDelete(id!); await invalidateAll(); toast.success('Archived'); navigate('/quotes') }
+    catch { toast.error('Failed to archive') }
+    finally { setIsArchiving(false) }
   }
 
   async function handleRestore() {
-    setIsRestoring(true);
-    try {
-      await api.quotes.restore(id!);
-      await invalidateQueries();
-      toast.success('Quote restored.');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to restore quote.');
-    } finally {
-      setIsRestoring(false);
-    }
+    setIsRestoring(true)
+    try { await api.quotes.restore(id!); await invalidateAll(); toast.success('Restored') }
+    catch { toast.error('Failed to restore') }
+    finally { setIsRestoring(false) }
   }
 
   async function handleExportExcel() {
-    setIsExporting(true);
+    setIsExporting(true)
     try {
-      const blob = await api.quotes.exportExcel(id!);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `quote-${id}.xlsx`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
-      toast.success('Excel export downloaded.');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Failed to export Excel.');
-    } finally {
-      setIsExporting(false);
-    }
+      const blob = await api.quotes.exportExcel(id!)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `quote-${id}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Excel downloaded')
+    } catch { toast.error('Export failed') }
+    finally { setIsExporting(false) }
   }
-
-  function handleExportPdf() {
-    toast.info('PDF export coming soon');
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Hidden anchor for programmatic downloads */}
+    <div className="page-content space-y-6">
       <a ref={downloadAnchorRef} className="hidden" aria-hidden="true" />
 
-      {/* Header */}
-      <div className="space-y-3">
-        {/* Back link */}
-        <Link
-          to="/quotes"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors"
-        >
+      {/* Back link */}
+      <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.25 }}>
+        <Link to="/quotes" className="inline-flex items-center gap-1.5 text-sm text-[#9aa3b2] hover:text-[#4a5568] transition-colors">
           <ArrowLeft className="h-4 w-4" />
           All Quotes
         </Link>
+      </motion.div>
 
-        {/* Part name + number */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{quotation.part.name}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {quotation.part.part_number ?? 'No part number'}
-          </p>
-        </div>
+      {/* Header card */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="bg-white rounded-2xl border border-[#e5e8ef] shadow-sm p-6"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          {/* Left — part info */}
+          <div className="space-y-3 flex-1 min-w-0">
+            <div>
+              <h1 className="text-2xl font-bold text-[#0f1729] tracking-tight truncate">{quotation.part.name}</h1>
+              <p className="text-sm text-[#9aa3b2] mt-0.5">{quotation.part.part_number ?? 'No part number'} · {quotation.part.commodity_type}</p>
+            </div>
 
-        {/* Badge row */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={statusVariant(quotation.status)}>
-            {statusLabel(quotation.status)}
-          </Badge>
-          {quotation.confidence_score !== null ? (
-            <Badge variant={confidenceVariant(quotation.confidence_score)}>
-              {quotation.confidence_score.toFixed(1)}% confidence
-            </Badge>
-          ) : (
-            <Badge variant="default">Confidence N/A</Badge>
-          )}
-          <Badge variant="default" className="capitalize">
-            {quotation.quote_type}
-          </Badge>
-        </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={statusCfg.badge}>{statusCfg.label}</Badge>
+              {quotation.confidence_score !== null ? (
+                <Badge variant={confidenceVariant(quotation.confidence_score)}>
+                  {quotation.confidence_score.toFixed(1)}% confidence
+                </Badge>
+              ) : (
+                <Badge variant="default">Confidence N/A</Badge>
+              )}
+              <Badge variant="default" className="capitalize">{quotation.quote_type}</Badge>
+            </div>
 
-        {/* Cost display */}
-        <div>
-          {quotation.cost_eur !== null ? (
-            <span className="font-mono text-3xl font-bold text-gray-900">
-              €{' '}
-              {new Intl.NumberFormat('de-DE', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }).format(quotation.cost_eur)}
-            </span>
-          ) : (
-            <span className="text-xl font-medium text-gray-400">Not estimated</span>
-          )}
-          {quotation.created_at && (
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-[#9aa3b2]">
               Created {format(new Date(quotation.created_at), 'dd MMM yyyy, HH:mm')}
               {' · '}Updated {format(new Date(quotation.updated_at), 'dd MMM yyyy, HH:mm')}
             </p>
-          )}
+          </div>
+
+          {/* Right — cost */}
+          <div className="text-right flex-shrink-0">
+            {quotation.cost_eur !== null ? (
+              <>
+                <p className="text-xs text-[#9aa3b2] mb-1 font-medium uppercase tracking-wider">Total Cost</p>
+                <p className="font-mono text-3xl font-bold text-[#0f1729]">
+                  €{new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(quotation.cost_eur)}
+                </p>
+              </>
+            ) : (
+              <p className="text-lg font-medium text-[#9aa3b2]">Not estimated</p>
+            )}
+          </div>
         </div>
-      </div>
+
+        {/* Confidence bar */}
+        {quotation.confidence_score !== null && (
+          <div className="mt-4 pt-4 border-t border-[#e5e8ef]">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-[#9aa3b2]">Confidence Score</span>
+              <span className="text-xs font-semibold text-[#0f1729] font-mono">{quotation.confidence_score.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 bg-[#e8ebf2] rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${quotation.confidence_score}%` }}
+                transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                className={cn(
+                  'h-full rounded-full',
+                  quotation.confidence_score >= 80 ? 'bg-emerald-500' :
+                  quotation.confidence_score >= 60 ? 'bg-amber-400' : 'bg-red-500',
+                )}
+              />
+            </div>
+          </div>
+        )}
+      </motion.div>
 
       {/* Action bar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Submit */}
-        {quotation.status === 'draft' &&
-          (role === 'engineer' || role === 'cost_analyst') && (
-            <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              Submit for Review
-            </Button>
-          )}
-
-        {/* Approve */}
-        {quotation.status === 'pending_approval' &&
-          (role === 'ceo' || role === 'admin') && (
-            <Button
-              variant="primary"
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() => setShowApproveModal(true)}
-              disabled={isApproving}
-            >
-              {isApproving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle className="h-4 w-4" />
-              )}
-              Approve
-            </Button>
-          )}
-
-        {/* Reject */}
-        {quotation.status === 'pending_approval' &&
-          (role === 'ceo' || role === 'admin') && (
-            <Button
-              variant="danger"
-              onClick={() => setShowRejectModal(true)}
-              disabled={isRejecting}
-            >
-              {isRejecting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <XCircle className="h-4 w-4" />
-              )}
-              Reject
-            </Button>
-          )}
-
-        {/* Archive */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={{ delay: 0.1, duration: 0.3 }}
+        className="flex items-center gap-2 flex-wrap"
+      >
+        {quotation.status === 'draft' && (role === 'engineer' || role === 'cost_analyst') && (
+          <Button onClick={handleSubmit} loading={isSubmitting} iconLeft={!isSubmitting ? <Send className="h-4 w-4" /> : undefined}>
+            Submit for Review
+          </Button>
+        )}
+        {quotation.status === 'pending_approval' && (role === 'ceo' || role === 'admin') && (<>
+          <Button
+            className="bg-emerald-600 hover:bg-emerald-700 text-white border-none"
+            onClick={() => setShowApproveModal(true)}
+            loading={isApproving}
+            iconLeft={!isApproving ? <CheckCircle className="h-4 w-4" /> : undefined}
+          >Approve</Button>
+          <Button variant="danger" onClick={() => setShowRejectModal(true)} loading={isRejecting} iconLeft={!isRejecting ? <XCircle className="h-4 w-4" /> : undefined}>
+            Reject
+          </Button>
+        </>)}
         {!isArchived && role === 'admin' && (
-          <Button variant="secondary" onClick={handleArchive} disabled={isArchiving}>
-            {isArchiving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Archive className="h-4 w-4" />
-            )}
-            Archive
-          </Button>
+          <Button variant="secondary" onClick={handleArchive} loading={isArchiving} iconLeft={!isArchiving ? <Archive className="h-4 w-4" /> : undefined}>Archive</Button>
         )}
-
-        {/* Restore */}
         {isArchived && role === 'admin' && (
-          <Button variant="secondary" onClick={handleRestore} disabled={isRestoring}>
-            {isRestoring ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RotateCcw className="h-4 w-4" />
-            )}
-            Restore
-          </Button>
+          <Button variant="secondary" onClick={handleRestore} loading={isRestoring} iconLeft={!isRestoring ? <RotateCcw className="h-4 w-4" /> : undefined}>Restore</Button>
         )}
-
-        {/* Export Excel */}
-        <Button variant="ghost" onClick={handleExportExcel} disabled={isExporting}>
-          {isExporting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Export Excel
-        </Button>
-
-        {/* Export PDF */}
-        <Button variant="ghost" onClick={handleExportPdf}>
-          <FileText className="h-4 w-4" />
-          Export PDF
-        </Button>
-      </div>
+        <div className="ml-auto flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={handleExportExcel} loading={isExporting} iconLeft={!isExporting ? <Download className="h-4 w-4" /> : undefined}>
+            Excel
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => toast.info('PDF export coming soon')} iconLeft={<FileText className="h-4 w-4" />}>
+            PDF
+          </Button>
+        </div>
+      </motion.div>
 
       {/* Tabs */}
-      <div>
-        <div className="flex border-b border-gray-200 mb-6">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      >
+        {/* Tab bar */}
+        <div className="relative flex border-b border-[#e5e8ef] mb-6 gap-1">
           {TABS.map((tab, index) => (
             <button
               key={tab}
               onClick={() => setActiveTab(index)}
-              className={[
-                'px-4 py-2 text-sm font-medium cursor-pointer transition-colors whitespace-nowrap',
-                activeTab === index
-                  ? 'border-b-2 border-[#e85c1a] text-[#e85c1a]'
-                  : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent',
-              ].join(' ')}
+              className={cn(
+                'relative px-4 py-2.5 text-sm font-medium transition-colors whitespace-nowrap',
+                activeTab === index ? 'text-[#0f1729]' : 'text-[#9aa3b2] hover:text-[#4a5568]',
+              )}
             >
               {tab}
+              {activeTab === index && (
+                <motion.div
+                  layoutId="tab-indicator"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-t-full"
+                  transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                />
+              )}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
-        <div>
-          {activeTab === 0 && (
-            <Tab1Overview quotation={quotation} quotationId={id!} />
-          )}
-          {activeTab === 1 && (
-            <Tab2Process quotation={quotation} quotationId={id!} />
-          )}
-          {activeTab === 2 && (
-            <Tab3Logistics quotation={quotation} quotationId={id!} />
-          )}
-          {activeTab === 3 && (
-            <Tab4Assumptions quotation={quotation} quotationId={id!} />
-          )}
-          {activeTab === 4 && (
-            <Tab5History quotation={quotation} quotationId={id!} />
-          )}
-        </div>
-      </div>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {activeTab === 0 && <Tab1Overview quotation={quotation} quotationId={id!} />}
+            {activeTab === 1 && <Tab2Process  quotation={quotation} quotationId={id!} />}
+            {activeTab === 2 && <Tab3Logistics quotation={quotation} quotationId={id!} />}
+            {activeTab === 3 && <Tab4Assumptions quotation={quotation} quotationId={id!} />}
+            {activeTab === 4 && <Tab5History  quotation={quotation} quotationId={id!} />}
+          </motion.div>
+        </AnimatePresence>
+      </motion.div>
 
       {/* Modals */}
-      {showApproveModal && (
-        <ApproveModal
-          onConfirm={handleApproveConfirm}
-          onCancel={() => setShowApproveModal(false)}
-          loading={isApproving}
-        />
-      )}
-      {showRejectModal && (
-        <RejectModal
-          onConfirm={handleRejectConfirm}
-          onCancel={() => setShowRejectModal(false)}
-          loading={isRejecting}
-        />
-      )}
+      <AnimatePresence>
+        {showApproveModal && (
+          <ConfirmModal
+            title="Approve Quote" description="This quote will be marked as approved."
+            confirmLabel="Approve" confirmVariant="primary"
+            onConfirm={handleApproveConfirm} onCancel={() => setShowApproveModal(false)} loading={isApproving}
+          />
+        )}
+        {showRejectModal && (
+          <ConfirmModal
+            title="Reject Quote" description="This quote will be rejected and the team notified. Please provide a reason."
+            confirmLabel="Reject" confirmVariant="danger"
+            onConfirm={handleRejectConfirm} onCancel={() => setShowRejectModal(false)} loading={isRejecting}
+          />
+        )}
+      </AnimatePresence>
     </div>
-  );
+  )
 }
