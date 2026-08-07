@@ -14,6 +14,7 @@ import {
   ChevronRight,
   LogOut,
   Bell,
+  Brain,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api'
@@ -27,10 +28,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
-  { to: '/quotes',     label: 'Quotations',  icon: FileText },
-  { to: '/bulk',       label: 'Bulk Costing', icon: Layers },
-  { to: '/assemblies', label: 'Assemblies',  icon: Package },
+  { to: '/dashboard',  label: 'Dashboard',     icon: LayoutDashboard },
+  { to: '/quotes',     label: 'Quotations',    icon: FileText },
+  { to: '/bulk',       label: 'Bulk Costing',  icon: Layers },
+  { to: '/assemblies', label: 'Assemblies',    icon: Package },
+  { to: '/ai-control', label: 'AI Control',    icon: Brain, adminOnly: true },
 ]
 
 const sidebarVariants = {
@@ -56,7 +58,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
   }
 
   const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.adminOnly || hasRole(['admin']),
+    (item) => !item.adminOnly || hasRole(['admin', 'ceo', 'developer', 'owner']),
   )
 
   return (

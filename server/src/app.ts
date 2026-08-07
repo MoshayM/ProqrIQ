@@ -17,6 +17,7 @@ import { router as kbRouter }           from './routes/kb'
 import { router as bulkBatchesRouter }  from './routes/bulkBatches'
 import { router as assembliesRouter }   from './routes/assemblies'
 import notificationsRouter              from './routes/notifications'
+import { router as adminConfigRouter }  from './routes/adminConfig'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 const app = express()
@@ -81,6 +82,7 @@ app.use('/api/kb',            kbRouter)
 app.use('/api/bulk-batches',  bulkBatchesRouter)
 app.use('/api/assemblies',    assembliesRouter)
 app.use('/api/notifications', notificationsRouter)
+app.use('/api/admin',        adminConfigRouter)
 
 // Standalone assumptions confirm route
 app.patch('/api/assumptions/:id/confirm', (req, res, next) => {

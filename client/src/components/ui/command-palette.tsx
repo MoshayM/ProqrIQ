@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, LayoutDashboard, FileText, Plus, Layers, Package, Settings, LogOut, X } from 'lucide-react'
+import { Search, LayoutDashboard, FileText, Plus, Layers, Package, Settings, LogOut, X, Brain } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
 
@@ -34,8 +34,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'new-quote',  label: 'New Quote',        description: 'Start a new costing quote', icon: Plus, action: () => go('/quotes/new'), keywords: ['create', 'add'] },
     { id: 'bulk',       label: 'Bulk Costing',     icon: Layers,          action: () => go('/bulk'),        keywords: ['batch', 'multiple'] },
     { id: 'assemblies', label: 'Assemblies',       icon: Package,         action: () => go('/assemblies'),  keywords: ['bom', 'component'] },
-    { id: 'account',    label: 'Account Settings', icon: Settings,        action: () => go('/account'),     keywords: ['profile', 'admin'] },
-    { id: 'logout',     label: 'Sign Out',         icon: LogOut,          action: async () => { await logout(); navigate('/login'); onClose() }, keywords: ['log out', 'exit'] },
+    { id: 'account',     label: 'Account Settings', icon: Settings,        action: () => go('/account'),      keywords: ['profile', 'admin'] },
+    { id: 'ai-control',  label: 'AI Control',       description: 'Model routing & rate limits', icon: Brain, action: () => go('/ai-control'), keywords: ['model', 'budget', 'config', 'claude'] },
+    { id: 'logout',      label: 'Sign Out',         icon: LogOut,          action: async () => { await logout(); navigate('/login'); onClose() }, keywords: ['log out', 'exit'] },
   ]
 
   const filtered = query.trim()

@@ -115,6 +115,12 @@ export const api = {
     read:    (id: string) => client.patch(`/notifications/${id}/read`).then(d),
     readAll: ()           => client.patch('/notifications/read-all').then(d),
   },
+  admin: {
+    getAiConfig:   ()              => client.get('/admin/ai-config').then(d),
+    patchAiConfig: (data: unknown) => client.patch('/admin/ai-config', data).then(d),
+    resetAiConfig: ()              => client.post('/admin/ai-config/reset').then(d),
+    getAiUsage:    ()              => client.get('/admin/ai-usage').then(d),
+  },
   passkey: {
     authOptions:     (email?: string) => client.post('/auth/passkey/auth/options', { email }).then(d),
     authVerify:      (body: unknown)  => client.post('/auth/passkey/auth/verify', body).then(d),
