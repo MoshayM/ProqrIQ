@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Navy background -->
+  <rect width="32" height="32" rx="8" fill="#1e2d4e"/>
+  <!-- Letter P body -->
+  <rect x="8" y="8" width="4" height="16" rx="2" fill="white"/>
+  <!-- P bowl (top half circle shape) -->
+  <path d="M12 8h4a5 5 0 0 1 0 10h-4" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Circuit node dots (brand orange) -->
+  <circle cx="22" cy="22" r="2.5" fill="#e85c1a"/>
+  <circle cx="27" cy="19" r="1.5" fill="#e85c1a" opacity="0.7"/>
+  <circle cx="24" cy="27" r="1.5" fill="#e85c1a" opacity="0.7"/>
+  <!-- Connector lines -->
+  <line x1="22" y1="22" x2="27" y2="19" stroke="#e85c1a" stroke-width="1" opacity="0.5"/>
+  <line x1="22" y1="22" x2="24" y2="27" stroke="#e85c1a" stroke-width="1" opacity="0.5"/>
+</svg>

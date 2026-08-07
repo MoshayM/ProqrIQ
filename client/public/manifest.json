@@ -1,0 +1,12 @@
+{
+  "name": "ProqrIQ",
+  "short_name": "ProqrIQ",
+  "description": "B2B cost engineering and quotation platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e2d4e",
+  "theme_color": "#1e2d4e",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

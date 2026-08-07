@@ -1,4 +1,4 @@
-# CLAUDE.md — ManufactureIQ Nexus
+# CLAUDE.md — ProqrIQ
 
 > This file is read by Claude Code on every session.
 > It defines project context, conventions, and rules.
@@ -9,7 +9,7 @@
 
 ## What this project is
 
-ManufactureIQ Nexus — a local desktop B2B cost engineering and quotation
+ProqrIQ — a B2B cost engineering and quotation
 application for Pepperl+Fuchs (P+F). Engineers upload part drawings, AI
 analyses them, queries an internal knowledge base of PDF engineering documents,
 and generates structured cost breakdowns with confidence scores (target 98%).
