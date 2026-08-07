@@ -5,7 +5,6 @@ import {
   Plus,
   Layers,
   Package,
-  UserCircle,
   LogOut,
   Bell,
 } from 'lucide-react'
@@ -87,19 +86,6 @@ export function Sidebar() {
 
       {/* Bottom section */}
       <div className="px-3 pb-4 space-y-0.5 border-t border-white/10 pt-3">
-        <NavLink
-          to="/account"
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
-              isActive ? 'bg-[#e85c1a] text-white' : 'text-white/70 hover:bg-white/10 hover:text-white',
-            )
-          }
-        >
-          <UserCircle className="w-4 h-4" />
-          Account
-        </NavLink>
-
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors"

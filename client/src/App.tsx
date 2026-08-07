@@ -135,9 +135,9 @@ function AppRoutes() {
         }
       />
       {/* Legacy redirects */}
-      <Route path="/kb"             element={<Navigate to="/account?tab=kb"     replace />} />
-      <Route path="/regional-rates" element={<Navigate to="/account?tab=rates"  replace />} />
-      <Route path="/settings"       element={<Navigate to="/account?tab=admin"  replace />} />
+      <Route path="/kb"             element={<Navigate to="/account?tab=kb"    replace />} />
+      <Route path="/regional-rates" element={<Navigate to="/account?tab=rates" replace />} />
+      <Route path="/settings"       element={<Navigate to="/account"           replace />} />
 
       {/* Root redirect */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
