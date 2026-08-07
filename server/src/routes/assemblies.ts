@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { requirePlan } from '../middleware/plan'
 import {
   db,
   quotations,
@@ -21,7 +22,7 @@ import { MAX_ASSEMBLY_DEPTH } from '../config'
 
 const router = Router()
 
-router.use(requireAuth)
+router.use(requireAuth, requirePlan('pro'))
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -735,7 +736,7 @@ router.post('/:id/rollup', requireRole(['engineer', 'admin']), async (req: Reque
 })
 
 // ─── GET /assemblies/:id/export-excel ────────────────────────────────────────
-router.get('/:id/export-excel', async (req: Request, res: Response) => {
+router.get('/:id/export-excel', requirePlan('pro'), async (req: Request, res: Response) => {
   try {
     const [assembly] = await db.select().from(quotations).where(and(
       eq(quotations.id, req.params.id),

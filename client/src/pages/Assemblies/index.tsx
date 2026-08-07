@@ -12,7 +12,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge'
 import { Skeleton } from '../../components/ui/skeleton'
 import { EmptyState } from '../../components/ui/empty-state'
+import { AssemblyEmptyIllustration, ComponentsEmptyIllustration, AssemblyOpsEmptyIllustration } from '../../components/ui/illustrations'
 import { cn } from '../../lib/utils'
+import { usePageTitle } from '../../hooks/usePageTitle'
+import { UpgradeGate } from '../../components/ui/UpgradeGate'
+import { useSubscription } from '../../hooks/useSubscription'
 
 interface Quotation {
   id: string
@@ -257,6 +261,133 @@ function AddComponentModal({ assemblyId, onClose }: { assemblyId: string; onClos
   )
 }
 
+// ─── BOM TREE ────────────────────────────────────────────────────────────────
+
+const TYPE_ORDER = ['sub_assembly', 'machined_part', 'purchased_standard']
+
+function BomTree({ components, onRemove, removing }: {
+  components: AssemblyComponent[]
+  onRemove: (id: string) => void
+  removing: boolean
+}) {
+  const sorted = [...components].sort((a, b) =>
+    TYPE_ORDER.indexOf(a.component_type) - TYPE_ORDER.indexOf(b.component_type)
+  )
+
+  const totalCost = sorted.reduce((sum, c) => sum + ((c.child_quotation?.cost_eur ?? 0) * c.quantity), 0)
+
+  return (
+    <div className="space-y-2">
+      {/* Tree header */}
+      <div className="grid grid-cols-12 gap-2 px-3 pb-1 text-xs font-semibold text-[#9aa3b2] uppercase tracking-wider border-b border-[#e5e8ef]">
+        <div className="col-span-5">Component</div>
+        <div className="col-span-2 text-center">Qty</div>
+        <div className="col-span-2 text-right">Unit Cost</div>
+        <div className="col-span-2 text-right">Subtotal</div>
+        <div className="col-span-1" />
+      </div>
+
+      {/* Grouped rows */}
+      {TYPE_ORDER.map(typeKey => {
+        const group = sorted.filter(c => c.component_type === typeKey)
+        if (group.length === 0) return null
+        return (
+          <div key={typeKey}>
+            <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-widest px-3 pt-1 pb-0.5">
+              {typeKey.replace(/_/g, ' ')}
+            </p>
+            {group.map((comp, i) => {
+              const name = comp.child_quotation?.part?.name ?? comp.child_part?.name ?? comp.notes ?? 'Unnamed'
+              const status = comp.child_quotation?.status
+              const cost = comp.child_quotation?.cost_eur ?? null
+              const confidence = comp.child_quotation?.confidence_score
+              const subtotal = cost !== null ? cost * comp.quantity : null
+              const isLast = i === group.length - 1
+
+              return (
+                <motion.div
+                  key={comp.id}
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05, duration: 0.2 }}
+                  className="grid grid-cols-12 gap-2 items-center px-3 py-2.5 rounded-lg hover:bg-surface-2 group transition-colors"
+                >
+                  {/* Component name with tree connector */}
+                  <div className="col-span-5 flex items-start gap-2 min-w-0">
+                    <div className="flex flex-col items-center flex-shrink-0 mt-1.5">
+                      <div className="w-3 h-px bg-[#c8cdd8]" />
+                    </div>
+                    <div className="min-w-0">
+                      {comp.child_quotation ? (
+                        <Link to={`/quotes/${comp.child_quotation.id}`} className="text-sm font-medium text-[#0f1729] hover:text-brand truncate block">
+                          {name}
+                        </Link>
+                      ) : (
+                        <p className="text-sm font-medium text-[#4a5568] truncate">{name}</p>
+                      )}
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {status && (
+                          <span className={cn('inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium capitalize', STATUS_COLORS[status] ?? 'bg-[#f1f3f7] text-[#9aa3b2]')}>
+                            {status}
+                          </span>
+                        )}
+                        {confidence != null && (
+                          <span className={cn('text-[10px] font-semibold', confidence >= 0.8 ? 'text-emerald-600' : confidence >= 0.6 ? 'text-amber-600' : 'text-red-600')}>
+                            {Math.round(confidence * 100)}% conf
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Qty */}
+                  <div className="col-span-2 text-center">
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-surface-3 text-xs font-semibold text-[#4a5568]">
+                      {comp.quantity}
+                    </span>
+                  </div>
+
+                  {/* Unit cost */}
+                  <div className="col-span-2 text-right font-mono text-xs text-[#4a5568]">
+                    {cost !== null ? fmt(cost) : '—'}
+                  </div>
+
+                  {/* Subtotal */}
+                  <div className="col-span-2 text-right font-mono text-xs font-semibold text-[#0f1729]">
+                    {subtotal !== null ? fmt(subtotal) : '—'}
+                  </div>
+
+                  {/* Remove */}
+                  <div className="col-span-1 flex justify-end">
+                    <button
+                      onClick={() => onRemove(comp.id)}
+                      disabled={removing}
+                      className="p-1 rounded-md hover:bg-red-50 text-[#c8cdd8] hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        )
+      })}
+
+      {/* Total row */}
+      <div className="grid grid-cols-12 gap-2 px-3 py-2.5 border-t-2 border-[#e5e8ef] mt-1">
+        <div className="col-span-9 text-xs font-semibold text-[#4a5568] uppercase tracking-wide text-right">
+          Components Total
+        </div>
+        <div className="col-span-2 text-right font-mono text-sm font-bold text-[#0f1729]">
+          {fmt(totalCost)}
+        </div>
+        <div className="col-span-1" />
+      </div>
+    </div>
+  )
+}
+
 // ─── DETAIL VIEW ─────────────────────────────────────────────────────────────
 
 function AssemblyDetail({ id }: { id: string }) {
@@ -270,6 +401,7 @@ function AssemblyDetail({ id }: { id: string }) {
   const [isCostingChildren, setIsCostingChildren] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const { canUse } = useSubscription()
 
   const { data: quotation } = useQuery<Quotation>({ queryKey: ['quote', id], queryFn: () => api.quotes.get(id) })
   const { data: components = [] } = useQuery<AssemblyComponent[]>({
@@ -399,9 +531,11 @@ function AssemblyDetail({ id }: { id: string }) {
             >
               {hasLowConfidence ? '⚠ Submit Assembly' : 'Submit Assembly'}
             </Button>
-            <Button variant="outline" onClick={handleExport} loading={isExporting} iconLeft={<Download className="w-4 h-4" />}>
-              Export Excel
-            </Button>
+            {canUse('excel_export') && (
+              <Button variant="outline" onClick={handleExport} loading={isExporting} iconLeft={<Download className="w-4 h-4" />}>
+                Export Excel
+              </Button>
+            )}
           </div>
           {hasLowConfidence && (
             <p className="text-xs text-amber-600 mt-2 bg-amber-50 px-3 py-1.5 rounded-lg inline-block">
@@ -446,71 +580,13 @@ function AssemblyDetail({ id }: { id: string }) {
                   </Button>
                 </div>
                 {components.length === 0 ? (
-                  <EmptyState title="No components yet" description="Add the first component to build your assembly BOM." />
+                  <EmptyState illustration={<ComponentsEmptyIllustration />} title="No components yet" description="Add the first component to build your assembly BOM." />
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-[#e5e8ef] text-left text-xs uppercase tracking-wide text-[#9aa3b2]">
-                          <th className="pb-3 pr-4 font-medium">Component</th>
-                          <th className="pb-3 pr-4 font-medium">Type</th>
-                          <th className="pb-3 pr-4 font-medium">Qty</th>
-                          <th className="pb-3 pr-4 font-medium">Status</th>
-                          <th className="pb-3 pr-4 font-medium">Cost EUR</th>
-                          <th className="pb-3 pr-4 font-medium">Confidence</th>
-                          <th className="pb-3 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#e5e8ef]">
-                        {components.map((comp) => {
-                          const name = comp.child_quotation?.part?.name ?? comp.child_part?.name ?? comp.notes ?? 'Unnamed'
-                          const status = comp.child_quotation?.status ?? '—'
-                          const cost = comp.child_quotation?.cost_eur ?? null
-                          const confidence = comp.child_quotation?.confidence_score
-                          return (
-                            <tr key={comp.id} className="hover:bg-surface-2 group transition-colors">
-                              <td className="py-3 pr-4 font-medium text-[#0f1729]">
-                                {comp.child_quotation ? (
-                                  <Link to={`/quotes/${comp.child_quotation.id}`} className="hover:underline text-[#0f1729]">
-                                    {name}
-                                  </Link>
-                                ) : name}
-                              </td>
-                              <td className="py-3 pr-4">
-                                <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize', COMPONENT_TYPE_COLORS[comp.component_type] ?? 'bg-[#f1f3f7] text-[#4a5568]')}>
-                                  {comp.component_type.replace(/_/g, ' ')}
-                                </span>
-                              </td>
-                              <td className="py-3 pr-4 text-[#4a5568]">{comp.quantity}</td>
-                              <td className="py-3 pr-4">
-                                <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize', STATUS_COLORS[status] ?? 'bg-[#f1f3f7] text-[#9aa3b2]')}>
-                                  {status}
-                                </span>
-                              </td>
-                              <td className="py-3 pr-4 text-[#4a5568] font-mono text-xs">{fmt(cost)}</td>
-                              <td className="py-3 pr-4">
-                                {confidence != null ? (
-                                  <span className={cn('text-sm font-medium', confidence >= 0.8 ? 'text-green-600' : confidence >= 0.6 ? 'text-amber-600' : 'text-red-600')}>
-                                    {Math.round(confidence * 100)}%
-                                  </span>
-                                ) : '—'}
-                              </td>
-                              <td className="py-3">
-                                <button
-                                  onClick={() => removeComponentMut.mutate(comp.id)}
-                                  disabled={removeComponentMut.isPending}
-                                  className="p-1.5 rounded-md hover:bg-red-50 text-[#9aa3b2] hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                                  title="Remove component"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <BomTree
+                    components={components}
+                    onRemove={(compId) => removeComponentMut.mutate(compId)}
+                    removing={removeComponentMut.isPending}
+                  />
                 )}
               </div>
             )}
@@ -580,7 +656,7 @@ function AssemblyDetail({ id }: { id: string }) {
                 </div>
 
                 {assemblyOps.length === 0 ? (
-                  <EmptyState title="No assembly operations" description='Click "Estimate Assembly Ops" to generate AI-powered operations.' />
+                  <EmptyState illustration={<AssemblyOpsEmptyIllustration />} title="No assembly operations" description='Click "Estimate Assembly Ops" to generate AI-powered operations.' />
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
@@ -622,10 +698,12 @@ function AssemblyDetail({ id }: { id: string }) {
                   Download the full assembly package. The Excel export includes the complete BOM tree, rollup summary, and assembly operations breakdown.
                 </p>
                 <div className="flex flex-wrap justify-center gap-4 py-8">
-                  <Button size="lg" onClick={handleExport} loading={isExporting} iconLeft={<Download className="w-4 h-4" />}
-                    className="bg-green-600 hover:bg-green-700 text-white px-8">
-                    Download Excel
-                  </Button>
+                  {canUse('excel_export') && (
+                    <Button size="lg" onClick={handleExport} loading={isExporting} iconLeft={<Download className="w-4 h-4" />}
+                      className="bg-green-600 hover:bg-green-700 text-white px-8">
+                      Download Excel
+                    </Button>
+                  )}
                   <Button variant="outline" size="lg" onClick={() => toast.info('PDF export coming soon')}
                     iconLeft={<Download className="w-4 h-4" />} className="px-8 text-[#9aa3b2]">
                     Download PDF
@@ -706,6 +784,7 @@ function AssembliesList() {
           ) : assemblies.length === 0 ? (
             <div className="p-6">
               <EmptyState
+                illustration={<AssemblyEmptyIllustration />}
                 title="No assemblies yet"
                 description="Create your first assembly to get started with multi-level costing."
                 action={{ label: 'New Assembly', onClick: () => setShowNewModal(true) }}
@@ -820,7 +899,11 @@ function AssembliesList() {
 // ─── ROOT ────────────────────────────────────────────────────────────────────
 
 export default function Assemblies() {
+  usePageTitle('Assemblies')
   const { id } = useParams<{ id?: string }>()
-  if (id) return <AssemblyDetail id={id} />
-  return <AssembliesList />
+  return (
+    <UpgradeGate requiredPlan="pro" feature="Assemblies">
+      {id ? <AssemblyDetail id={id} /> : <AssembliesList />}
+    </UpgradeGate>
+  )
 }

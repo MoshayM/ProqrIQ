@@ -15,13 +15,16 @@ export const users = sqliteTable('users', {
   full_name:     text('full_name').notNull(),
   password_hash: text('password_hash').notNull(),
   role:          text('role', {
-                   enum: ['admin', 'engineer', 'cost_analyst', 'ceo'],
+                   enum: ['admin', 'engineer', 'cost_analyst', 'ceo', 'developer', 'owner'],
                  }).notNull().default('engineer'),
-  is_active:     integer('is_active', { mode: 'boolean' }).notNull().default(true),
-  avatar_url:    text('avatar_url'),
-  created_at:    text('created_at').$defaultFn(() => new Date().toISOString()),
-  updated_at:    text('updated_at').$defaultFn(() => new Date().toISOString()),
-  last_login:    text('last_login'),
+  is_active:              integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  avatar_url:             text('avatar_url'),
+  ai_budget_usd_monthly:  real('ai_budget_usd_monthly').default(20.0),
+  ai_spend_usd_current:   real('ai_spend_usd_current').default(0.0),
+  ai_budget_reset_at:     text('ai_budget_reset_at'),
+  created_at:             text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:             text('updated_at').$defaultFn(() => new Date().toISOString()),
+  last_login:             text('last_login'),
 })
 
 // ─── parts ────────────────────────────────────────────────────────────────────
@@ -121,6 +124,9 @@ export const quotations = sqliteTable('quotations', {
   exchange_rate:           real('exchange_rate'),
   exchange_rate_source:    text('exchange_rate_source'),
   exchange_rate_date:      text('exchange_rate_date'),
+
+  // File type of the uploaded drawing/model
+  file_type:               text('file_type', { enum: ['drawing', 'step', 'iges'] }),
 
   // AI results
   confidence_score:        real('confidence_score'),
@@ -461,3 +467,182 @@ export const asmComponentsParentIdx   = index('idx_asm_components_parent').on(
 export const asmComponentsChildIdx    = index('idx_asm_components_child').on(
   assemblyComponents.component_quotation_id,
 )
+
+// ─── ai_usage_log ─────────────────────────────────────────────────────────────
+
+export const aiUsageLog = sqliteTable('ai_usage_log', {
+  id:                  text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  user_id:             text('user_id').notNull(),
+  task_type:           text('task_type').notNull(),
+  provider:            text('provider').notNull(),
+  model:               text('model').notNull(),
+  input_tokens:        integer('input_tokens').notNull().default(0),
+  output_tokens:       integer('output_tokens').notNull().default(0),
+  estimated_cost_usd:  real('estimated_cost_usd').notNull().default(0),
+  quote_id:            text('quote_id'),
+  batch_id:            text('batch_id'),
+  created_at:          text('created_at').$defaultFn(() => new Date().toISOString()),
+})
+
+export const aiUsageLogUserIdx = index('idx_ai_usage_log_user').on(aiUsageLog.user_id)
+export const aiUsageLogTaskIdx = index('idx_ai_usage_log_task').on(aiUsageLog.task_type)
+
+// ─── ai_route_overrides ───────────────────────────────────────────────────────
+
+export const aiRouteOverrides = sqliteTable('ai_route_overrides', {
+  task:       text('task').primaryKey(),
+  provider:   text('provider').notNull(),
+  model:      text('model').notNull(),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+  updated_by: text('updated_by'),
+})
+
+// ─── suppliers ────────────────────────────────────────────────────────────────
+
+export const suppliers = sqliteTable('suppliers', {
+  id:             text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name:           text('name').notNull(),
+  country_code:   text('country_code').notNull(),
+  city:           text('city'),
+  contact_name:   text('contact_name'),
+  contact_email:  text('contact_email'),
+  contact_phone:  text('contact_phone'),
+  capabilities:   text('capabilities'),        // JSON array of commodity types
+  tier_rating:    integer('tier_rating'),       // 1–5
+  origin:         text('origin', {
+                    enum: ['manual', 'ai_suggested', 'external_api'],
+                  }).notNull().default('manual'),
+  source_tier:    integer('source_tier').notNull().default(3),
+  // 5 = ai_suggested, 4 = external_api (promoted), 3 = manual
+  is_active:      integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  notes:          text('notes'),
+  created_by:     text('created_by').references(() => users.id),
+  created_at:     text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:     text('updated_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── supplier_quotes ──────────────────────────────────────────────────────────
+
+export const supplierQuotes = sqliteTable('supplier_quotes', {
+  id:                    text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  quotation_id:          text('quotation_id').notNull().references(() => quotations.id),
+  supplier_id:           text('supplier_id').notNull().references(() => suppliers.id),
+  status:                text('status', {
+                           enum: ['draft', 'received', 'compared', 'negotiating', 'accepted', 'rejected'],
+                         }).notNull().default('draft'),
+  received_date:         text('received_date'),
+  valid_until_date:      text('valid_until_date'),
+  total_price_eur:       real('total_price_eur'),
+  currency:              text('currency'),
+  exchange_rate_to_eur:  real('exchange_rate_to_eur'),
+  extraction_method:     text('extraction_method', {
+                           enum: ['manual', 'ai_extracted'],
+                         }).notNull().default('manual'),
+  raw_text:              text('raw_text'),
+  notes:                 text('notes'),
+  is_active:             integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  created_by:            text('created_by').references(() => users.id),
+  created_at:            text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:            text('updated_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── supplier_quote_lines ─────────────────────────────────────────────────────
+
+export const supplierQuoteLines = sqliteTable('supplier_quote_lines', {
+  id:                  text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  supplier_quote_id:   text('supplier_quote_id').notNull().references(() => supplierQuotes.id),
+  category:            text('category', {
+                         enum: ['material', 'manufacturing', 'special_direct', 'overheads'],
+                       }).notNull(),
+  label:               text('label').notNull(),
+  value_eur:           real('value_eur').notNull(),
+  source_tier:         integer('source_tier').notNull(),   // required — reject if missing
+  notes:               text('notes'),
+  created_at:          text('created_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── negotiation_reports ──────────────────────────────────────────────────────
+
+export const negotiationReports = sqliteTable('negotiation_reports', {
+  id:                      text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  quotation_id:            text('quotation_id').notNull().references(() => quotations.id),
+  supplier_quote_id:       text('supplier_quote_id').notNull().references(() => supplierQuotes.id),
+  comparison_json:         text('comparison_json'),         // full ComparisonResult JSON
+  total_gap_eur:           real('total_gap_eur'),           // our_cost - supplier_total
+  recommended_target_eur:  real('recommended_target_eur'),  // floored at our should-cost
+  talking_points_json:     text('talking_points_json'),     // AI-generated string[]
+  status:                  text('status', {
+                             enum: ['draft', 'sent', 'resolved'],
+                           }).notNull().default('draft'),
+  is_active:               integer('is_active', { mode: 'boolean' }).notNull().default(true),
+  created_by:              text('created_by').references(() => users.id),
+  created_at:              text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:              text('updated_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── Supplier indexes ─────────────────────────────────────────────────────────
+
+export const suppliersActiveIdx         = index('idx_suppliers_active').on(suppliers.is_active)
+export const supplierQuotesQuotationIdx = index('idx_supplier_quotes_quotation').on(supplierQuotes.quotation_id)
+export const supplierQuotesSupplierIdx  = index('idx_supplier_quotes_supplier').on(supplierQuotes.supplier_id)
+export const negotiationQuotationIdx    = index('idx_negotiation_quotation').on(negotiationReports.quotation_id)
+
+// ─── organizations ────────────────────────────────────────────────────────────
+
+export const organizations = sqliteTable('organizations', {
+  id:           text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name:         text('name').notNull(),
+  owner_id:     text('owner_id').references(() => users.id),
+  member_limit: integer('member_limit').default(25),
+  logo_url:     text('logo_url'),
+  created_at:   text('created_at').$defaultFn(() => new Date().toISOString()),
+  deleted_at:   text('deleted_at'),
+})
+
+// ─── subscriptions ────────────────────────────────────────────────────────────
+
+export const subscriptions = sqliteTable('subscriptions', {
+  id:                     text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  user_id:                text('user_id').references(() => users.id),
+  org_id:                 text('org_id').references(() => organizations.id),
+  plan:                   text('plan', { enum: ['free', 'pro', 'organization'] }).default('free'),
+  status:                 text('status', { enum: ['active', 'trialing', 'past_due', 'canceled', 'paused'] }).default('active'),
+  billing_cycle:          text('billing_cycle', { enum: ['monthly', 'annual'] }),
+  stripe_customer_id:     text('stripe_customer_id'),
+  stripe_subscription_id: text('stripe_subscription_id'),
+  trial_ends_at:          text('trial_ends_at'),
+  current_period_start:   text('current_period_start'),
+  current_period_end:     text('current_period_end'),
+  canceled_at:            text('canceled_at'),
+  created_at:             text('created_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── organization_members ─────────────────────────────────────────────────────
+
+export const organizationMembers = sqliteTable('organization_members', {
+  id:          text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  org_id:      text('org_id').references(() => organizations.id),
+  user_id:     text('user_id').references(() => users.id),
+  email:       text('email').notNull(),
+  role:        text('role').notNull(),
+  invited_at:  text('invited_at').$defaultFn(() => new Date().toISOString()),
+  joined_at:   text('joined_at'),
+})
+
+// ─── usage_counters ───────────────────────────────────────────────────────────
+
+export const usageCounters = sqliteTable('usage_counters', {
+  id:                      text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  user_id:                 text('user_id').references(() => users.id),
+  period_start:            text('period_start').notNull(),
+  quotes_used:             integer('quotes_used').default(0),
+  bulk_used:               integer('bulk_used').default(0),
+  supplier_searches_used:  integer('supplier_searches_used').default(0),
+  ai_tokens_used:          integer('ai_tokens_used').default(0),
+})
+
+// ─── Subscription / org indexes ───────────────────────────────────────────────
+
+export const subscriptionsUserIdx = index('idx_subscriptions_user').on(subscriptions.user_id)
+export const orgMembersOrgIdx     = index('idx_org_members_org').on(organizationMembers.org_id)
+export const usageUserPeriodIdx   = index('idx_usage_user_period').on(usageCounters.user_id, usageCounters.period_start)

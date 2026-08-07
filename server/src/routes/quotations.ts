@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { requirePlan } from '../middleware/plan'
 import {
   db,
   quotations,
@@ -649,7 +650,7 @@ router.get('/:id/versions', requireAuth, async (req: Request, res: Response) => 
 })
 
 // GET /quotations/:id/export-excel
-router.get('/:id/export-excel', requireAuth, async (req: Request, res: Response) => {
+router.get('/:id/export-excel', requireAuth, requirePlan('pro'), async (req: Request, res: Response) => {
   try {
     const user = (req as any).user
     const [quote] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))

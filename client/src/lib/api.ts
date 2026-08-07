@@ -33,6 +33,7 @@ const pl = <T = any>(res: { data: { data: { data: T[] } } }): T[] => res.data.da
 
 export const api = {
   auth: {
+    register:      (email: string, password: string, full_name: string) => client.post('/auth/register', { email, password, full_name }).then(d),
     login:         (email: string, password: string) => client.post('/auth/login', { email, password }).then(d),
     me:            ()                                => client.get('/auth/me').then(d),
     logout:        ()                                => client.post('/auth/logout').then(d),
@@ -116,10 +117,14 @@ export const api = {
     readAll: ()           => client.patch('/notifications/read-all').then(d),
   },
   admin: {
-    getAiConfig:   ()              => client.get('/admin/ai-config').then(d),
-    patchAiConfig: (data: unknown) => client.patch('/admin/ai-config', data).then(d),
-    resetAiConfig: ()              => client.post('/admin/ai-config/reset').then(d),
-    getAiUsage:    ()              => client.get('/admin/ai-usage').then(d),
+    getAiConfig:     ()                           => client.get('/admin/ai-config').then(d),
+    patchAiConfig:   (data: unknown)              => client.patch('/admin/ai-config', data).then(d),
+    resetAiConfig:   ()                           => client.post('/admin/ai-config/reset').then(d),
+    getAiUsage:      ()                           => client.get('/admin/ai-usage').then(d),
+    getProviders:    ()                           => client.get('/admin/providers').then(d),
+    getRoutes:       ()                           => client.get('/admin/routes').then(d),
+    setRoute:        (task: string, data: unknown) => client.put(`/admin/routes/${task}`, data).then(d),
+    deleteRoute:     (task: string)               => client.delete(`/admin/routes/${task}`).then(d),
   },
   passkey: {
     authOptions:     (email?: string) => client.post('/auth/passkey/auth/options', { email }).then(d),
@@ -127,5 +132,34 @@ export const api = {
     registerOptions: ()               => client.post('/auth/passkey/register/options').then(d),
     registerVerify:  (body: unknown)  => client.post('/auth/passkey/register/verify', body).then(d),
     credentials:     ()               => client.get('/auth/passkey/credentials').then(d),
+  },
+  suppliers: {
+    list:           ()                          => client.get('/suppliers').then(d),
+    create:         (body: unknown)             => client.post('/suppliers', body).then(d),
+    update:         (id: string, body: unknown) => client.patch(`/suppliers/${id}`, body).then(d),
+    softDelete:     (id: string)                => client.delete(`/suppliers/${id}`).then(d),
+    forQuote:       (quoteId: string)           => client.get(`/suppliers/for-quote/${quoteId}`).then(d),
+    createQuote:    (body: unknown)             => client.post('/suppliers/quote', body).then(d),
+    updateQuote:    (id: string, body: unknown) => client.patch(`/suppliers/quote/${id}`, body).then(d),
+    deleteQuote:    (id: string)                => client.delete(`/suppliers/quote/${id}`).then(d),
+    suggest:        (body: unknown)             => client.post('/suppliers/suggest', body).then(d),
+    extractQuote:   (body: unknown)             => client.post('/suppliers/extract-quote', body).then(d),
+    compare:        (body: unknown)             => client.post('/suppliers/compare', body).then(d),
+    negotiate:      (body: unknown)             => client.post('/suppliers/negotiate', body).then(d),
+    getNegotiation: (quoteId: string)           => client.get(`/suppliers/negotiation/${quoteId}`).then(d),
+  },
+  subscription: {
+    get:      ()              => client.get('/subscription').then(d),
+    checkout: (body: unknown) => client.post('/subscription/checkout', body).then(d),
+    portal:   ()              => client.post('/subscription/portal', {}).then(d),
+    cancel:   ()              => client.post('/subscription/cancel', {}).then(d),
+  },
+  organization: {
+    get:          ()                => client.get('/organization').then(d),
+    invite:       (body: unknown)   => client.post('/organization/invite', body).then(d),
+    removeMember: (id: string)      => client.delete(`/organization/members/${id}`).then(d),
+  },
+  search: {
+    query: (q: string, limit = 20) => client.get(`/search?q=${encodeURIComponent(q)}&limit=${limit}`).then(d),
   },
 }

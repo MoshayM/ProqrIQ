@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -15,8 +15,12 @@ import { format } from 'date-fns'
 import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import { cn } from '../../lib/utils'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import KBManager from '../KBManager'
 import RegionalRates from '../RegionalRates'
+import { UpgradeGate } from '../../components/ui/UpgradeGate'
+import { PlanBadge } from '../../components/ui/PlanBadge'
+import { useSubscription } from '../../hooks/useSubscription'
 
 const ADMIN_ROLES = ['admin', 'ceo']
 
@@ -39,7 +43,7 @@ const passwordSchema = z.object({
 const createUserSchema = z.object({
   name:     z.string().min(1, 'Name is required'),
   email:    z.string().email('Valid email required'),
-  role:     z.enum(['admin', 'engineer', 'cost_analyst', 'ceo']),
+  role:     z.enum(['admin', 'engineer', 'cost_analyst', 'ceo', 'developer', 'owner']),
   password: z.string().min(8, 'At least 8 characters'),
 })
 
@@ -133,6 +137,8 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
               <option value="cost_analyst">Cost Analyst</option>
               <option value="ceo">CEO</option>
               <option value="admin">Admin</option>
+              <option value="developer">Developer</option>
+              <option value="owner">Owner</option>
             </select>
           </div>
           <div>
@@ -161,6 +167,7 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 
 function ProfileTab() {
   const { user, updateUser, hasRole } = useAuth()
+  const { plan } = useSubscription()
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -258,11 +265,15 @@ function ProfileTab() {
           <div>
             <p className="font-semibold text-[#0f1729]">{user?.full_name ?? user?.email}</p>
             <p className="text-sm text-[#9aa3b2] mt-0.5">{user?.email}</p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               <RoleBadge role={user?.role ?? ''} />
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />Active
               </span>
+              <Link to="/billing" className="flex items-center gap-1.5 text-xs text-[#e85c1a] hover:underline font-medium">
+                <PlanBadge plan={plan} />
+                Manage billing →
+              </Link>
             </div>
           </div>
         </div>
@@ -446,6 +457,7 @@ function ProfileTab() {
 // ─── Account page ─────────────────────────────────────────────────────────────
 
 export default function Account() {
+  usePageTitle('Account')
   const { hasRole } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = searchParams.get('tab') || 'profile'
@@ -502,8 +514,8 @@ export default function Account() {
       {/* Content */}
       <div className={activeTab === 'profile' ? 'max-w-2xl mx-auto p-8' : ''}>
         {activeTab === 'profile' && <ProfileTab />}
-        {activeTab === 'kb'      && isAdmin && <KBManager />}
-        {activeTab === 'rates'   && isAdmin && <RegionalRates />}
+        {activeTab === 'kb'      && isAdmin && <UpgradeGate requiredPlan="organization" feature="Knowledge Base Manager"><KBManager /></UpgradeGate>}
+        {activeTab === 'rates'   && isAdmin && <UpgradeGate requiredPlan="organization" feature="Regional Rates"><RegionalRates /></UpgradeGate>}
       </div>
     </div>
   )

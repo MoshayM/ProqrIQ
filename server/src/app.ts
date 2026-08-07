@@ -18,6 +18,9 @@ import { router as bulkBatchesRouter }  from './routes/bulkBatches'
 import { router as assembliesRouter }   from './routes/assemblies'
 import notificationsRouter              from './routes/notifications'
 import { router as adminConfigRouter }  from './routes/adminConfig'
+import { router as searchRouter }        from './routes/search'
+import { router as suppliersRouter }    from './routes/suppliers'
+import { router as subscriptionRouter } from './routes/subscription'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 const app = express()
@@ -37,6 +40,80 @@ app.use(cors({
   credentials: true,
 }))
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'))
+
+// ─── Stripe webhook (raw body needed — must come BEFORE json parser) ──────────
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
+  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+
+  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
+    res.status(200).json({ received: true })
+    return
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Stripe = (await import('stripe' as any)).default
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stripe = new (Stripe as any)(STRIPE_SECRET_KEY)
+    const sig = req.headers['stripe-signature'] as string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const event = (stripe as any).webhooks.constructEvent(req.body as Buffer, sig, STRIPE_WEBHOOK_SECRET)
+
+    const { db } = await import('./db')
+    const { subscriptions } = await import('./db/schema')
+    const { eq } = await import('drizzle-orm')
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = event.data.object as any
+
+    if (event.type === 'checkout.session.completed') {
+      const meta = data.metadata ?? {}
+      const userId = meta.user_id as string
+      if (userId) {
+        const existing = await db.select().from(subscriptions).where(eq(subscriptions.user_id, userId)).limit(1)
+        if (existing.length > 0) {
+          await db.update(subscriptions).set({
+            plan: meta.plan ?? 'pro',
+            status: 'active',
+            stripe_customer_id: data.customer,
+            stripe_subscription_id: data.subscription,
+          }).where(eq(subscriptions.user_id, userId))
+        } else {
+          await db.insert(subscriptions).values({
+            user_id: userId,
+            plan: meta.plan ?? 'pro',
+            status: 'active',
+            billing_cycle: meta.billing ?? 'monthly',
+            stripe_customer_id: data.customer,
+            stripe_subscription_id: data.subscription,
+          })
+        }
+      }
+    } else if (event.type === 'customer.subscription.updated') {
+      const subId = data.id as string
+      const status = data.status as string
+      await db.update(subscriptions).set({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        status: status as any,
+        current_period_start: new Date(data.current_period_start * 1000).toISOString(),
+        current_period_end: new Date(data.current_period_end * 1000).toISOString(),
+      }).where(eq(subscriptions.stripe_subscription_id, subId))
+    } else if (event.type === 'customer.subscription.deleted') {
+      const subId = data.id as string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await db.update(subscriptions).set({ status: 'canceled', plan: 'free' as any }).where(eq(subscriptions.stripe_subscription_id, subId))
+    } else if (event.type === 'invoice.payment_failed') {
+      const customerId = data.customer as string
+      await db.update(subscriptions).set({ status: 'past_due' }).where(eq(subscriptions.stripe_customer_id, customerId))
+    }
+
+    res.json({ received: true })
+  } catch (err) {
+    console.error('[Stripe Webhook]', err)
+    res.status(400).json({ error: (err as Error).message })
+  }
+})
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '5mb' }))
@@ -83,6 +160,9 @@ app.use('/api/bulk-batches',  bulkBatchesRouter)
 app.use('/api/assemblies',    assembliesRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/admin',        adminConfigRouter)
+app.use('/api/search',       searchRouter)
+app.use('/api/suppliers',    suppliersRouter)
+app.use('/api',              subscriptionRouter)
 
 // Standalone assumptions confirm route
 app.patch('/api/assumptions/:id/confirm', (req, res, next) => {

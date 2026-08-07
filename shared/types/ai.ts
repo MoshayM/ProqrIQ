@@ -145,10 +145,13 @@ export interface CostInput {
   part: CostInputPart;
   production: CostInputProduction;
   drawing_analysis: DrawingAnalysisResult | null;
+  cad_metadata_block?: string | null;
   modified_process_steps: ProcessStep[] | null;
   exchange_rate: number;
   exchange_rate_source: string;
   force_regenerate?: boolean;
+  user_id?: string;
+  is_bulk?: boolean;
 }
 
 // ─── AI Query / Regenerate Results ───────────────────────────────────────────

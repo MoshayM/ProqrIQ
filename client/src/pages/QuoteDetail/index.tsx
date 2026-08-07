@@ -1,18 +1,22 @@
 import React, { useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { format, differenceInDays, addDays } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, CheckCircle, XCircle, Send, Archive, RotateCcw, Download, FileText, Loader2,
+  Clock, RefreshCw,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
+import { useSubscription } from '../../hooks/useSubscription'
+import { useConfetti } from '../../hooks/useConfetti'
 import { Button } from '../../components/ui/button'
 import { Badge } from '../../components/ui/badge'
 import { Skeleton, SkeletonText } from '../../components/ui/skeleton'
 import { cn } from '../../lib/utils'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import Tab1Overview from './tabs/Tab1Overview'
 import Tab2Process from './tabs/Tab2Process'
 import Tab3Logistics from './tabs/Tab3Logistics'
@@ -52,6 +56,52 @@ function confidenceVariant(s: number | null): 'default' | 'success' | 'warning' 
 }
 
 const TABS = ['Overview', 'Process', 'Logistics', 'Assumptions', 'History'] as const
+
+// ─── Confidence arc gauge ─────────────────────────────────────────────────────
+
+function ConfidenceArc({ score }: { score: number }) {
+  const r = 48
+  const cx = 64
+  const cy = 64
+  const semicircle = Math.PI * r          // ≈ 150.8
+  const filled = (score / 100) * semicircle
+
+  const color = score >= 80 ? '#22c55e' : score >= 70 ? '#f59e0b' : '#ef4444'
+
+  return (
+    <div className="flex flex-col items-center gap-1 flex-shrink-0">
+      <svg viewBox="0 0 128 72" width="128" height="72" className="overflow-visible">
+        {/* Track */}
+        <path
+          d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+          fill="none"
+          stroke="#e8ebf2"
+          strokeWidth="10"
+          strokeLinecap="round"
+        />
+        {/* Value */}
+        <motion.path
+          d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={`${semicircle} ${semicircle}`}
+          initial={{ strokeDashoffset: semicircle }}
+          animate={{ strokeDashoffset: semicircle - filled }}
+          transition={{ delay: 0.35, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        />
+        {/* Score label */}
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="18" fontWeight="700" fill="#0f1729" fontFamily="ui-monospace,monospace">
+          {score.toFixed(0)}%
+        </text>
+        <text x={cx} y={cy + 8} textAnchor="middle" fontSize="9" fill="#9aa3b2" fontFamily="system-ui,sans-serif">
+          CONFIDENCE
+        </text>
+      </svg>
+    </div>
+  )
+}
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
@@ -120,11 +170,14 @@ function QuoteDetailSkeleton() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function QuoteDetail() {
+  usePageTitle('Quote Detail')
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuth()
+  const { canUse } = useSubscription()
 
+  const burstConfetti = useConfetti()
   const [activeTab, setActiveTab]           = useState(0)
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal]   = useState(false)
@@ -179,7 +232,7 @@ export default function QuoteDetail() {
 
   async function handleApproveConfirm(notes: string) {
     setIsApproving(true)
-    try { await api.quotes.approve(id!, { notes }); await invalidateAll(); toast.success('Quote approved'); setShowApproveModal(false) }
+    try { await api.quotes.approve(id!, { notes }); await invalidateAll(); toast.success('Quote approved! 🎉'); setShowApproveModal(false); burstConfetti() }
     catch (err: unknown) { toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to approve') }
     finally { setIsApproving(false) }
   }
@@ -261,44 +314,40 @@ export default function QuoteDetail() {
               Created {format(new Date(quotation.created_at), 'dd MMM yyyy, HH:mm')}
               {' · '}Updated {format(new Date(quotation.updated_at), 'dd MMM yyyy, HH:mm')}
             </p>
+            {/* Quote validity countdown (7D.5) — 30-day validity */}
+            {quotation.status !== 'approved' && quotation.status !== 'archived' && (() => {
+              const expiryDate = addDays(new Date(quotation.created_at), 30)
+              const daysLeft = differenceInDays(expiryDate, new Date())
+              if (daysLeft > 7) return null
+              const isExpired = daysLeft < 0
+              const color = isExpired ? 'text-red-600' : daysLeft <= 3 ? 'text-red-600' : 'text-amber-600'
+              return (
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${isExpired ? 'bg-red-50' : daysLeft <= 3 ? 'bg-red-50' : 'bg-amber-50'} ${color}`}>
+                  <Clock className="w-3 h-3" />
+                  {isExpired ? 'Quote expired — refresh recommended' : `Valid for ${daysLeft} more day${daysLeft !== 1 ? 's' : ''}`}
+                  {daysLeft <= 3 && !isExpired && <span className="opacity-60">· prices may have changed</span>}
+                </div>
+              )
+            })()}
           </div>
 
-          {/* Right — cost */}
-          <div className="text-right flex-shrink-0">
+          {/* Right — cost + confidence arc */}
+          <div className="flex flex-col items-end gap-3 flex-shrink-0">
+            {quotation.confidence_score !== null && (
+              <ConfidenceArc score={quotation.confidence_score} />
+            )}
             {quotation.cost_eur !== null ? (
-              <>
+              <div className="text-right">
                 <p className="text-xs text-[#9aa3b2] mb-1 font-medium uppercase tracking-wider">Total Cost</p>
                 <p className="font-mono text-3xl font-bold text-[#0f1729]">
                   €{new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(quotation.cost_eur)}
                 </p>
-              </>
+              </div>
             ) : (
               <p className="text-lg font-medium text-[#9aa3b2]">Not estimated</p>
             )}
           </div>
         </div>
-
-        {/* Confidence bar */}
-        {quotation.confidence_score !== null && (
-          <div className="mt-4 pt-4 border-t border-[#e5e8ef]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-[#9aa3b2]">Confidence Score</span>
-              <span className="text-xs font-semibold text-[#0f1729] font-mono">{quotation.confidence_score.toFixed(1)}%</span>
-            </div>
-            <div className="h-2 bg-[#e8ebf2] rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${quotation.confidence_score}%` }}
-                transition={{ delay: 0.3, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                className={cn(
-                  'h-full rounded-full',
-                  quotation.confidence_score >= 80 ? 'bg-emerald-500' :
-                  quotation.confidence_score >= 60 ? 'bg-amber-400' : 'bg-red-500',
-                )}
-              />
-            </div>
-          </div>
-        )}
       </motion.div>
 
       {/* Action bar */}
@@ -330,9 +379,11 @@ export default function QuoteDetail() {
           <Button variant="secondary" onClick={handleRestore} loading={isRestoring} iconLeft={!isRestoring ? <RotateCcw className="h-4 w-4" /> : undefined}>Restore</Button>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={handleExportExcel} loading={isExporting} iconLeft={!isExporting ? <Download className="h-4 w-4" /> : undefined}>
-            Excel
-          </Button>
+          {canUse('excel_export') && (
+            <Button variant="ghost" size="sm" onClick={handleExportExcel} loading={isExporting} iconLeft={!isExporting ? <Download className="h-4 w-4" /> : undefined}>
+              Excel
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => toast.info('PDF export coming soon')} iconLeft={<FileText className="h-4 w-4" />}>
             PDF
           </Button>

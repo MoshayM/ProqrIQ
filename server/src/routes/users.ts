@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { requirePlan } from '../middleware/plan'
 import { db, users, auditLog } from '../db/index'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
@@ -22,8 +23,8 @@ const updateUserSchema = z.object({
   message: 'At least one field required',
 })
 
-// All users routes require admin
-router.use(requireAuth, requireRole(['admin']))
+// All users routes require admin + organization plan
+router.use(requireAuth, requireRole(['admin']), requirePlan('organization'))
 
 // GET /users
 router.get('/', async (req: Request, res: Response) => {

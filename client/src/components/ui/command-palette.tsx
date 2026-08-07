@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, LayoutDashboard, FileText, Plus, Layers, Package, Settings, LogOut, X, Brain, Bell, CreditCard } from 'lucide-react'
+import { Search, LayoutDashboard, FileText, Plus, Layers, Package, Settings, LogOut, X, Brain, Bell, CreditCard, MapPin, Monitor } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
 
@@ -37,8 +37,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'account',     label: 'Account Settings', icon: Settings,        action: () => go('/account'),      keywords: ['profile', 'admin'] },
     { id: 'ai-control',     label: 'AI Control',    description: 'Model routing & rate limits', icon: Brain,      action: () => go('/ai-control'),    keywords: ['model', 'budget', 'config', 'claude'] },
     { id: 'notifications',  label: 'Notifications', icon: Bell,        action: () => go('/notifications'), keywords: ['alerts', 'inbox'] },
-    { id: 'plans',          label: 'Plans & Usage', description: 'Subscription plans and usage', icon: CreditCard, action: () => go('/plans'), keywords: ['billing', 'subscription', 'upgrade'] },
-    { id: 'logout',         label: 'Sign Out',      icon: LogOut,      action: async () => { await logout(); navigate('/login'); onClose() }, keywords: ['log out', 'exit'] },
+    { id: 'plans',          label: 'Plans & Usage',  description: 'Subscription plans and usage',    icon: CreditCard, action: () => go('/plans'),          keywords: ['billing', 'subscription', 'upgrade'] },
+    { id: 'supplier-map',   label: 'Supplier Map',   description: 'Find and visualise suppliers',     icon: MapPin,     action: () => go('/supplier-map'),   keywords: ['suppliers', 'discovery', 'sourcing', 'map'] },
+    { id: 'device-preview', label: 'Device Preview', description: 'Preview across viewports & roles', icon: Monitor,    action: () => go('/device-preview'), keywords: ['responsive', 'mobile', 'role', 'simulator'] },
+    { id: 'logout',         label: 'Sign Out',       icon: LogOut,      action: async () => { await logout(); navigate('/login'); onClose() }, keywords: ['log out', 'exit'] },
   ]
 
   const filtered = query.trim()

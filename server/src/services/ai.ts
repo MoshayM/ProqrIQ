@@ -16,6 +16,7 @@ import {
 import { parseAIJSON } from '../lib/parseAIJSON'
 import { searchKB, getMatchingKBEntries } from './kb'
 import { CONFIDENCE_GATE, MARGIN_PCT } from '../config'
+import { completeWithRouter } from './ai/aiRouter'
 
 import type {
   DrawingAnalysisResult,
@@ -68,6 +69,7 @@ export async function analyseDrawing(
   filePath: string,
   fileType: string,
   fileName: string,
+  userId = 'system',
 ): Promise<DrawingAnalysisResult> {
   const absPath = path.resolve(filePath)
   const fileBuffer = fs.readFileSync(absPath)
@@ -114,29 +116,16 @@ Output ONLY valid JSON with exactly this structure. No markdown fences. No pream
   "confidence_score": number between 0 and 100
 }`
 
-  const contentBlocks: Anthropic.MessageParam['content'] = [
-    {
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: mediaType,
-        data: base64Data,
-      },
-    } as Anthropic.ImageBlockParam,
-    { type: 'text', text: userPrompt },
-  ]
-
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: contentBlocks }],
+  const rawText = await completeWithRouter({
+    task:    'cad_costing',
+    userId,
+    request: {
+      systemPrompt,
+      userPrompt,
+      imageBase64: base64Data,
+      maxTokens: 2048,
+    },
   })
-
-  const rawText = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join('')
 
   const parsed = parseAIJSON<Record<string, unknown>>(rawText)
 
@@ -170,7 +159,7 @@ function mapFeasibility(val: string): DrawingAnalysisResult['feasibility'] {
 // ─── costOnePart ──────────────────────────────────────────────────────────────
 
 export async function costOnePart(input: CostInput): Promise<CostEstimateResult> {
-  const { part, production, drawing_analysis, quotation_id } = input
+  const { part, production, drawing_analysis, cad_metadata_block, quotation_id } = input
 
   // ── Step 1: KB-FIRST — mandatory before any Anthropic call ──────────────────
   const kbQuery = [
@@ -217,6 +206,8 @@ export async function costOnePart(input: CostInput): Promise<CostEstimateResult>
     ? `Drawing analysis: feasibility=${drawing_analysis.feasibility}, material=${drawing_analysis.material_grade ?? 'unknown'}, process=${drawing_analysis.manufacturing_process ?? 'unknown'}, process steps=${drawing_analysis.inferred_process_steps.length}`
     : 'No drawing analysis available.'
 
+  const cadMetadataText = cad_metadata_block ? `\n${cad_metadata_block}\n` : ''
+
   const modifiedStepsText =
     input.modified_process_steps && input.modified_process_steps.length > 0
       ? `Engineer-specified process steps:\n${input.modified_process_steps.map((s) => `  ${s.step_number}. ${s.process_name}`).join('\n')}`
@@ -225,7 +216,7 @@ export async function costOnePart(input: CostInput): Promise<CostEstimateResult>
   const systemPrompt = `You are an expert manufacturing cost engineer. You produce accurate, traceable cost estimates for B2B manufactured parts. You ALWAYS ground estimates in the provided KB data. You are precise, conservative, and thorough.`
 
   const userPrompt = `Estimate the full manufacturing cost for this part. Ground every cost line in the KB data provided.
-
+${cadMetadataText}
 ═══ PART DETAILS ═══
 Part Name: ${part.part_name}
 Part Number: ${part.part_number ?? 'N/A'}
@@ -344,18 +335,13 @@ Required JSON structure:
   "clarification_questions": []
 }`
 
-  // ── Step 4: Call Claude ──────────────────────────────────────────────────────
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+  // ── Step 4: Call AI via router ───────────────────────────────────────────────
+  const rawText = await completeWithRouter({
+    task:    input.is_bulk ? 'bulk_costing' : 'costing',
+    userId:  input.user_id ?? 'system',
+    quoteId: quotation_id,
+    request: { systemPrompt, userPrompt, maxTokens: 4096 },
   })
-
-  const rawText = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join('')
 
   // ── Step 5: Parse JSON ───────────────────────────────────────────────────────
   const aiResult = parseAIJSON<CostEstimateResult & { clarification_questions?: string[] }>(rawText)
@@ -567,6 +553,7 @@ export async function estimateAssemblyOps(input: {
     is_purchased_standard: boolean
   }>
   joining_notes?: string
+  user_id?: string
 }): Promise<{
   assembly_cost_lines: AICostLine[]
   assembly_cycle_time_steps: AICycleTimeStep[]
@@ -638,17 +625,12 @@ Output ONLY valid JSON. No markdown fences. No preamble.
   ]
 }`
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+  const rawText = await completeWithRouter({
+    task:    'costing',
+    userId:  input.user_id ?? 'system',
+    quoteId: assembly_quotation_id,
+    request: { systemPrompt, userPrompt, maxTokens: 2048 },
   })
-
-  const rawText = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join('')
 
   const aiResult = parseAIJSON<{
     confidence_score: number
@@ -707,6 +689,7 @@ Output ONLY valid JSON. No markdown fences. No preamble.
 export async function queryOnQuote(
   quotationId: string,
   question: string,
+  userId = 'system',
 ): Promise<{ answer: string }> {
   // Load quotation and its cost data
   const quotation = await db.query.quotations.findFirst({
@@ -760,20 +743,14 @@ Question: ${question}
 
 Answer clearly and specifically using the cost data above.`
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+  const answer = await completeWithRouter({
+    task:    'generic',
+    userId,
+    quoteId: quotationId,
+    request: { systemPrompt, userPrompt, maxTokens: 1024 },
   })
 
-  const answer = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join('')
-    .trim()
-
-  return { answer }
+  return { answer: answer.trim() }
 }
 
 // ─── regenerateQuote ──────────────────────────────────────────────────────────
@@ -781,6 +758,7 @@ Answer clearly and specifically using the cost data above.`
 export async function regenerateQuote(
   quotationId: string,
   instructions: string,
+  userId = 'system',
 ): Promise<{
   updated_cost_lines: AICostLine[]
   change_summary: string
@@ -850,17 +828,12 @@ Output ONLY valid JSON. No markdown fences.
   "overall_cost_eur": 11.20
 }`
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 3000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+  const rawText = await completeWithRouter({
+    task:    'generic',
+    userId,
+    quoteId: quotationId,
+    request: { systemPrompt, userPrompt, maxTokens: 3000 },
   })
-
-  const rawText = response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as Anthropic.TextBlock).text)
-    .join('')
 
   const aiResult = parseAIJSON<{
     change_summary: string

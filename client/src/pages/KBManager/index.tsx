@@ -2,7 +2,10 @@ import React, { useState, useRef } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Upload, RefreshCw, Trash2, Plus, Edit2, X, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Upload, RefreshCw, Trash2, Plus, Edit2, X, Check, Eye, EyeOff, Loader2, FileText, File } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { EmptyState } from '../../components/ui/empty-state';
+import { KBDocEmptyIllustration, KBEntryEmptyIllustration } from '../../components/ui/illustrations';
 import { api } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useRoleGuard } from '../../hooks/useRoleGuard';
@@ -99,16 +102,20 @@ function DocumentsTab() {
   }
 
   const FILE_TYPE_COLORS: Record<string, string> = {
-    pdf: 'bg-red-100 text-red-700',
-    docx: 'bg-blue-100 text-blue-700',
-    xlsx: 'bg-green-100 text-green-700',
-    csv: 'bg-emerald-100 text-emerald-700',
-    txt: 'bg-gray-100 text-gray-600',
+    pdf:  'bg-red-50 text-red-600',
+    docx: 'bg-blue-50 text-blue-600',
+    xlsx: 'bg-green-50 text-green-700',
+    csv:  'bg-emerald-50 text-emerald-700',
+    txt:  'bg-[#f1f3f7] text-[#4a5568]',
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
+    <div className="space-y-5">
+      {/* Upload zone */}
+      <div
+        className="relative border-2 border-dashed border-[#e5e8ef] rounded-2xl p-8 text-center cursor-pointer hover:border-brand/40 hover:bg-brand/[0.02] transition-all"
+        onClick={() => !uploadMut.isPending && fileInputRef.current?.click()}
+      >
         <input
           ref={fileInputRef}
           type="file"
@@ -116,78 +123,109 @@ function DocumentsTab() {
           accept=".pdf,.docx,.txt,.xlsx,.csv"
           onChange={handleFileChange}
         />
-        <Button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadMut.isPending}
-          className="bg-[#e85c1a] hover:bg-[#d04e14] text-white flex items-center gap-2"
-        >
-          {uploadMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-          Upload Document
-        </Button>
+        {uploadMut.isPending ? (
+          <div className="flex flex-col items-center gap-3">
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}>
+              <FileText className="w-8 h-8 text-brand" />
+            </motion.div>
+            <p className="text-sm font-medium text-[#0f1729]">Uploading & indexing…</p>
+            <p className="text-xs text-[#9aa3b2]">This may take a few seconds</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-brand/10 flex items-center justify-center">
+              <Upload className="w-6 h-6 text-brand" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#0f1729]">Upload a document</p>
+              <p className="text-xs text-[#9aa3b2] mt-0.5">PDF, DOCX, TXT, XLSX, CSV</p>
+            </div>
+            <div className="flex gap-2">
+              {['PDF', 'DOCX', 'TXT', 'XLSX', 'CSV'].map(t => (
+                <span key={t} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f1f3f7] text-[#4a5568]">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#e85c1a]" /></div>
-      ) : documents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
-          <Upload className="w-10 h-10" />
-          <p>No documents uploaded yet.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-24 bg-[#f1f3f7] rounded-xl animate-pulse" />
+          ))}
         </div>
+      ) : documents.length === 0 ? (
+        <EmptyState
+          illustration={<KBDocEmptyIllustration />}
+          title="No documents uploaded yet"
+          description="Upload PDF engineering documents to build the knowledge base for AI cost estimation."
+        />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">
-                <th className="pb-3 pr-4 font-medium">Filename</th>
-                <th className="pb-3 pr-4 font-medium">Type</th>
-                <th className="pb-3 pr-4 font-medium">Chunks</th>
-                <th className="pb-3 pr-4 font-medium">Indexed At</th>
-                <th className="pb-3 pr-4 font-medium">Created</th>
-                <th className="pb-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {documents.map((doc) => (
-                <tr key={doc.id} className="hover:bg-gray-50">
-                  <td className="py-3 pr-4 font-medium text-[#1e2d4e] max-w-xs truncate">{doc.filename}</td>
-                  <td className="py-3 pr-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium uppercase ${FILE_TYPE_COLORS[doc.file_type] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {doc.file_type}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4 text-gray-600">{doc.chunk_count}</td>
-                  <td className="py-3 pr-4 text-gray-500 whitespace-nowrap">
-                    {doc.indexed_at ? format(new Date(doc.indexed_at), 'dd MMM yy HH:mm') : (
-                      <span className="text-amber-500 text-xs">Not indexed</span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 text-gray-400 whitespace-nowrap text-xs">
-                    {format(new Date(doc.created_at), 'dd MMM yy')}
-                  </td>
-                  <td className="py-3">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleReindex(doc.id)}
-                        disabled={loadingIds[doc.id]}
-                        className="p-1.5 rounded hover:bg-blue-50 text-blue-500"
-                        title="Re-index"
-                      >
-                        {loadingIds[doc.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      </button>
-                      <button
-                        onClick={() => setConfirmDeleteId(doc.id)}
-                        disabled={loadingIds[doc.id]}
-                        className="p-1.5 rounded hover:bg-red-50 text-red-400"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <AnimatePresence>
+            {documents.map((doc) => {
+              const isIndexing = loadingIds[doc.id]
+              const indexed = !!doc.indexed_at
+
+              return (
+                <motion.div
+                  key={doc.id}
+                  layout
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex items-start gap-3 p-4 bg-white border border-[#e5e8ef] rounded-xl hover:border-brand/30 transition-colors"
+                >
+                  <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${FILE_TYPE_COLORS[doc.file_type] ?? 'bg-[#f1f3f7] text-[#4a5568]'}`}>
+                    {isIndexing
+                      ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}><File className="w-4 h-4" /></motion.div>
+                      : <File className="w-4 h-4" />
+                    }
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#0f1729] truncate">{doc.filename}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {isIndexing ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Indexing…
+                        </span>
+                      ) : indexed ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                          <Check className="w-3 h-3" /> Indexed
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-500 font-medium">Pending</span>
+                      )}
+                      <span className="text-xs text-[#9aa3b2]">·</span>
+                      <span className="text-xs text-[#9aa3b2]">{doc.chunk_count} chunks</span>
+                      <span className="text-xs text-[#9aa3b2]">·</span>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full uppercase ${FILE_TYPE_COLORS[doc.file_type] ?? 'bg-[#f1f3f7] text-[#4a5568]'}`}>{doc.file_type}</span>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <p className="text-xs text-[#9aa3b2] mt-0.5">{format(new Date(doc.created_at), 'dd MMM yyyy')}</p>
+                  </div>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      onClick={() => handleReindex(doc.id)}
+                      disabled={isIndexing}
+                      className="p-1.5 rounded-lg hover:bg-blue-50 text-[#9aa3b2] hover:text-blue-600 transition-colors"
+                      title="Re-ingest"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(doc.id)}
+                      disabled={isIndexing}
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-[#9aa3b2] hover:text-red-500 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
         </div>
       )}
 
@@ -358,10 +396,11 @@ function EntriesTab() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#e85c1a]" /></div>
       ) : entries.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2">
-          <Plus className="w-10 h-10" />
-          <p>No entries yet. Add the first knowledge base entry.</p>
-        </div>
+        <EmptyState
+          illustration={<KBEntryEmptyIllustration />}
+          title="No entries yet"
+          description="Add structured knowledge base entries to improve AI estimation accuracy."
+        />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

@@ -2,6 +2,7 @@ import { cn } from '../../lib/utils'
 import { Button } from './button'
 
 interface EmptyStateProps {
+  illustration?: React.ReactNode
   icon?: React.ReactNode
   title: string
   description?: string
@@ -9,13 +10,19 @@ interface EmptyStateProps {
     label: string
     onClick: () => void
   }
+  secondaryAction?: {
+    label: string
+    onClick: () => void
+  }
   className?: string
 }
 
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ illustration, icon, title, description, action, secondaryAction, className }: EmptyStateProps) {
   return (
     <div className={cn('flex flex-col items-center justify-center py-16 px-8 text-center', className)}>
-      {icon ? (
+      {illustration ? (
+        <div className="mb-5 opacity-80">{illustration}</div>
+      ) : icon ? (
         <div className="mb-5 text-[#9aa3b2]">{icon}</div>
       ) : (
         <DefaultEmptyIllustration />
@@ -24,9 +31,14 @@ export function EmptyState({ icon, title, description, action, className }: Empt
       {description && (
         <p className="text-sm text-[#4a5568] max-w-xs mb-5">{description}</p>
       )}
-      {action && (
-        <Button size="sm" onClick={action.onClick}>{action.label}</Button>
-      )}
+      <div className="flex items-center gap-2">
+        {action && (
+          <Button size="sm" onClick={action.onClick}>{action.label}</Button>
+        )}
+        {secondaryAction && (
+          <Button size="sm" variant="outline" onClick={secondaryAction.onClick}>{secondaryAction.label}</Button>
+        )}
+      </div>
     </div>
   )
 }

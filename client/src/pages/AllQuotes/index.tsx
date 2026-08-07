@@ -15,7 +15,9 @@ import { Badge } from '../../components/ui/badge'
 import { Card, CardContent } from '../../components/ui/card'
 import { Skeleton } from '../../components/ui/skeleton'
 import { EmptyState } from '../../components/ui/empty-state'
+import { QuoteEmptyIllustration } from '../../components/ui/illustrations'
 import { cn } from '../../lib/utils'
+import { usePageTitle } from '../../hooks/usePageTitle'
 
 type QuoteStatus = 'draft' | 'in_review' | 'pending_approval' | 'approved' | 'archived'
 type QuoteType   = 'individual' | 'assembly' | 'component'
@@ -90,6 +92,7 @@ function SkeletonRows() {
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export default function AllQuotes() {
+  usePageTitle('All Quotes')
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -97,6 +100,7 @@ export default function AllQuotes() {
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | ''>('')
   const [typeFilter, setTypeFilter]     = useState<QuoteType | ''>('')
+  const [sortBy, setSortBy]             = useState<'newest' | 'oldest' | 'cost_desc' | 'cost_asc' | 'confidence_desc'>('newest')
   const [showArchived, setShowArchived] = useState(false)
   const [currentPage, setCurrentPage]  = useState(1)
   const [showFilters, setShowFilters]  = useState(false)
@@ -113,7 +117,7 @@ export default function AllQuotes() {
 
   const filteredQuotes = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return quotes.filter(quote => {
+    const filtered = quotes.filter(quote => {
       if (quote.status === 'archived') {
         if (user?.role !== 'admin') return false
         if (!showArchived) return false
@@ -123,7 +127,16 @@ export default function AllQuotes() {
       if (typeFilter && quote.quote_type !== typeFilter) return false
       return true
     })
-  }, [quotes, search, statusFilter, typeFilter, showArchived, user?.role])
+    return [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case 'oldest': return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        case 'cost_desc': return (b.cost_eur ?? -1) - (a.cost_eur ?? -1)
+        case 'cost_asc': return (a.cost_eur ?? Infinity) - (b.cost_eur ?? Infinity)
+        case 'confidence_desc': return (b.confidence_score ?? -1) - (a.confidence_score ?? -1)
+        default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      }
+    })
+  }, [quotes, search, statusFilter, typeFilter, showArchived, sortBy, user?.role])
 
   const totalPages = Math.max(1, Math.ceil(filteredQuotes.length / PAGE_SIZE))
   const safePage   = Math.min(currentPage, totalPages)
@@ -174,9 +187,9 @@ export default function AllQuotes() {
         transition={{ delay: 0.08, duration: 0.3 }}
         className="space-y-3"
       >
-        {/* Search + filter toggle */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
+        {/* Search + sort + filter toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[160px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9aa3b2] pointer-events-none" />
             <input
               type="text"
@@ -186,6 +199,17 @@ export default function AllQuotes() {
               className="w-full pl-9 pr-3 h-9 text-sm border border-[#e5e8ef] rounded-lg bg-white text-[#0f1729] placeholder:text-[#9aa3b2] focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all"
             />
           </div>
+          <select
+            value={sortBy}
+            onChange={e => { setSortBy(e.target.value as typeof sortBy); resetPage() }}
+            className="h-9 text-sm border border-[#e5e8ef] rounded-lg px-3 bg-white text-[#4a5568] focus:outline-none focus:ring-2 focus:ring-navy cursor-pointer"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="cost_desc">Highest cost</option>
+            <option value="cost_asc">Lowest cost</option>
+            <option value="confidence_desc">Highest confidence</option>
+          </select>
           <Button
             variant={activeFiltersCount > 0 ? 'navy' : 'secondary'}
             size="sm"
@@ -276,7 +300,54 @@ export default function AllQuotes() {
       >
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            {/* ── Mobile card list (hidden on sm+) ── */}
+            <div className="sm:hidden divide-y divide-[#e5e8ef]">
+              {isLoading ? (
+                <div className="p-4 space-y-3">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="rounded-xl border border-[#e5e8ef] p-4 space-y-2">
+                      <Skeleton variant="line" height="16px" width="60%" />
+                      <Skeleton variant="line" height="12px" width="40%" />
+                    </div>
+                  ))}
+                </div>
+              ) : pageQuotes.length === 0 ? null : pageQuotes.map(quote => {
+                const cfg = STATUS_CONFIG[quote.status]
+                return (
+                  <Link key={quote.id} to={`/quotes/${quote.id}`} className="block px-4 py-3.5 hover:bg-surface-2 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-[#0f1729] truncate">{quote.part.name}</p>
+                        <p className="text-xs text-[#9aa3b2] mt-0.5">{quote.part.commodity_type}{quote.part.part_number ? ` · ${quote.part.part_number}` : ''}</p>
+                      </div>
+                      <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0', cfg.className)}>{cfg.label}</span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-2">
+                      {quote.cost_eur !== null && (
+                        <span className="text-sm font-mono font-semibold text-[#0f1729]">
+                          €{new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2 }).format(quote.cost_eur)}
+                        </span>
+                      )}
+                      {quote.confidence_score !== null && (
+                        <Badge variant={confidenceVariant(quote.confidence_score)}>{quote.confidence_score.toFixed(0)}%</Badge>
+                      )}
+                      <span className="text-xs text-[#9aa3b2] ml-auto">{format(new Date(quote.created_at), 'dd MMM yyyy')}</span>
+                    </div>
+                  </Link>
+                )
+              })}
+              {!isLoading && filteredQuotes.length === 0 && (
+                <EmptyState
+                  illustration={<QuoteEmptyIllustration />}
+                  title="No quotes found"
+                  description={search || statusFilter || typeFilter ? 'Try adjusting your filters.' : 'Get started by creating your first quote.'}
+                  action={{ label: 'New Quote', onClick: () => navigate('/quotes/new') }}
+                />
+              )}
+            </div>
+
+            {/* ── Desktop table (hidden below sm) ── */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full divide-y divide-[#e5e8ef]">
                 <thead className="bg-surface-2">
                   <tr>
@@ -377,7 +448,7 @@ export default function AllQuotes() {
               {/* Empty state */}
               {!isLoading && filteredQuotes.length === 0 && (
                 <EmptyState
-                  icon={<FileText className="w-10 h-10" />}
+                  illustration={<QuoteEmptyIllustration />}
                   title="No quotes found"
                   description={search || statusFilter || typeFilter ? 'Try adjusting your filters.' : 'Get started by creating your first quote.'}
                   action={{ label: 'New Quote', onClick: () => navigate('/quotes/new') }}

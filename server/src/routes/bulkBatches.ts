@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { requirePlan } from '../middleware/plan'
 import { bulkDrawingUpload, saveUploadedFile } from '../middleware/upload'
 import {
   db,
@@ -19,7 +20,7 @@ import { BULK_MAX_ITEMS } from '../config'
 
 const router = Router()
 
-router.use(requireAuth, requireRole(['engineer', 'admin']))
+router.use(requireAuth, requireRole(['engineer', 'admin']), requirePlan('pro'))
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -487,7 +488,7 @@ router.post('/:id/soft-delete', async (req: Request, res: Response) => {
 })
 
 // ─── GET /bulk-batches/:id/export-excel ───────────────────────────────────────
-router.get('/:id/export-excel', async (req: Request, res: Response) => {
+router.get('/:id/export-excel', requirePlan('pro'), async (req: Request, res: Response) => {
   try {
     const [batch] = await db.select().from(costingBatches)
       .where(and(

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { Zap, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Loader2, X } from 'lucide-react';
+import { Zap, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Loader2, X, Timer } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../../../lib/api';
 import { useQuoteContext } from '../../../contexts/QuoteContext';
 import { Button } from '../../../components/ui/button';
@@ -54,6 +55,8 @@ export default function Step4() {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showReasoning, setShowReasoning] = useState(false);
   const [diffSummary, setDiffSummary] = useState<string | null>(null);
+  const [estimationTime, setEstimationTime] = useState<number | null>(null);
+  const estimationStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -70,11 +73,15 @@ export default function Step4() {
     }
     setIsRunning(true);
     setProgressIndex(0);
+    estimationStartRef.current = performance.now();
     try {
       const result = await api.ai.estimateCost({
         quotation_id: context.quotationId,
         ...context.productionParams,
       });
+      if (estimationStartRef.current !== null) {
+        setEstimationTime((performance.now() - estimationStartRef.current) / 1000);
+      }
       context.setCostEstimate(result);
       await api.quotes.update(context.quotationId, {
         confidence_score: result.confidence_score,
@@ -92,11 +99,13 @@ export default function Step4() {
   const handleRegenerate = async () => {
     if (!context.quotationId) return;
     setIsRegenerating(true);
+    const regenStart = performance.now();
     try {
       const result = await api.ai.regenerate({
         quotation_id: context.quotationId,
         instructions: regenerateInstructions,
       });
+      setEstimationTime((performance.now() - regenStart) / 1000);
       context.setCostEstimate(result.estimate);
       if (result.diff_summary) {
         setDiffSummary(result.diff_summary);
@@ -124,11 +133,35 @@ export default function Step4() {
 
   if (isRunning) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-6">
-        <Loader2 className="w-16 h-16 text-[#e85c1a] animate-spin" />
-        <div className="text-center">
-          <p className="text-lg font-semibold text-[#1e2d4e]">Running AI Estimate</p>
-          <p className="text-gray-500 mt-1 transition-all">{PROGRESS_MESSAGES[progressIndex]}</p>
+      <div className="flex flex-col items-center justify-center min-h-[420px] space-y-8 py-12">
+        {/* Animated rings */}
+        <div className="relative w-24 h-24">
+          <span className="absolute inset-0 rounded-full border-4 border-[#e85c1a]/20 animate-ping" style={{ animationDuration: '1.8s' }} />
+          <span className="absolute inset-2 rounded-full border-4 border-[#e85c1a]/40 animate-ping" style={{ animationDuration: '1.4s', animationDelay: '0.3s' }} />
+          <div className="absolute inset-4 rounded-full bg-[#e85c1a]/10 flex items-center justify-center">
+            <Zap className="w-8 h-8 text-[#e85c1a]" />
+          </div>
+        </div>
+        <div className="text-center max-w-xs">
+          <p className="text-xl font-bold text-[#1e2d4e]">AI Engine Running</p>
+          <p className="text-[#9aa3b2] mt-2 text-sm min-h-[20px] transition-all duration-500">{PROGRESS_MESSAGES[progressIndex]}</p>
+        </div>
+        {/* Step pills */}
+        <div className="flex flex-wrap justify-center gap-2 max-w-sm">
+          {PROGRESS_MESSAGES.map((msg, i) => (
+            <span
+              key={i}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-300 ${
+                i < progressIndex
+                  ? 'bg-[#1e2d4e] text-white'
+                  : i === progressIndex
+                  ? 'bg-[#e85c1a] text-white scale-105'
+                  : 'bg-[#f1f3f7] text-[#9aa3b2]'
+              }`}
+            >
+              {msg}
+            </span>
+          ))}
         </div>
       </div>
     );
@@ -168,19 +201,34 @@ export default function Step4() {
           <h2 className="text-2xl font-bold text-[#1e2d4e]">AI Cost Estimate</h2>
           <p className="text-gray-500 mt-1">Review the AI-generated cost breakdown below.</p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className={`px-3 py-1 rounded-full font-medium ${
-            estimate.confidence_score >= 80
-              ? 'bg-green-100 text-green-800'
-              : estimate.confidence_score >= 70
-              ? 'bg-yellow-100 text-yellow-800'
-              : 'bg-red-100 text-red-800'
-          }`}>
-            {estimate.confidence_score}% confident
-          </span>
-          <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">
-            {estimate.kb_coverage_pct}% KB coverage
-          </span>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2 text-sm">
+            <span className={`px-3 py-1 rounded-full font-medium ${
+              estimate.confidence_score >= 80
+                ? 'bg-green-100 text-green-800'
+                : estimate.confidence_score >= 70
+                ? 'bg-yellow-100 text-yellow-800'
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {estimate.confidence_score}% confident
+            </span>
+            <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">
+              {estimate.kb_coverage_pct}% KB coverage
+            </span>
+          </div>
+          <AnimatePresence>
+            {estimationTime !== null && (
+              <motion.span
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-1 text-xs text-[#9aa3b2]"
+              >
+                <Timer className="w-3 h-3" />
+                Estimate generated in {estimationTime.toFixed(1)}s
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

@@ -13,7 +13,9 @@ import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Skeleton } from '../../components/ui/skeleton'
 import { EmptyState } from '../../components/ui/empty-state'
+import { NotificationsEmptyIllustration } from '../../components/ui/illustrations'
 import { cn } from '../../lib/utils'
+import { usePageTitle } from '../../hooks/usePageTitle'
 import type { Notification } from '@shared/types'
 
 const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
@@ -44,6 +46,7 @@ const itemVariants = {
 }
 
 export default function Notifications() {
+  usePageTitle('Notifications')
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -119,6 +122,7 @@ export default function Notifications() {
         <Card>
           <CardContent className="p-6">
             <EmptyState
+              illustration={<NotificationsEmptyIllustration />}
               title="No notifications yet"
               description="You'll see alerts here when quotes are submitted, approved, or need attention."
             />

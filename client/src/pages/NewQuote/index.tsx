@@ -12,6 +12,7 @@ import Step4 from './steps/Step4'
 import Step5 from './steps/Step5'
 import Step6 from './steps/Step6'
 import { cn } from '../../lib/utils'
+import { usePageTitle } from '../../hooks/usePageTitle'
 
 const STEPS = [
   { number: 1, label: 'Drawing' },
@@ -23,6 +24,7 @@ const STEPS = [
 ]
 
 function NewQuoteInner() {
+  usePageTitle('New Quote')
   const { currentStep, setStep } = useQuoteContext()
   const navigate = useNavigate()
 

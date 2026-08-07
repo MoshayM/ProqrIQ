@@ -1,12 +1,14 @@
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { Check, X, Zap, Building2, Users, Star, ChevronLeft, ExternalLink } from 'lucide-react'
+import { Check, X, Zap, Building2, Users, Star, ChevronLeft, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { usePlan, type PlanId } from '../../contexts/PlanContext'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { ProgressBar } from '../../components/ui/progress-bar'
 import { cn } from '../../lib/utils'
+import { usePageTitle } from '../../hooks/usePageTitle'
 
 interface PlanFeature {
   label: string
@@ -99,9 +101,11 @@ const fadeUp = {
 }
 
 export default function Plans() {
+  usePageTitle('Plans')
   const { user } = useAuth()
   const navigate = useNavigate()
   const [billingAnnual, setBillingAnnual] = useState(false)
+  const { effectivePlan, previewPlan, setPreviewPlan, limits, canPreview } = usePlan()
 
   const currentPlan = (user as any)?.plan ?? 'free'
 
@@ -112,10 +116,52 @@ export default function Plans() {
       transition={{ duration: 0.3 }}
       className="page-content space-y-8"
     >
+      {/* Plan Preview Banner */}
+      <AnimatePresence>
+        {previewPlan && (
+          <motion.div
+            initial={{ opacity: 0, y: -12, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -12, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 bg-purple-600 rounded-xl text-white text-sm">
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 flex-shrink-0" />
+                <span>Previewing as <strong className="capitalize">{previewPlan}</strong> plan — feature restrictions are simulated</span>
+              </div>
+              <button onClick={() => setPreviewPlan(null)} className="flex items-center gap-1 text-white/80 hover:text-white text-xs font-medium">
+                <EyeOff className="w-3.5 h-3.5" /> Exit preview
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-[#0f1729]">Plans &amp; Usage</h1>
-        <p className="text-sm text-[#9aa3b2] mt-1">Compare plans and track your current usage</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[#0f1729]">Plans &amp; Usage</h1>
+          <p className="text-sm text-[#9aa3b2] mt-1">Compare plans and track your current usage</p>
+        </div>
+        {/* Admin plan previewer */}
+        {canPreview && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#9aa3b2]">Preview as plan:</span>
+            {(['free', 'pro', 'org'] as PlanId[]).map(p => (
+              <button
+                key={p}
+                onClick={() => setPreviewPlan(previewPlan === p ? null : p)}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors capitalize',
+                  previewPlan === p ? 'bg-purple-600 text-white' : 'bg-surface-3 text-[#4a5568] hover:bg-surface-4',
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Current Usage */}
@@ -177,7 +223,7 @@ export default function Plans() {
         {PLANS.map((plan, i) => {
           const Icon = plan.icon
           const monthly = billingAnnual ? Math.round(plan.price * 0.8) : plan.price
-          const isCurrent = currentPlan === plan.id
+          const isCurrent = effectivePlan === plan.id
           return (
             <motion.div key={plan.id} variants={fadeUp} custom={i} initial="hidden" animate="show">
               <Card className={cn('relative h-full flex flex-col', plan.bg, plan.border, 'border-2')}>

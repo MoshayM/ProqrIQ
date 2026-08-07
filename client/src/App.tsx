@@ -1,6 +1,8 @@
 import React from 'react'
 import { Routes, Route, Navigate, Link } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { PlanProvider } from './contexts/PlanContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import PersistentLayout from './components/layout/PersistentLayout'
 import { CommandPalette, useCommandPalette } from './components/ui/command-palette'
 import { LogoMark } from './components/ui/logo'
@@ -20,6 +22,13 @@ import Account from './pages/Account'
 import AiControl from './pages/AiControl'
 import Plans from './pages/Plans'
 import Notifications from './pages/Notifications'
+import DevicePreview from './pages/DevicePreview'
+import SupplierMap from './pages/SupplierMap'
+import Billing from './pages/Billing'
+import Organization from './pages/Organization'
+import SearchPage from './pages/Search'
+import Pricing from './pages/Pricing'
+import Register from './pages/Register'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -90,7 +99,9 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/login"    element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
+      <Route path="/pricing"  element={<Pricing />} />
 
       <Route path="/dashboard"     element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
       <Route path="/quotes"        element={<ProtectedLayout><AllQuotes /></ProtectedLayout>} />
@@ -102,7 +113,12 @@ function AppRoutes() {
       <Route path="/account"       element={<ProtectedLayout><Account /></ProtectedLayout>} />
       <Route path="/ai-control"   element={<ProtectedLayout><AiControl /></ProtectedLayout>} />
       <Route path="/plans"          element={<ProtectedLayout><Plans /></ProtectedLayout>} />
-      <Route path="/notifications" element={<ProtectedLayout><Notifications /></ProtectedLayout>} />
+      <Route path="/notifications"   element={<ProtectedLayout><Notifications /></ProtectedLayout>} />
+      <Route path="/device-preview"  element={<ProtectedLayout><DevicePreview /></ProtectedLayout>} />
+      <Route path="/supplier-map"    element={<ProtectedLayout><SupplierMap /></ProtectedLayout>} />
+      <Route path="/billing"         element={<ProtectedLayout><Billing /></ProtectedLayout>} />
+      <Route path="/organization"    element={<ProtectedLayout><Organization /></ProtectedLayout>} />
+      <Route path="/search"          element={<ProtectedLayout><SearchPage /></ProtectedLayout>} />
 
       {/* Legacy redirects */}
       <Route path="/kb"             element={<Navigate to="/account?tab=kb"    replace />} />
@@ -119,8 +135,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppShell />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <PlanProvider>
+          <AppShell />
+        </PlanProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }

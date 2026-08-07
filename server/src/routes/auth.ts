@@ -34,6 +34,55 @@ async function purgeExpiredChallenges() {
 
 // ─── password auth ────────────────────────────────────────────────────────────
 
+// POST /auth/register — public self-service registration (Free plan)
+router.post('/register', async (req: Request, res: Response) => {
+  try {
+    const { email, password, full_name } = req.body
+    if (!email || !password || !full_name) {
+      return res.status(400).json({ success: false, error: 'email, password, and full_name are required', error_code: 'MISSING_FIELDS' })
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters', error_code: 'WEAK_PASSWORD' })
+    }
+
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email))
+    if (existing) {
+      return res.status(409).json({ success: false, error: 'An account with this email already exists', error_code: 'EMAIL_CONFLICT' })
+    }
+
+    const password_hash = await bcrypt.hash(password, 12)
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+
+    await db.insert(users).values({
+      id,
+      email,
+      full_name,
+      password_hash,
+      role: 'engineer',
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    })
+
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(),
+      user_id: id,
+      action: 'user_self_registered',
+      entity_type: 'user',
+      entity_id: id,
+      details: JSON.stringify({ email }),
+      created_at: now,
+    })
+
+    const token = issueToken({ id, email, role: 'engineer', full_name })
+    return res.status(201).json({ success: true, data: { token, user: { id, email, role: 'engineer', full_name } } })
+  } catch (err) {
+    console.error('Register error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
+  }
+})
+
 // POST /auth/login
 router.post('/login', async (req: Request, res: Response) => {
   try {

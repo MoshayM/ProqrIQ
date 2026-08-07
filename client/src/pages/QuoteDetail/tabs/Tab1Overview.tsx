@@ -287,7 +287,56 @@ export default function Tab1Overview({ quotation, quotationId }: TabProps) {
               Failed to load cost lines. Please try again.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Mobile card list (sm and below) */}
+            <div className="md:hidden divide-y divide-gray-100">
+              {isLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="px-4 py-3 space-y-1.5 animate-pulse">
+                    <div className="h-3.5 bg-gray-200 rounded w-2/3" />
+                    <div className="flex justify-between items-center">
+                      <div className="h-3 bg-gray-200 rounded w-1/4" />
+                      <div className="h-3 bg-gray-200 rounded w-1/5" />
+                    </div>
+                  </div>
+                ))
+              ) : !costLines || costLines.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-gray-500">
+                  No cost lines yet. Run the AI estimate to generate a breakdown.
+                </p>
+              ) : (
+                <>
+                  {CATEGORY_ORDER.filter((cat) => grouped.has(cat)).map((cat) => {
+                    const lines = grouped.get(cat)!;
+                    return (
+                      <React.Fragment key={cat}>
+                        <div className="px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                          {CATEGORY_LABELS[cat] ?? cat}
+                        </div>
+                        {lines.map((line) => (
+                          <div key={line.id} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-800 truncate">{line.label}</p>
+                              {line.notes && <p className="text-xs text-gray-400 mt-0.5 truncate">{line.notes}</p>}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <TierBadge tier={line.source_tier} />
+                              <span className="text-sm font-mono font-medium text-gray-900">€ {formatEur(line.value_eur)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                  <div className="px-4 py-3 bg-gray-100 flex items-center justify-between border-t-2 border-gray-300">
+                    <span className="text-sm font-bold text-gray-900">Total Cost</span>
+                    <span className="text-sm font-bold font-mono text-gray-900">€ {formatEur(totalCost)}</span>
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Desktop table (md and above) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200">
@@ -383,6 +432,7 @@ export default function Tab1Overview({ quotation, quotationId }: TabProps) {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth, requireRole } from '../middleware/auth'
+import { requirePlan } from '../middleware/plan'
 import { kbUpload, saveUploadedFile } from '../middleware/upload'
 import {
   db,
@@ -16,7 +17,7 @@ import { ingestDocument } from '../services/kb'
 
 const router = Router()
 
-router.use(requireAuth)
+router.use(requireAuth, requirePlan('organization'))
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 

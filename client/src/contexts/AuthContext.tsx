@@ -10,6 +10,8 @@ import type { Profile } from '@shared/types'
 
 // ─── Shape ───────────────────────────────────────────────────────────────────
 
+const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner'] as const
+
 interface AuthContextValue {
   user: Profile | null
   token: string | null
@@ -20,6 +22,11 @@ interface AuthContextValue {
   logout: () => Promise<void>
   hasRole: (roles: string[]) => boolean
   updateUser: (updates: Partial<Profile>) => void
+  /** Role being previewed (admin only). null = off. */
+  previewRole: string | null
+  setPreviewRole: (role: string | null) => void
+  /** The effective role: previewRole if set, otherwise real user role */
+  effectiveRole: string | null
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -37,6 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(
     () => !!localStorage.getItem('aq_token'),
   )
+  const urlPreviewRole = new URLSearchParams(window.location.search).get('preview_role')
+  const [previewRole, setPreviewRoleState] = useState<string | null>(urlPreviewRole)
 
   // On mount: validate stored token and hydrate profile in background
   useEffect(() => {
@@ -87,12 +96,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const isRealAdmin = user ? (ADMIN_ROLES as readonly string[]).includes(user.role) : false
+
+  const setPreviewRole = useCallback((role: string | null) => {
+    if (!isRealAdmin) return
+    setPreviewRoleState(role)
+  }, [isRealAdmin])
+
+  const effectiveRole = (isRealAdmin && previewRole) ? previewRole : (user?.role ?? null)
+
   const hasRole = useCallback(
     (roles: string[]) => {
       if (!user) return false
-      return roles.includes(user.role)
+      const role = (isRealAdmin && previewRole) ? previewRole : user.role
+      return roles.includes(role)
     },
-    [user],
+    [user, isRealAdmin, previewRole],
   )
 
   const updateUser = useCallback((updates: Partial<Profile>) => {
@@ -111,6 +130,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         hasRole,
         updateUser,
+        previewRole,
+        setPreviewRole,
+        effectiveRole,
       }}
     >
       {children}

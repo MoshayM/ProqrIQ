@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff, Mail, Lock, Fingerprint, Sparkles } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { api } from '../../lib/api'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
@@ -326,6 +327,13 @@ export default function Login() {
                 </div>
               </div>
             </>
+          )}
+
+          {!showSetup && (
+            <p className="text-center text-sm text-[#9aa3b2] mt-6">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-navy font-semibold hover:underline">Start free</Link>
+            </p>
           )}
 
         </div>

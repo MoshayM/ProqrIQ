@@ -12,7 +12,15 @@ const DRAWING_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
   'image/webp',
+  // CAD formats — browsers often send these as octet-stream
+  'application/step',
+  'model/step',
+  'application/iges',
+  'model/iges',
+  'application/octet-stream', // fallback for STEP/IGES from most browsers
 ])
+
+const CAD_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs'])
 
 const KB_MIME_TYPES = new Set([
   'application/pdf',
@@ -30,11 +38,12 @@ function drawingFileFilter(
   file: Express.Multer.File,
   cb: FileFilterCallback,
 ): void {
-  if (DRAWING_MIME_TYPES.has(file.mimetype)) {
+  const ext = path.extname(file.originalname).toLowerCase()
+  if (DRAWING_MIME_TYPES.has(file.mimetype) || CAD_EXTENSIONS.has(ext)) {
     cb(null, true)
   } else {
     cb(
-      Object.assign(new Error('Invalid file type. Allowed: PDF, PNG, JPG, WEBP'), {
+      Object.assign(new Error('Invalid file type. Allowed: PDF, PNG, JPG, WEBP, STEP, IGES'), {
         error_code: 'INVALID_FILE_TYPE',
         status:     400,
       }) as unknown as null,

@@ -1,0 +1,169 @@
+import { db } from '../../db/index'
+import { eq, sql } from 'drizzle-orm'
+import { aiRouteOverrides, aiUsageLog, users } from '../../db/schema'
+import { getProvider, estimateCost } from './providers'
+import type { AIRequest, AIResponse } from './providers'
+
+// ─── Task types ───────────────────────────────────────────────────────────────
+
+export type AITask =
+  | 'costing'
+  | 'bulk_costing'
+  | 'cad_costing'
+  | 'kb_summary'
+  | 'supplier_suggest'
+  | 'supplier_recommend'
+  | 'negotiation'
+  | 'clarification'
+  | 'extraction'
+  | 'generic'
+
+export interface RouteResult {
+  provider: string
+  model:    string
+}
+
+// ─── Default routing table ────────────────────────────────────────────────────
+
+const ENV_OVERRIDES: Partial<Record<AITask, string | undefined>> = {
+  costing:            process.env.AI_ROUTE_COSTING,
+  bulk_costing:       process.env.AI_ROUTE_BULK_COSTING,
+  cad_costing:        process.env.AI_ROUTE_CAD_COSTING,
+  supplier_suggest:   process.env.AI_ROUTE_SUPPLIER_SUGGEST,
+  supplier_recommend: process.env.AI_ROUTE_SUPPLIER_RECOMMEND,
+  negotiation:        process.env.AI_ROUTE_NEGOTIATION,
+}
+
+const DEFAULTS: Record<AITask, RouteResult> = {
+  costing:            { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  bulk_costing:       { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  cad_costing:        { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  kb_summary:         { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  supplier_suggest:   { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  supplier_recommend: { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  negotiation:        { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  clarification:      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  extraction:         { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  generic:            { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+}
+
+function parseRoute(raw: string): RouteResult {
+  const [provider, ...rest] = raw.split('/')
+  return { provider, model: rest.join('/') }
+}
+
+// In-memory cache for DB overrides (TTL 5 minutes)
+let dbOverrideCache: Record<string, RouteResult> = {}
+let dbCacheTs = 0
+
+async function getDbOverrides(): Promise<Record<string, RouteResult>> {
+  if (Date.now() - dbCacheTs < 300_000) return dbOverrideCache
+  try {
+    const rows = await db.select().from(aiRouteOverrides)
+    dbOverrideCache = Object.fromEntries(rows.map(r => [r.task, { provider: r.provider, model: r.model }]))
+    dbCacheTs = Date.now()
+  } catch {
+    // Table may not exist yet during dev — return empty
+    dbOverrideCache = {}
+    dbCacheTs = Date.now()
+  }
+  return dbOverrideCache
+}
+
+export async function getModelForTask(task: AITask): Promise<RouteResult> {
+  const dbOverrides = await getDbOverrides()
+  if (dbOverrides[task]) return dbOverrides[task]
+  const envRaw = ENV_OVERRIDES[task]
+  if (envRaw) return parseRoute(envRaw)
+  return DEFAULTS[task]
+}
+
+export async function setRouteOverride(task: AITask, provider: string, model: string, updatedBy: string): Promise<void> {
+  await db.insert(aiRouteOverrides)
+    .values({ task, provider, model, updated_by: updatedBy, updated_at: new Date().toISOString() })
+    .onConflictDoUpdate({ target: aiRouteOverrides.task, set: { provider, model, updated_by: updatedBy, updated_at: new Date().toISOString() } })
+  dbCacheTs = 0 // bust cache
+}
+
+export async function deleteRouteOverride(task: AITask): Promise<void> {
+  await db.delete(aiRouteOverrides).where(eq(aiRouteOverrides.task, task))
+  dbCacheTs = 0
+}
+
+// ─── Budget check ─────────────────────────────────────────────────────────────
+
+export async function checkBudget(userId: string): Promise<void> {
+  try {
+    const user = await db.query.users.findFirst({ where: eq(users.id, userId) })
+    if (!user) return
+    const budget = (user as unknown as { ai_budget_usd_monthly?: number }).ai_budget_usd_monthly ?? 20
+    const spent  = (user as unknown as { ai_spend_usd_current?: number }).ai_spend_usd_current  ?? 0
+    if (budget > 0 && spent >= budget) {
+      const err = Object.assign(new Error('Monthly AI budget exhausted. Contact admin to increase your limit.'), { status: 429 })
+      throw err
+    }
+  } catch (e: unknown) {
+    if ((e as { status?: number }).status === 429) throw e
+    // Budget columns not yet migrated — skip check silently
+  }
+}
+
+// ─── Usage tracking ───────────────────────────────────────────────────────────
+
+export function trackUsage(opts: {
+  userId:   string
+  task:     AITask
+  response: AIResponse
+  quoteId?: string
+  batchId?: string
+}): void {
+  setImmediate(async () => {
+    try {
+      const cost = estimateCost(opts.response.provider, opts.response.model, opts.response.inputTokens, opts.response.outputTokens)
+
+      await db.insert(aiUsageLog).values({
+        user_id:            opts.userId,
+        task_type:          opts.task,
+        provider:           opts.response.provider,
+        model:              opts.response.model,
+        input_tokens:       opts.response.inputTokens,
+        output_tokens:      opts.response.outputTokens,
+        estimated_cost_usd: cost,
+        quote_id:           opts.quoteId ?? null,
+        batch_id:           opts.batchId ?? null,
+        created_at:         new Date().toISOString(),
+      })
+
+      // Increment running spend atomically
+      await db.update(users)
+        .set({ ai_spend_usd_current: sql`COALESCE(ai_spend_usd_current, 0) + ${cost}` })
+        .where(eq(users.id, opts.userId))
+    } catch { /* tracking is best-effort — never crash */ }
+  })
+}
+
+// ─── Main completion helper (drop-in for callers) ─────────────────────────────
+
+export async function completeWithRouter(opts: {
+  task:       AITask
+  request:    Omit<AIRequest, 'model'>
+  userId:     string
+  quoteId?:   string
+  batchId?:   string
+}): Promise<string> {
+  await checkBudget(opts.userId)
+
+  const route    = await getModelForTask(opts.task)
+  const provider = getProvider(route.provider)
+  const response = await provider.complete({ ...opts.request, model: route.model })
+
+  trackUsage({
+    userId:  opts.userId,
+    task:    opts.task,
+    response,
+    quoteId: opts.quoteId,
+    batchId: opts.batchId,
+  })
+
+  return response.content
+}

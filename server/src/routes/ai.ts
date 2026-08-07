@@ -98,7 +98,8 @@ const regenerateSchema = z.object({
 // POST /ai/analyse-drawing
 router.post('/analyse-drawing', validate(analyseDrawingSchema), async (req: Request, res: Response) => {
   try {
-    const result = await analyseDrawing(req.body.file_path, req.body.file_type, req.body.file_name)
+    const userId = (req as any).user?.id ?? 'system'
+    const result = await analyseDrawing(req.body.file_path, req.body.file_type, req.body.file_name, userId)
     return res.json({ success: true, data: result })
   } catch (err) {
     console.error('Analyse drawing error:', err)
@@ -139,6 +140,7 @@ router.post('/estimate-cost', validate(estimateCostSchema), async (req: Request,
       exchange_rate: body.exchange_rate,
       exchange_rate_source: body.exchange_rate_source,
       force_regenerate: body.force_regenerate ?? false,
+      user_id: userId,
     })
 
     // Confidence gate: below threshold → return questions only, no cost data
@@ -198,6 +200,7 @@ router.post('/estimate-assembly', validate(estimateAssemblySchema), async (req: 
       assembly_quotation_id: body.assembly_quotation_id,
       components: body.components,
       joining_notes: body.joining_notes ?? null,
+      user_id: userId,
     })
 
     await db.insert(auditLog).values({
@@ -240,7 +243,8 @@ router.post('/query', validate(querySchema), async (req: Request, res: Response)
       })
     }
 
-    const result = await queryOnQuote(quotation_id, question)
+    const queryUserId = (req as any).user?.id ?? 'system'
+    const result = await queryOnQuote(quotation_id, question, queryUserId)
     return res.json({ success: true, data: { answer: result.answer } })
   } catch (err) {
     console.error('AI query error:', err)
@@ -272,7 +276,7 @@ router.post('/regenerate', validate(regenerateSchema), async (req: Request, res:
       })
     }
 
-    const result = await regenerateQuote(quotation_id, instructions)
+    const result = await regenerateQuote(quotation_id, instructions, userId)
 
     await db.insert(auditLog).values({
       id: crypto.randomUUID(),

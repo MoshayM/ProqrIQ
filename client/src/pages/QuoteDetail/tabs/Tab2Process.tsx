@@ -189,7 +189,45 @@ function MaterialTab({ quotationId }: { quotationId: string }) {
           </p>
         </div>
       )}
-      <div className="overflow-x-auto">
+      {/* Mobile cards (sm and below) */}
+      <div className="md:hidden divide-y divide-gray-100 border border-gray-200 rounded-lg">
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="px-4 py-3 space-y-1.5 animate-pulse">
+              <div className="h-3.5 bg-gray-200 rounded w-2/3" />
+              <div className="flex justify-between">
+                <div className="h-3 bg-gray-200 rounded w-1/4" />
+                <div className="h-3 bg-gray-200 rounded w-1/5" />
+              </div>
+            </div>
+          ))
+        ) : materials && materials.length > 0 ? (
+          <>
+            {materials.map((m) => (
+              <div key={m.id} className={`px-4 py-3 space-y-1 ${m.benchmark_divergence_pct != null && m.benchmark_divergence_pct > 15 ? 'bg-red-50' : ''}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-gray-800">{m.material_name}</p>
+                  <span className="text-sm font-mono font-semibold text-gray-900 flex-shrink-0">€ {formatEur(m.total_cost_eur)}</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                  {m.spec && <span>{m.spec}</span>}
+                  <span>{m.quantity} {m.unit}</span>
+                  <span>@ € {formatEur(m.unit_cost_eur)}</span>
+                  <TierBadge tier={m.source_tier} />
+                </div>
+              </div>
+            ))}
+            <div className="px-4 py-2.5 bg-gray-100 flex justify-between items-center border-t-2 border-gray-300">
+              <span className="text-sm font-bold text-gray-900">Total</span>
+              <span className="text-sm font-bold font-mono text-gray-900">€ {formatEur(totalCost)}</span>
+            </div>
+          </>
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-gray-500">No material breakdown available.</p>
+        )}
+      </div>
+      {/* Desktop table (md and above) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
@@ -305,6 +343,8 @@ function MaterialTab({ quotationId }: { quotationId: string }) {
   );
 }
 
+
+
 // ─── Cycle Time Sub-Tab ───────────────────────────────────────────────────────
 
 function CycleTimeTab({ quotationId }: { quotationId: string }) {
@@ -345,8 +385,49 @@ function CycleTimeTab({ quotationId }: { quotationId: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* Mobile card list */}
+      <div className="md:hidden divide-y divide-gray-100 border border-gray-200 rounded-lg">
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="px-4 py-3 space-y-1.5 animate-pulse">
+              <div className="h-3.5 bg-gray-200 rounded w-1/2" />
+              <div className="flex gap-4">
+                <div className="h-3 bg-gray-200 rounded w-1/5" />
+                <div className="h-3 bg-gray-200 rounded w-1/5" />
+                <div className="h-3 bg-gray-200 rounded w-1/5" />
+              </div>
+            </div>
+          ))
+        ) : sortedSteps.length > 0 ? (
+          <>
+            {sortedSteps.map((s) => {
+              const rowTotal = (s.machine_time_min ?? 0) + (s.labour_time_min ?? 0) + (s.setup_time_min ?? 0);
+              return (
+                <div key={s.id} className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-sm font-medium text-gray-800">{s.step_number}. {s.process_name}</p>
+                    <span className="text-sm font-mono font-semibold text-gray-900">{rowTotal.toFixed(1)} min</span>
+                  </div>
+                  <div className="flex gap-3 text-xs text-gray-500">
+                    {s.machine_time_min != null && <span>M: {s.machine_time_min.toFixed(1)}</span>}
+                    {s.labour_time_min != null && <span>L: {s.labour_time_min.toFixed(1)}</span>}
+                    {s.setup_time_min != null && <span>S: {s.setup_time_min.toFixed(1)}</span>}
+                  </div>
+                  {s.notes && <p className="text-xs text-gray-400 mt-0.5">{s.notes}</p>}
+                </div>
+              );
+            })}
+            <div className="px-4 py-2.5 bg-gray-100 flex justify-between border-t-2 border-gray-300">
+              <span className="text-sm font-bold text-gray-900">Total</span>
+              <span className="text-sm font-bold font-mono text-gray-900">{(totals.machine + totals.labour + totals.setup).toFixed(1)} min</span>
+            </div>
+          </>
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-gray-500">No cycle time steps recorded.</p>
+        )}
+      </div>
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">

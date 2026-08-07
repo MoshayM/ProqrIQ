@@ -145,6 +145,7 @@ function buildCostInput(
     modified_process_steps: null,
     exchange_rate: merged.exchange_rate,
     exchange_rate_source: merged.exchange_rate_source,
+    is_bulk: true,
   }
 }
 
@@ -176,6 +177,8 @@ export async function runBatch(batchId: string): Promise<void> {
 
     // Load queued items
     const items = await getQueuedItems(batchId)
+
+    const batchUserId = batch.created_by ?? 'system'
 
     const sharedParams: SharedBatchParams = batch.shared_params_json
       ? JSON.parse(batch.shared_params_json)
@@ -222,6 +225,7 @@ export async function runBatch(batchId: string): Promise<void> {
               item.source_file_path,
               ext,
               item.source_file_name ?? item.source_file_path,
+              batchUserId,
             )
           }
 
@@ -240,6 +244,7 @@ export async function runBatch(batchId: string): Promise<void> {
           }
 
           const costInput = buildCostInput(item, sharedParams, drawingAnalysis, quotationId, partData ?? null)
+          costInput.user_id = batchUserId
           const result = await costOnePart(costInput)
 
           if ((result.confidence_score ?? 0) < 70) {
