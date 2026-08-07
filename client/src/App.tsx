@@ -19,6 +19,7 @@ import Settings from './pages/Settings'
 import Account from './pages/Account'
 import AiControl from './pages/AiControl'
 import Plans from './pages/Plans'
+import Notifications from './pages/Notifications'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -100,7 +101,8 @@ function AppRoutes() {
       <Route path="/assemblies/:id" element={<ProtectedLayout><Assemblies /></ProtectedLayout>} />
       <Route path="/account"       element={<ProtectedLayout><Account /></ProtectedLayout>} />
       <Route path="/ai-control"   element={<ProtectedLayout><AiControl /></ProtectedLayout>} />
-      <Route path="/plans"        element={<ProtectedLayout><Plans /></ProtectedLayout>} />
+      <Route path="/plans"          element={<ProtectedLayout><Plans /></ProtectedLayout>} />
+      <Route path="/notifications" element={<ProtectedLayout><Notifications /></ProtectedLayout>} />
 
       {/* Legacy redirects */}
       <Route path="/kb"             element={<Navigate to="/account?tab=kb"    replace />} />
