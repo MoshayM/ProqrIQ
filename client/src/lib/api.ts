@@ -107,6 +107,7 @@ export const api = {
     createEntry:     (u: unknown)              => client.post('/kb/entries', u).then(d),
     updateEntry:     (id: string, u: unknown)  => client.patch(`/kb/entries/${id}`, u).then(d),
     deactivateEntry: (id: string)              => client.patch(`/kb/entries/${id}/deactivate`).then(d),
+    search:          (q: string)               => client.get(`/kb/search?q=${encodeURIComponent(q)}`).then(d),
     rates:           ()                        => client.get('/kb/regional-rates').then(d),
     createRate:      (u: unknown)              => client.post('/kb/regional-rates', u).then(d),
     updateRate:      (id: string, u: unknown)  => client.patch(`/kb/regional-rates/${id}`, u).then(d),

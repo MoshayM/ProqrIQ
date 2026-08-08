@@ -256,6 +256,16 @@ function NotificationsDrawer({ open, onClose }: { open: boolean; onClose: () => 
   )
 }
 
+// 7B.10 — scroll to top on every route change
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    const main = document.querySelector('main')
+    if (main) main.scrollTop = 0
+  }, [pathname])
+  return null
+}
+
 export default function PersistentLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, hasRole } = useAuth()
   const navigate = useNavigate()
@@ -658,6 +668,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
 
       {/* ── Main content ────────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto pt-14 lg:pt-0 relative">
+        <ScrollToTop />
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -142,22 +142,51 @@ export default function Dashboard() {
   const pendingList = useMemo(() => quotes.filter(q => q.status === 'pending_approval'), [quotes])
   const canApprove = user?.role === 'ceo' || user?.role === 'admin'
 
-  async function handleApprove(id: string) {
-    try {
-      await api.quotes.approve(id, {})
+  // 7B.4 — optimistic approve
+  const approveMut = useMutation({
+    mutationFn: (id: string) => api.quotes.approve(id, {}),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['quotes'] })
+      const prev = queryClient.getQueryData<Quotation[]>(['quotes'])
+      queryClient.setQueryData<Quotation[]>(['quotes'], old =>
+        old?.map(q => q.id === id ? { ...q, status: 'approved' as const } : q) ?? []
+      )
+      return { prev }
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['quotes'], ctx.prev)
+      toast.error('Failed to approve')
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       toast.success('Quote approved! 🎉')
       burstConfetti()
-    } catch { toast.error('Failed to approve') }
-  }
+    },
+  })
 
-  async function handleReject(id: string) {
-    try {
-      await api.quotes.reject(id, {})
+  // 7B.4 — optimistic reject
+  const rejectMut = useMutation({
+    mutationFn: (id: string) => api.quotes.reject(id, {}),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['quotes'] })
+      const prev = queryClient.getQueryData<Quotation[]>(['quotes'])
+      queryClient.setQueryData<Quotation[]>(['quotes'], old =>
+        old?.map(q => q.id === id ? { ...q, status: 'archived' as const } : q) ?? []
+      )
+      return { prev }
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['quotes'], ctx.prev)
+      toast.error('Failed to reject')
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quotes'] })
       toast.info('Quote rejected')
-    } catch { toast.error('Failed to reject') }
-  }
+    },
+  })
+
+  const handleApprove = (id: string) => approveMut.mutate(id)
+  const handleReject  = (id: string) => rejectMut.mutate(id)
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'

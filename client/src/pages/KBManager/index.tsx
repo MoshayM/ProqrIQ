@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Upload, RefreshCw, Trash2, Plus, Edit2, X, Check, Eye, EyeOff, Loader2, FileText, File } from 'lucide-react';
+import { Upload, RefreshCw, Trash2, Plus, Edit2, X, Check, Eye, EyeOff, Loader2, FileText, File, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EmptyState } from '../../components/ui/empty-state';
 import { KBDocEmptyIllustration, KBEntryEmptyIllustration } from '../../components/ui/illustrations';
@@ -56,6 +56,22 @@ function DocumentsTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loadingIds, setLoadingIds] = useState<Record<string, boolean>>({});
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback((q: string) => {
+    setSearchQuery(q);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => setSearchDebounced(q.trim()), 350);
+  }, []);
+
+  const { data: kbResults = [], isFetching: kbSearching } = useQuery<Array<{ id: string; content: string; similarity: number }>>({
+    queryKey: ['kb-search', searchDebounced],
+    queryFn: () => api.kb.search(searchDebounced),
+    enabled: searchDebounced.length >= 2,
+    staleTime: 10_000,
+  });
 
   const { data: documents = [], isLoading } = useQuery<KBDocument[]>({
     queryKey: ['kb-documents'],
@@ -228,6 +244,38 @@ function DocumentsTab() {
           </AnimatePresence>
         </div>
       )}
+
+      {/* KB search preview (7C.15) */}
+      <div className="border border-[#e5e8ef] rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 bg-surface-2 border-b border-[#e5e8ef] flex items-center gap-2">
+          <Search className="w-4 h-4 text-[#9aa3b2]" />
+          <input
+            value={searchQuery}
+            onChange={e => handleSearchChange(e.target.value)}
+            placeholder="Search KB — try a material, process, or rate…"
+            className="flex-1 text-sm bg-transparent text-[#0f1729] placeholder-[#9aa3b2] focus:outline-none"
+          />
+          {kbSearching && <Loader2 className="w-3.5 h-3.5 text-[#9aa3b2] animate-spin" />}
+        </div>
+        <div className="divide-y divide-[#f1f3f7] max-h-64 overflow-y-auto">
+          {searchDebounced.length < 2 ? (
+            <p className="px-4 py-3 text-xs text-[#9aa3b2]">Type at least 2 characters to preview matching chunks</p>
+          ) : kbResults.length === 0 && !kbSearching ? (
+            <p className="px-4 py-3 text-xs text-[#9aa3b2]">No matching chunks found</p>
+          ) : (
+            kbResults.map(r => (
+              <div key={r.id} className="px-4 py-2.5 hover:bg-surface-2 transition-colors">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] font-semibold text-brand uppercase tracking-wide">
+                    {(r.similarity * 100).toFixed(0)}% match
+                  </span>
+                </div>
+                <p className="text-xs text-[#4a5568] leading-relaxed line-clamp-3">{r.content}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* Delete Confirm Dialog */}
       {confirmDeleteId && (

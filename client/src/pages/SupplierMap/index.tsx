@@ -7,6 +7,7 @@ import {
   Star, ChevronRight, X, Upload, BarChart3, MessageSquare, RefreshCw,
   CheckCircle, Zap, AlertTriangle, Users, Trash2,
 } from 'lucide-react'
+import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts'
 import { api } from '../../lib/api'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { useSubscription } from '../../hooks/useSubscription'
@@ -435,23 +436,52 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
 
         {tab === 'customers' && (
           <div className="space-y-4">
-            {/* Total share indicator */}
-            {customers.length > 0 && (
-              <div className="p-3 rounded-xl bg-surface-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide">Business Share Allocated</span>
-                  <span className={cn('text-xs font-bold font-mono', totalShare > 100 ? 'text-red-600' : totalShare === 100 ? 'text-green-600' : 'text-[#4a5568]')}>
-                    {totalShare.toFixed(0)}%
-                  </span>
+            {/* Donut chart (4B.8) */}
+            {customers.filter(c => c.business_share_pct != null).length > 0 && (() => {
+              const COLORS = ['#e85c1a', '#1e2d4e', '#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899']
+              const chartData = customers
+                .filter(c => c.business_share_pct != null)
+                .map(c => ({ name: c.customer_name, value: c.business_share_pct! }))
+              const remaining = Math.max(0, 100 - totalShare)
+              if (remaining > 0) chartData.push({ name: 'Other / unallocated', value: remaining })
+              return (
+                <div className="flex flex-col items-center gap-2">
+                  <ResponsiveContainer width="100%" height={140}>
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={42}
+                        outerRadius={62}
+                        paddingAngle={2}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {chartData.map((_, i) => (
+                          <Cell key={i} fill={i === chartData.length - 1 && remaining > 0 ? '#e5e8ef' : COLORS[i % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <ReTooltip
+                        formatter={(v: number) => [`${v.toFixed(1)}%`, 'Share']}
+                        contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e5e8ef' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="w-full flex flex-wrap justify-center gap-x-3 gap-y-1">
+                    {chartData.map((d, i) => (
+                      <span key={i} className="flex items-center gap-1 text-[10px] text-[#4a5568]">
+                        <span className="w-2 h-2 rounded-full inline-block" style={{ background: i === chartData.length - 1 && remaining > 0 ? '#e5e8ef' : COLORS[i % COLORS.length] }} />
+                        {d.name} {d.value.toFixed(0)}%
+                      </span>
+                    ))}
+                  </div>
+                  {totalShare > 100 && (
+                    <p className="text-xs text-red-500 font-medium">Total exceeds 100% — please review</p>
+                  )}
                 </div>
-                <div className="h-1.5 rounded-full bg-[#e5e8ef] overflow-hidden">
-                  <div
-                    className={cn('h-full rounded-full transition-all', totalShare > 100 ? 'bg-red-500' : 'bg-brand')}
-                    style={{ width: `${Math.min(totalShare, 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* Customer list */}
             {customersLoading ? (

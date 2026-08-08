@@ -487,4 +487,29 @@ router.patch('/regional-rates/:id', requireRole(['admin']), validate(regionalRat
   }
 })
 
+// ─── GET /kb/search?q=... — live KB search preview ───────────────────────────
+
+router.get('/search', async (req: Request, res: Response) => {
+  try {
+    const q = String(req.query.q ?? '').trim()
+    if (!q) return res.json({ success: true, data: [] })
+
+    const { searchKB } = await import('../services/kb')
+    // commodity type left empty for cross-commodity preview search; topK=5
+    const results = await searchKB(q, '', 5)
+
+    return res.json({
+      success: true,
+      data: results.map((r, i) => ({
+        id:         i,
+        content:    r.content.slice(0, 200),
+        similarity: Number(r.similarity.toFixed(3)),
+      })),
+    })
+  } catch (err) {
+    console.error('KB search error:', err)
+    return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
 export { router }
