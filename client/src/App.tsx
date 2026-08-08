@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import PersistentLayout from './components/layout/PersistentLayout'
 import { CommandPalette, useCommandPalette } from './components/ui/command-palette'
 import { LogoMark } from './components/ui/logo'
+import { PreviewBanner } from './components/PreviewBanner'
 
 // ─── Pages ───────────────────────────────────────────────────────────────────
 import Login from './pages/Login'
@@ -86,6 +87,7 @@ function AppShell() {
 
   return (
     <>
+      <PreviewBanner />
       <AppRoutes />
       <CommandPalette open={open} onClose={() => setOpen(false)} />
     </>

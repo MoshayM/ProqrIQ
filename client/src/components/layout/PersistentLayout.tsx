@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
@@ -20,12 +20,19 @@ import {
   Menu,
   X,
   Search,
+  CheckCheck,
+  AlertTriangle,
+  BookOpen,
+  RotateCcw,
+  TrendingUp,
+  ExternalLink,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api'
 import type { Notification } from '@shared/types'
 import { KeyboardShortcutsModal } from '../ui/KeyboardShortcutsModal'
 import { UsageBanner } from '../ui/UsageBanner'
+import { formatDistanceToNow } from 'date-fns'
 
 interface NavItem {
   to: string
@@ -106,12 +113,156 @@ function getActivityStreak(): number {
   } catch { return 1 }
 }
 
+// ─── Notifications drawer (7B.6) ─────────────────────────────────────────────
+
+const NOTIF_TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
+  quote_submitted:         { icon: FileText,      color: 'text-blue-600',   bg: 'bg-blue-50' },
+  quote_approved:          { icon: CheckCheck,    color: 'text-green-600',  bg: 'bg-green-50' },
+  quote_rejected:          { icon: AlertTriangle, color: 'text-red-600',    bg: 'bg-red-50' },
+  kb_updated:              { icon: BookOpen,      color: 'text-indigo-600', bg: 'bg-indigo-50' },
+  confidence_alert:        { icon: AlertTriangle, color: 'text-amber-600',  bg: 'bg-amber-50' },
+  quote_restored:          { icon: RotateCcw,     color: 'text-[#4a5568]',  bg: 'bg-[#f1f3f7]' },
+  batch_completed:         { icon: Layers,        color: 'text-brand',      bg: 'bg-brand/10' },
+  assembly_rollup_updated: { icon: TrendingUp,    color: 'text-navy',       bg: 'bg-navy/10' },
+}
+const NOTIF_DEFAULT = { icon: Bell, color: 'text-[#9aa3b2]', bg: 'bg-surface-3' }
+
+function NotificationsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const { data: notifs = [] } = useQuery<Notification[]>({
+    queryKey: ['notifications'],
+    queryFn: () => api.notifications.list(),
+    refetchInterval: 30_000,
+  })
+  const readMut = useMutation({
+    mutationFn: (id: string) => api.notifications.read(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+  const readAllMut = useMutation({
+    mutationFn: () => api.notifications.readAll(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+  const unread = notifs.filter(n => !n.is_read).length
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="notif-backdrop"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/30 z-[60]"
+            onClick={onClose}
+          />
+          {/* Drawer */}
+          <motion.div
+            key="notif-drawer"
+            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 380, damping: 35 }}
+            className="fixed right-0 top-0 bottom-0 w-96 bg-white shadow-2xl z-[61] flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e8ef] flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-[#0f1729]">Notifications</h2>
+                {unread > 0 && (
+                  <span className="min-w-[20px] h-5 bg-brand text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1.5">
+                    {unread}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                {unread > 0 && (
+                  <button
+                    onClick={() => readAllMut.mutate()}
+                    className="text-xs text-[#9aa3b2] hover:text-[#4a5568] px-2 py-1 rounded-lg hover:bg-surface-3 transition-colors"
+                  >
+                    Mark all read
+                  </button>
+                )}
+                <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-3 text-[#9aa3b2] hover:text-[#4a5568] transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto">
+              {notifs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
+                  <div className="w-12 h-12 rounded-full bg-surface-3 flex items-center justify-center">
+                    <Bell className="w-5 h-5 text-[#9aa3b2]" />
+                  </div>
+                  <p className="text-sm font-medium text-[#0f1729]">You're all caught up</p>
+                  <p className="text-xs text-[#9aa3b2]">Quote approvals, batch completions, and alerts will appear here.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#f1f3f7]">
+                  {notifs.map(n => {
+                    const meta = NOTIF_TYPE_META[n.type] ?? NOTIF_DEFAULT
+                    const Icon = meta.icon
+                    const href = n.reference_id
+                      ? n.reference_type === 'quotation' ? `/quotes/${n.reference_id}`
+                      : n.reference_type === 'batch'     ? `/bulk/${n.reference_id}`
+                      : n.reference_type === 'assembly'  ? `/assemblies/${n.reference_id}`
+                      : null
+                    : null
+                    return (
+                      <div
+                        key={n.id}
+                        className={cn('flex gap-3 px-5 py-4 hover:bg-surface-2 transition-colors', !n.is_read && 'border-l-2 border-brand')}
+                        onClick={() => !n.is_read && readMut.mutate(n.id)}
+                      >
+                        <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0', meta.bg)}>
+                          <Icon className={cn('w-3.5 h-3.5', meta.color)} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn('text-sm leading-snug', n.is_read ? 'text-[#4a5568]' : 'text-[#0f1729] font-medium')}>{n.message}</p>
+                          <p className="text-[10px] text-[#9aa3b2] mt-0.5">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</p>
+                          {href && (
+                            <Link
+                              to={href}
+                              onClick={onClose}
+                              className="inline-flex items-center gap-1 mt-1.5 text-[11px] text-brand hover:underline font-medium"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              View
+                            </Link>
+                          )}
+                        </div>
+                        {!n.is_read && <div className="w-2 h-2 rounded-full bg-brand mt-1.5 flex-shrink-0" />}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-[#e5e8ef] px-5 py-3 flex-shrink-0">
+              <Link
+                to="/notifications"
+                onClick={onClose}
+                className="text-xs text-[#9aa3b2] hover:text-[#4a5568] transition-colors"
+              >
+                View all notifications →
+              </Link>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
 export default function PersistentLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, hasRole } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [notifDrawerOpen, setNotifDrawerOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [shortcutTip, setShortcutTip] = useState<string | null>(null)
   const pendingGRef = useRef(false)
@@ -193,14 +344,14 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
         </button>
         <Logo size="sm" inverted />
         <div className="ml-auto flex items-center gap-2">
-          <NavLink to="/notifications" className="relative p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+          <button onClick={() => setNotifDrawerOpen(true)} className="relative p-1.5 rounded-lg hover:bg-white/10 transition-colors">
             <Bell className="w-4 h-4 text-white/60" />
             {unread > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] bg-brand text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
                 {unread > 99 ? '99+' : unread}
               </span>
             )}
-          </NavLink>
+          </button>
         </div>
       </div>
 
@@ -261,8 +412,8 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
           {!collapsed && (
             <div className="flex items-center gap-1 ml-auto">
               {/* Notifications */}
-              <NavLink
-                to="/notifications"
+              <button
+                onClick={() => setNotifDrawerOpen(true)}
                 className="relative p-1.5 rounded-lg hover:bg-white/10 transition-colors"
                 aria-label="Notifications"
               >
@@ -272,7 +423,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
                     {unread > 99 ? '99+' : unread}
                   </span>
                 )}
-              </NavLink>
+              </button>
 
               {/* Collapse toggle */}
               <button
@@ -389,6 +540,17 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
 
         {/* User footer */}
         <div className="border-t border-white/10 p-3 flex-shrink-0">
+          {/* Activity streak — desktop expanded only */}
+          {!collapsed && (() => {
+            const streak = getActivityStreak()
+            if (streak < 2) return null
+            return (
+              <div className="flex items-center gap-1.5 px-1.5 py-1 mb-2 rounded-md bg-white/5">
+                <span className="text-xs">🔥</span>
+                <span className="text-[10px] text-white/50">{streak} day streak</span>
+              </div>
+            )
+          })()}
           {collapsed ? (
             <button
               onClick={() => navigate('/account')}
@@ -530,6 +692,9 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
 
       {/* ── Keyboard shortcuts modal ─────────────────────────────────────────── */}
       <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+
+      {/* ── Notifications drawer (7B.6) ──────────────────────────────────────── */}
+      <NotificationsDrawer open={notifDrawerOpen} onClose={() => setNotifDrawerOpen(false)} />
     </div>
   )
 }

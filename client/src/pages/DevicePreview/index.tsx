@@ -1,12 +1,13 @@
 import React, { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Monitor, Tablet, Smartphone, Users, RefreshCw, ExternalLink } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Monitor, Tablet, Smartphone, Users, RefreshCw, ExternalLink, Zap } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { cn } from '../../lib/utils'
 import { usePageTitle } from '../../hooks/usePageTitle'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
+import { DeviceShell } from '../../components/DeviceShell'
 
 const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner']
 
@@ -20,10 +21,18 @@ interface Viewport {
 }
 
 const VIEWPORTS: Viewport[] = [
-  { id: 'mobile',   label: 'Mobile',   width: 375,  height: 812, icon: Smartphone, device: 'iPhone 14' },
-  { id: 'tablet',   label: 'Tablet',   width: 768,  height: 1024, icon: Tablet,    device: 'iPad Air' },
-  { id: 'laptop',   label: 'Laptop',   width: 1280, height: 800,  icon: Monitor,   device: '13" Laptop' },
-  { id: 'desktop',  label: 'Desktop',  width: 1440, height: 900,  icon: Monitor,   device: '24" Monitor' },
+  { id: 'mobile',   label: 'Mobile',   width: 375,  height: 812,  icon: Smartphone, device: 'iPhone 14' },
+  { id: 'tablet',   label: 'Tablet',   width: 768,  height: 1024, icon: Tablet,     device: 'iPad Air' },
+  { id: 'laptop',   label: 'Laptop',   width: 1280, height: 800,  icon: Monitor,    device: '13" Laptop' },
+  { id: 'desktop',  label: 'Desktop',  width: 1440, height: 900,  icon: Monitor,    device: '24" Monitor' },
+]
+
+// 5D.4 — Preview matrix: quick-access scenario presets
+const PREVIEW_MATRIX = [
+  { label: 'Free user · mobile',    viewport: 'mobile',  role: 'engineer',    page: '/dashboard',  desc: 'Engineer on iPhone 14 on Free plan' },
+  { label: 'Pro user · desktop',    viewport: 'desktop', role: 'engineer',    page: '/quotes',     desc: 'Engineer on 24" desktop on Pro plan' },
+  { label: 'CEO · tablet',          viewport: 'tablet',  role: 'ceo',         page: '/dashboard',  desc: 'CEO reviewing dashboard on iPad' },
+  { label: 'Admin · AI Control',    viewport: 'laptop',  role: 'admin',       page: '/ai-control', desc: 'Admin managing AI routing on laptop' },
 ]
 
 const ROLES = [
@@ -193,50 +202,62 @@ function DevicePreviewInner() {
         </div>
       </div>
 
-      {/* Device Frame + iframe */}
-      <div className="flex justify-center">
-        <div
-          className="relative bg-[#1a1a2e] rounded-3xl shadow-2xl overflow-hidden"
-          style={{
-            width: Math.min(viewport.width + 32, 932),
-            height: viewport.height + 48,
-          }}
-        >
-          {/* Phone notch / screen */}
-          {viewport.id === 'mobile' && (
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#1a1a2e] rounded-b-2xl z-10" />
-          )}
-          <div
-            className="absolute overflow-hidden bg-white"
-            style={{
-              top: viewport.id === 'mobile' ? 24 : 12,
-              left: 16,
-              right: 16,
-              bottom: 12,
-              borderRadius: viewport.id === 'mobile' ? '0 0 16px 16px' : 8,
-            }}
-          >
-            <iframe
-              key={iframeKey}
-              src={previewUrl}
-              title={`Preview: ${selectedPage.label} as ${selectedRole.label}`}
-              className="w-full h-full border-0"
-              style={{
-                transformOrigin: 'top left',
-                transform: `scale(${Math.min(viewport.width, 900) / viewport.width})`,
-                width: `${viewport.width}px`,
-                height: `${viewport.height}px`,
-              }}
-            />
+      {/* 5D.4 — Preview matrix */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-brand" />
+            <CardTitle className="text-sm">Quick Scenarios</CardTitle>
           </div>
-        </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {PREVIEW_MATRIX.map((preset) => (
+              <button
+                key={preset.label}
+                onClick={() => {
+                  const vp = VIEWPORTS.find(v => v.id === preset.viewport) ?? VIEWPORTS[0]
+                  const role = ROLES.find(r => r.id === preset.role) ?? ROLES[0]
+                  const page = PREVIEW_PAGES.find(p => p.path === preset.page) ?? PREVIEW_PAGES[0]
+                  setViewport(vp)
+                  handleRoleChange(role)
+                  setSelectedPage(page)
+                  setIframeKey(k => k + 1)
+                }}
+                className="flex flex-col gap-1 p-3 rounded-xl border border-[#e5e8ef] hover:border-brand/40 hover:bg-brand/5 transition-all text-left"
+              >
+                <span className="text-xs font-semibold text-[#0f1729] leading-tight">{preset.label}</span>
+                <span className="text-[10px] text-[#9aa3b2] leading-tight">{preset.desc}</span>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Device Frame + iframe with DeviceShell (5C.2) */}
+      <div className="flex justify-center overflow-x-auto pb-4">
+        {(() => {
+          const shellType = viewport.id === 'mobile' ? 'mobile' : viewport.id === 'tablet' ? 'tablet' : 'desktop'
+          const maxW = 900
+          const scale = viewport.width > maxW ? maxW / viewport.width : 1
+          return (
+            <DeviceShell type={shellType} width={viewport.width} height={viewport.height} scale={scale}>
+              <iframe
+                key={iframeKey}
+                src={previewUrl}
+                title={`Preview: ${selectedPage.label} as ${selectedRole.label}`}
+                className="border-0"
+                style={{ width: viewport.width, height: viewport.height }}
+              />
+            </DeviceShell>
+          )
+        })()}
       </div>
 
       {/* Note */}
       <p className="text-xs text-[#9aa3b2] text-center">
-        The iframe preview shows the live app. Role simulation relies on the{' '}
-        <code className="font-mono bg-surface-3 px-1 rounded">preview_role</code> query param
-        — actual role-gating in auth is not overridden.
+        Role simulation uses the{' '}
+        <code className="font-mono bg-surface-3 px-1 rounded">preview_role</code> URL param — UI only, API calls use your real session.
       </p>
     </motion.div>
   )

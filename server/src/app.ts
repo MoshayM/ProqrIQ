@@ -168,6 +168,33 @@ app.use('/api/search',       searchRouter)
 app.use('/api/suppliers',    suppliersRouter)
 app.use('/api',              subscriptionRouter)
 
+// ─── Vercel cron: reset monthly usage counters (runs 1st of every month) ──────
+app.post('/api/cron/reset-usage', async (req: Request, res: Response) => {
+  // Vercel cron requests include a bearer token — verify it
+  const authHeader = req.headers.authorization
+  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  try {
+    const { db } = await import('./db')
+    const { usage_counters } = await import('./db/schema')
+    const period = new Date().toISOString().slice(0, 7) + '-01'
+    const result = await db.update(usage_counters).set({
+      quotes_used: 0,
+      bulk_used: 0,
+      supplier_searches_used: 0,
+      ai_tokens_used: 0,
+      period_start: period,
+    })
+    console.log('[Cron] Usage counters reset for period', period)
+    res.json({ success: true, period, result })
+  } catch (err) {
+    console.error('[Cron] reset-usage failed', err)
+    res.status(500).json({ error: (err as Error).message })
+  }
+})
+
 // Standalone assumptions confirm route
 app.patch('/api/assumptions/:id/confirm', (req, res, next) => {
   // Forward to quotations router by re-pathing

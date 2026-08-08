@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e2d4e"/>
+      <stop offset="100%" stop-color="#0d1829"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.03"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid pattern -->
+  <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+    <path d="M 60 0 L 0 0 0 60" fill="none" stroke="white" stroke-width="0.4" stroke-opacity="0.05"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Orange accent bar -->
+  <rect x="80" y="80" width="6" height="80" rx="3" fill="#e85c1a"/>
+
+  <!-- Logo mark — P with circuit node -->
+  <g transform="translate(96, 90)">
+    <rect width="52" height="68" rx="6" fill="#e85c1a" opacity="0.15"/>
+    <text x="26" y="46" font-family="system-ui, sans-serif" font-size="38" font-weight="900" fill="#e85c1a" text-anchor="middle">P</text>
+    <!-- Circuit nodes -->
+    <circle cx="46" cy="28" r="4" fill="#e85c1a"/>
+    <line x1="42" y1="28" x2="52" y2="28" stroke="#e85c1a" stroke-width="2"/>
+    <circle cx="56" cy="28" r="2.5" fill="none" stroke="#e85c1a" stroke-width="1.5"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="168" y="130" font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="800" fill="white" letter-spacing="-1">ProqrIQ</text>
+
+  <!-- Tagline -->
+  <text x="96" y="185" font-family="system-ui, sans-serif" font-size="22" fill="white" fill-opacity="0.55" font-weight="400">Cost engineering. Reimagined.</text>
+
+  <!-- Divider -->
+  <line x1="96" y1="220" x2="500" y2="220" stroke="white" stroke-opacity="0.1" stroke-width="1"/>
+
+  <!-- Feature pills -->
+  <g transform="translate(96, 246)">
+    <!-- Pill 1 -->
+    <rect width="210" height="36" rx="18" fill="white" fill-opacity="0.07"/>
+    <text x="18" y="23" font-family="system-ui, sans-serif" font-size="14" fill="white" fill-opacity="0.8">⚡ AI Cost Estimation</text>
+
+    <!-- Pill 2 -->
+    <rect x="226" width="220" height="36" rx="18" fill="white" fill-opacity="0.07"/>
+    <text x="244" y="23" font-family="system-ui, sans-serif" font-size="14" fill="white" fill-opacity="0.8">🔍 Supplier Discovery</text>
+
+    <!-- Pill 3 -->
+    <rect x="462" width="200" height="36" rx="18" fill="white" fill-opacity="0.07"/>
+    <text x="480" y="23" font-family="system-ui, sans-serif" font-size="14" fill="white" fill-opacity="0.8">📊 Bulk Costing</text>
+  </g>
+
+  <!-- Right side — mock UI card -->
+  <g transform="translate(720, 80)">
+    <!-- Card background -->
+    <rect width="400" height="470" rx="20" fill="url(#card)" stroke="white" stroke-opacity="0.1" stroke-width="1"/>
+
+    <!-- Card header -->
+    <rect width="400" height="56" rx="20" fill="white" fill-opacity="0.06"/>
+    <rect y="40" width="400" height="16" fill="white" fill-opacity="0.06"/>
+    <text x="20" y="34" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="white">Housing_v3.step</text>
+    <rect x="310" y="16" width="72" height="24" rx="12" fill="#22c55e" fill-opacity="0.2"/>
+    <text x="346" y="32" font-family="system-ui, sans-serif" font-size="11" fill="#22c55e" text-anchor="middle">98% conf.</text>
+
+    <!-- Confidence arc mock -->
+    <g transform="translate(200, 160)">
+      <path d="M -70 0 A 70 70 0 0 1 70 0" fill="none" stroke="white" stroke-opacity="0.1" stroke-width="12" stroke-linecap="round"/>
+      <path d="M -70 0 A 70 70 0 0 1 68 -14" fill="none" stroke="#22c55e" stroke-width="12" stroke-linecap="round"/>
+      <text x="0" y="-10" font-family="ui-monospace, monospace" font-size="26" font-weight="700" fill="white" text-anchor="middle">98%</text>
+      <text x="0" y="8" font-family="system-ui, sans-serif" font-size="10" fill="white" fill-opacity="0.4" text-anchor="middle">CONFIDENCE</text>
+    </g>
+
+    <!-- Cost lines -->
+    <g transform="translate(20, 250)">
+      <text x="0" y="0" font-family="system-ui, sans-serif" font-size="11" fill="white" fill-opacity="0.5">COST BREAKDOWN</text>
+
+      <rect y="12" width="360" height="1" fill="white" fill-opacity="0.08"/>
+
+      <text x="0" y="34" font-family="system-ui, sans-serif" font-size="13" fill="white" fill-opacity="0.8">Material</text>
+      <text x="360" y="34" font-family="ui-monospace, monospace" font-size="13" fill="white" text-anchor="end">€ 24.50</text>
+      <rect y="40" width="360" height="1" fill="white" fill-opacity="0.06"/>
+
+      <text x="0" y="62" font-family="system-ui, sans-serif" font-size="13" fill="white" fill-opacity="0.8">Labour</text>
+      <text x="360" y="62" font-family="ui-monospace, monospace" font-size="13" fill="white" text-anchor="end">€ 18.20</text>
+      <rect y="68" width="360" height="1" fill="white" fill-opacity="0.06"/>
+
+      <text x="0" y="90" font-family="system-ui, sans-serif" font-size="13" fill="white" fill-opacity="0.8">Machine</text>
+      <text x="360" y="90" font-family="ui-monospace, monospace" font-size="13" fill="white" text-anchor="end">€ 12.80</text>
+      <rect y="96" width="360" height="1" fill="white" fill-opacity="0.06"/>
+
+      <rect y="106" width="360" height="44" rx="10" fill="#e85c1a" fill-opacity="0.15"/>
+      <text x="16" y="132" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="white">Total incl. margin</text>
+      <text x="344" y="132" font-family="ui-monospace, monospace" font-size="16" font-weight="800" fill="#e85c1a" text-anchor="end">€ 64.70</text>
+    </g>
+  </g>
+
+  <!-- Bottom bar -->
+  <rect y="570" width="1200" height="60" fill="black" fill-opacity="0.2"/>
+  <text x="96" y="602" font-family="system-ui, sans-serif" font-size="14" fill="white" fill-opacity="0.4">B2B Cost Engineering Platform · Pepperl+Fuchs · proqriq.vercel.app</text>
+  <rect x="1096" y="584" width="32" height="32" rx="8" fill="#e85c1a" fill-opacity="0.8"/>
+  <text x="1112" y="605" font-family="system-ui, sans-serif" font-size="16" font-weight="900" fill="white" text-anchor="middle">P</text>
+</svg>
