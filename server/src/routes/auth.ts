@@ -11,7 +11,7 @@ import { requireAuth } from '../middleware/auth'
 import { avatarUpload, saveUploadedFile } from '../middleware/upload'
 import { db, users, auditLog, passkeyCredentials, passkeyChallenges } from '../db/index'
 import { eq, lt, and } from 'drizzle-orm'
-import { JWT_SECRET, RP_ID, RP_ORIGIN, RP_NAME } from '../config'
+import { JWT_SECRET, RP_ID, RP_ORIGINS, RP_NAME } from '../config'
 
 const router = Router()
 
@@ -249,7 +249,7 @@ router.post('/passkey/register/verify', requireAuth, async (req: Request, res: R
     const verification = await verifyRegistrationResponse({
       response,
       expectedChallenge: challengeRow.challenge,
-      expectedOrigin: RP_ORIGIN,
+      expectedOrigin: RP_ORIGINS,
       expectedRPID: RP_ID,
     })
     if (!verification.verified || !verification.registrationInfo) {
@@ -328,7 +328,7 @@ router.post('/passkey/auth/verify', async (req: Request, res: Response) => {
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge: challengeRow.challenge,
-      expectedOrigin: RP_ORIGIN,
+      expectedOrigin: RP_ORIGINS,
       expectedRPID: RP_ID,
       authenticator: {
         credentialID: fromBase64Url(cred.id),
