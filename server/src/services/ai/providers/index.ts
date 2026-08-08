@@ -1,6 +1,8 @@
 import { AnthropicProvider } from './anthropic'
 import { OpenAIProvider }   from './openai'
 import { GeminiProvider }   from './gemini'
+import { GrokProvider }     from './grok'
+import { CopilotProvider }  from './copilot'
 import type { AIProvider }  from './base'
 
 export * from './base'
@@ -10,6 +12,8 @@ export const ALL_PROVIDERS: AIProvider[] = [
   new AnthropicProvider(),
   new OpenAIProvider(),
   new GeminiProvider(),
+  new GrokProvider(),
+  new CopilotProvider(),
 ]
 
 export function activeProviders(): AIProvider[] {

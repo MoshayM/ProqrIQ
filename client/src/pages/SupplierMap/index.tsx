@@ -631,55 +631,141 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
 
 // ─── SUPPLIER CARD ────────────────────────────────────────────────────────────
 
-function SupplierCard({ supplier, selected, onClick }: {
+function SupplierCard({ supplier, selected, inCompare, onClick, onCompare }: {
   supplier: Supplier
   selected: boolean
+  inCompare: boolean
   onClick: () => void
+  onCompare: (e: React.MouseEvent) => void
 }) {
   const caps: string[] = (() => {
     try { return JSON.parse(supplier.capabilities ?? '[]') } catch { return [] }
   })()
 
   return (
-    <motion.button
+    <motion.div
       layout
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      onClick={onClick}
       className={cn(
-        'w-full text-left p-3 rounded-xl border-2 transition-all',
-        selected ? 'border-brand bg-brand/5' : 'border-[#e5e8ef] hover:border-brand/30 bg-white',
+        'w-full text-left p-3 rounded-xl border-2 transition-all bg-white',
+        selected ? 'border-brand bg-brand/5' : inCompare ? 'border-purple-400 bg-purple-50/40' : 'border-[#e5e8ef] hover:border-brand/30',
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <p className="text-sm font-semibold text-[#0f1729] truncate">{supplier.name}</p>
-            {supplier.origin === 'ai_suggested' && (
-              <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 font-medium">AI</span>
+      <button className="w-full text-left" onClick={onClick}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-[#0f1729] truncate">{supplier.name}</p>
+              {supplier.origin === 'ai_suggested' && (
+                <span className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 font-medium">AI</span>
+              )}
+            </div>
+            <p className="text-xs text-[#9aa3b2] mt-0.5">
+              {COUNTRY_NAMES[supplier.country_code] ?? supplier.country_code}
+              {supplier.city ? ` · ${supplier.city}` : ''}
+            </p>
+            {caps.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {caps.slice(0, 2).map(c => (
+                  <span key={c} className="text-[9px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand font-medium capitalize">
+                    {c.replace(/_/g, ' ')}
+                  </span>
+                ))}
+                {caps.length > 2 && <span className="text-[9px] text-[#9aa3b2]">+{caps.length - 2}</span>}
+              </div>
             )}
           </div>
-          <p className="text-xs text-[#9aa3b2] mt-0.5">
-            {COUNTRY_NAMES[supplier.country_code] ?? supplier.country_code}
-            {supplier.city ? ` · ${supplier.city}` : ''}
-          </p>
-          {caps.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {caps.slice(0, 2).map(c => (
-                <span key={c} className="text-[9px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand font-medium capitalize">
-                  {c.replace(/_/g, ' ')}
-                </span>
+          <div className="flex-shrink-0 flex flex-col items-end gap-1">
+            <TierStars rating={supplier.tier_rating} />
+            <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', selected ? 'text-brand rotate-90' : 'text-[#c8cdd8]')} />
+          </div>
+        </div>
+      </button>
+      {/* Compare toggle */}
+      <button
+        onClick={onCompare}
+        className={cn(
+          'mt-2 w-full text-[10px] font-medium py-1 rounded-lg border transition-all',
+          inCompare
+            ? 'border-purple-300 bg-purple-100 text-purple-700 hover:bg-purple-200'
+            : 'border-[#e5e8ef] text-[#9aa3b2] hover:border-purple-300 hover:text-purple-600 hover:bg-purple-50'
+        )}
+      >
+        {inCompare ? '✓ In comparison' : '+ Compare'}
+      </button>
+    </motion.div>
+  )
+}
+
+// ─── COMPARE DRAWER ───────────────────────────────────────────────────────────
+
+function CompareDrawer({ suppliers, onClose }: { suppliers: Supplier[]; onClose: () => void }) {
+  const FIELDS: { key: keyof Supplier; label: string }[] = [
+    { key: 'country_code', label: 'Country' },
+    { key: 'city',         label: 'City' },
+    { key: 'tier_rating',  label: 'Tier Rating' },
+    { key: 'capabilities', label: 'Capabilities' },
+    { key: 'notes',        label: 'Notes' },
+  ]
+
+  function displayVal(supplier: Supplier, key: keyof Supplier): string {
+    const v = supplier[key]
+    if (key === 'country_code') return COUNTRY_NAMES[v as string] ?? (v as string) ?? '—'
+    if (key === 'capabilities') {
+      try { const arr = JSON.parse(v as string ?? '[]'); return (arr as string[]).join(', ') || '—' } catch { return String(v ?? '—') }
+    }
+    if (key === 'tier_rating') return v != null ? `${v} / 5` : '—'
+    return String(v ?? '—')
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[9000] flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 40, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden max-h-[85vh] flex flex-col"
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e8ef]">
+          <h2 className="text-lg font-bold text-[#0f1729]">Supplier Comparison</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-3 text-[#9aa3b2] hover:text-[#4a5568]">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="overflow-auto flex-1">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-surface-2 border-b border-[#e5e8ef]">
+              <tr>
+                <th className="text-left py-3 px-6 text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide w-36">Field</th>
+                {suppliers.map(s => (
+                  <th key={s.id} className="text-left py-3 px-4 text-sm font-semibold text-[#0f1729]">{s.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#f1f3f7]">
+              {FIELDS.map(({ key, label }) => (
+                <tr key={key} className="hover:bg-surface-2 transition-colors">
+                  <td className="py-3 px-6 text-xs font-medium text-[#9aa3b2] uppercase tracking-wide">{label}</td>
+                  {suppliers.map(s => (
+                    <td key={s.id} className="py-3 px-4 text-[#0f1729]">{displayVal(s, key)}</td>
+                  ))}
+                </tr>
               ))}
-              {caps.length > 2 && <span className="text-[9px] text-[#9aa3b2]">+{caps.length - 2}</span>}
-            </div>
-          )}
+            </tbody>
+          </table>
         </div>
-        <div className="flex-shrink-0 flex flex-col items-end gap-1">
-          <TierStars rating={supplier.tier_rating} />
-          <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', selected ? 'text-brand rotate-90' : 'text-[#c8cdd8]')} />
-        </div>
-      </div>
-    </motion.button>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -712,6 +798,17 @@ export default function SupplierMap() {
   const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null)
   const [filterMinTier, setFilterMinTier] = useState<number>(0)
   const [filterCapability, setFilterCapability] = useState('')
+  const [compareIds, setCompareIds] = useState<string[]>([])
+  const [showCompareDrawer, setShowCompareDrawer] = useState(false)
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+
+  function toggleCompare(id: string) {
+    setCompareIds(prev =>
+      prev.includes(id)
+        ? prev.filter(x => x !== id)
+        : prev.length < 4 ? [...prev, id] : (toast.error('Max 4 suppliers in comparison'), prev)
+    )
+  }
 
   const { data: suppliers = [], isLoading: suppliersLoading } = useQuery<Supplier[]>({
     queryKey: ['suppliers'],
@@ -785,6 +882,14 @@ export default function SupplierMap() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-[#9aa3b2]">{suppliers.filter(s => s.is_active).length} suppliers</span>
+          {/* Mobile filter toggle */}
+          <button
+            onClick={() => setMobileFilterOpen(v => !v)}
+            className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#e5e8ef] rounded-xl bg-white hover:border-brand/30 transition-colors"
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filters
+          </button>
         </div>
       </div>
 
@@ -792,7 +897,7 @@ export default function SupplierMap() {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-4">
 
         {/* ── Panel 1: Filter + Discover ── */}
-        <div className="flex flex-col gap-3 overflow-y-auto">
+        <div className={cn('flex-col gap-3 overflow-y-auto', mobileFilterOpen ? 'flex' : 'hidden lg:flex')}>
           <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
@@ -927,14 +1032,16 @@ export default function SupplierMap() {
               description="Use AI Discovery to find suppliers, or add one manually."
             />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 pb-20">
               <AnimatePresence>
                 {filteredSuppliers.map(s => (
                   <SupplierCard
                     key={s.id}
                     supplier={s}
                     selected={selectedSupplier?.id === s.id}
+                    inCompare={compareIds.includes(s.id)}
                     onClick={() => setSelectedSupplier(s === selectedSupplier ? null : s)}
+                    onCompare={e => { e.stopPropagation(); toggleCompare(s.id) }}
                   />
                 ))}
               </AnimatePresence>
@@ -968,6 +1075,55 @@ export default function SupplierMap() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* ── 4B.6 Compare bar (fixed bottom) ── */}
+      <AnimatePresence>
+        {compareIds.length > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[8000] flex items-center gap-3 bg-[#1e2d4e] text-white px-5 py-3 rounded-2xl shadow-xl"
+          >
+            <div className="flex items-center gap-2">
+              {compareIds.map(id => {
+                const s = suppliers.find(x => x.id === id)
+                return s ? (
+                  <div key={id} className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-lg">
+                    <span className="text-xs font-medium truncate max-w-[96px]">{s.name}</span>
+                    <button onClick={() => toggleCompare(id)} className="text-white/50 hover:text-white">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : null
+              })}
+              {compareIds.length < 4 && (
+                <span className="text-xs text-white/40 ml-1">+{4 - compareIds.length} more</span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowCompareDrawer(true)}
+              className="flex-shrink-0 bg-[#e85c1a] hover:bg-[#d4511a] text-white text-xs font-semibold px-4 py-1.5 rounded-xl transition-colors"
+            >
+              Compare Now
+            </button>
+            <button onClick={() => setCompareIds([])} className="text-white/40 hover:text-white/70 ml-1">
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Compare drawer ── */}
+      <AnimatePresence>
+        {showCompareDrawer && (
+          <CompareDrawer
+            suppliers={suppliers.filter(s => compareIds.includes(s.id))}
+            onClose={() => setShowCompareDrawer(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

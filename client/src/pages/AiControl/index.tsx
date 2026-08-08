@@ -213,6 +213,45 @@ function AiControlInner() {
   }, 0)
   const savingsVsSonnet = Math.max(0, totalSonnetCost - totalCost)
 
+  // 3C.7 — Projected cost calculator: per-task savings if switched to cheapest model
+  // Model costs per M tokens (input / output)
+  const MODEL_COSTS: Record<string, { input: number; output: number }> = {
+    'anthropic/claude-sonnet-4-20250514': { input: 3.00,  output: 15.00 },
+    'anthropic/claude-haiku-4-5-20251001':{ input: 0.25,  output: 1.25  },
+    'anthropic/claude-opus-4-8':          { input: 15.00, output: 75.00 },
+    'openai/gpt-4o':                      { input: 2.50,  output: 10.00 },
+    'openai/gpt-4o-mini':                 { input: 0.15,  output: 0.60  },
+    'google/gemini-2.0-flash':            { input: 0.10,  output: 0.40  },
+  }
+  // For each high-volume task, compute potential monthly saving if switched to gpt-4o-mini
+  const CHEAPER_ALT: Record<string, { label: string; model: string }> = {
+    bulk_costing:       { label: 'switch to Haiku',          model: 'anthropic/claude-haiku-4-5-20251001' },
+    kb_summary:         { label: 'switch to Gemini Flash',   model: 'google/gemini-2.0-flash' },
+    supplier_suggest:   { label: 'switch to GPT-4o mini',    model: 'openai/gpt-4o-mini' },
+    extraction:         { label: 'switch to GPT-4o mini',    model: 'openai/gpt-4o-mini' },
+    clarification:      { label: 'switch to Haiku',          model: 'anthropic/claude-haiku-4-5-20251001' },
+  }
+  const projectedSavings: { task: string; saving: number; alt: string }[] = []
+  if (usage?.by_task) {
+    for (const [task, info] of Object.entries(usage.by_task)) {
+      const alt = CHEAPER_ALT[task]
+      if (!alt || info.calls === 0) continue
+      const currentRoute = routes?.find(r => r.task === task)
+      const currentKey = currentRoute ? `${currentRoute.provider}/${currentRoute.model}` : 'anthropic/claude-sonnet-4-20250514'
+      const currentCost = MODEL_COSTS[currentKey]
+      const altCost     = MODEL_COSTS[alt.model]
+      if (!currentCost || !altCost) continue
+      // Estimate tokens from calls (rough avg: 1500 input, 800 output)
+      const avgInput  = info.calls > 0 ? 1500 : 0
+      const avgOutput = info.calls > 0 ? 800  : 0
+      const actualPerCall  = (avgInput * currentCost.input + avgOutput * currentCost.output) / 1_000_000
+      const altPerCall     = (avgInput * altCost.input    + avgOutput * altCost.output)     / 1_000_000
+      const saving = Math.max(0, (actualPerCall - altPerCall) * info.calls)
+      if (saving > 0.00001) projectedSavings.push({ task, saving, alt: alt.label })
+    }
+    projectedSavings.sort((a, b) => b.saving - a.saving)
+  }
+
   // Daily spend chart data — last 30 days
   const spendChartData = (() => {
     const days: { date: string; cost: number }[] = []
@@ -545,6 +584,45 @@ function AiControlInner() {
           )}
         </CardContent>
       </Card>
+
+      {/* 3C.7 — Projected cost calculator */}
+      {projectedSavings.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div>
+                <CardTitle>Projected Savings Calculator</CardTitle>
+                <p className="text-xs text-[#9aa3b2] mt-0.5">Based on last 30 days — switching high-volume tasks to cheaper models</p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {projectedSavings.map(({ task, saving, alt }) => (
+                <div key={task} className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-emerald-50 border border-emerald-100">
+                  <div>
+                    <p className="text-sm font-medium text-[#0f1729]">{TASK_LABELS[task] ?? task}</p>
+                    <p className="text-xs text-emerald-700 mt-0.5">{alt}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-emerald-700 font-mono">−${saving.toFixed(4)}/mo</p>
+                    <p className="text-[10px] text-emerald-600">est. saving</p>
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 border-t border-[#e5e8ef]">
+                <p className="text-sm font-semibold text-[#0f1729]">Total potential saving</p>
+                <p className="text-lg font-bold text-emerald-700 font-mono">
+                  −${projectedSavings.reduce((s, r) => s + r.saving, 0).toFixed(4)}/mo
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </motion.div>
   )
 }
