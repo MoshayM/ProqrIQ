@@ -25,6 +25,10 @@ import { router as subscriptionRouter } from './routes/subscription'
 // ─── App ──────────────────────────────────────────────────────────────────────
 const app = express()
 
+// Vercel (and most reverse proxies) sets X-Forwarded-For — trust one hop
+// so express-rate-limit and req.ip see the real client IP.
+app.set('trust proxy', 1)
+
 // ─── Security & logging ───────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow static file serving
