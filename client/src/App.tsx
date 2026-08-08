@@ -30,6 +30,8 @@ import Organization from './pages/Organization'
 import SearchPage from './pages/Search'
 import Pricing from './pages/Pricing'
 import Register from './pages/Register'
+import Terms from './pages/Terms'
+import Privacy from './pages/Privacy'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -104,6 +106,8 @@ function AppRoutes() {
       <Route path="/login"    element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
       <Route path="/pricing"  element={<Pricing />} />
+      <Route path="/terms"    element={<Terms />} />
+      <Route path="/privacy"  element={<Privacy />} />
 
       <Route path="/dashboard"     element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
       <Route path="/quotes"        element={<ProtectedLayout><AllQuotes /></ProtectedLayout>} />

@@ -314,26 +314,22 @@ export default function Login() {
                 </>
               )}
 
-              {/* Demo credentials */}
-              <div className="mt-6 p-4 bg-surface-3 rounded-xl border border-[#e5e8ef]">
-                <p className="text-[11px] font-semibold text-[#9aa3b2] uppercase tracking-widest mb-3">Demo credentials</p>
-                <div className="space-y-2">
-                  {[{ label: 'Email', value: 'admin@autoquote.com' }, { label: 'Password', value: 'AutoQuote2024!' }].map(({ label, value }) => (
-                    <div key={label} className="flex items-center justify-between gap-3">
-                      <span className="text-xs text-[#9aa3b2] w-16 shrink-0">{label}</span>
-                      <code className="text-xs bg-white border border-[#e5e8ef] px-2 py-1 rounded-md text-[#0f1729] font-mono truncate">{value}</code>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </>
           )}
 
           {!showSetup && (
-            <p className="text-center text-sm text-[#9aa3b2] mt-6">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-navy font-semibold hover:underline">Start free</Link>
-            </p>
+            <>
+              <p className="text-center text-sm text-[#9aa3b2] mt-6">
+                Don't have an account?{' '}
+                <Link to="/register" className="text-navy font-semibold hover:underline">Start free</Link>
+              </p>
+              <p className="text-center text-xs text-[#b0b8c9] mt-4">
+                By signing in you agree to our{' '}
+                <Link to="/terms" className="underline hover:text-[#4a5568] transition-colors">Terms of Service</Link>
+                {' '}and{' '}
+                <Link to="/privacy" className="underline hover:text-[#4a5568] transition-colors">Privacy Policy</Link>
+              </p>
+            </>
           )}
 
         </div>

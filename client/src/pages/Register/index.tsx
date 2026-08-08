@@ -268,9 +268,11 @@ export default function Register() {
             <Link to="/login" className="text-navy font-semibold hover:underline">Sign in</Link>
           </p>
 
-          <p className="text-center text-[11px] text-[#9aa3b2] mt-4 leading-relaxed">
-            By creating an account you agree to run ProqrIQ on-premise only.<br />
-            No data leaves your infrastructure.
+          <p className="text-center text-xs text-[#b0b8c9] mt-4">
+            By creating an account you agree to our{' '}
+            <Link to="/terms" className="underline hover:text-[#4a5568] transition-colors">Terms of Service</Link>
+            {' '}and{' '}
+            <Link to="/privacy" className="underline hover:text-[#4a5568] transition-colors">Privacy Policy</Link>
           </p>
         </div>
       </motion.div>
