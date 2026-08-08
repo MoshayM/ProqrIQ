@@ -29,21 +29,38 @@ const ENV_OVERRIDES: Partial<Record<AITask, string | undefined>> = {
   costing:            process.env.AI_ROUTE_COSTING,
   bulk_costing:       process.env.AI_ROUTE_BULK_COSTING,
   cad_costing:        process.env.AI_ROUTE_CAD_COSTING,
+  kb_summary:         process.env.AI_ROUTE_KB_SUMMARY,
   supplier_suggest:   process.env.AI_ROUTE_SUPPLIER_SUGGEST,
   supplier_recommend: process.env.AI_ROUTE_SUPPLIER_RECOMMEND,
   negotiation:        process.env.AI_ROUTE_NEGOTIATION,
+  clarification:      process.env.AI_ROUTE_CLARIFICATION,
+  extraction:         process.env.AI_ROUTE_EXTRACTION,
+  generic:            process.env.AI_ROUTE_GENERIC,
+}
+
+// When OLLAMA_ENABLED=true, high-volume cheap tasks route to local inference by default.
+// Tasks needing vision (cad_costing) or high accuracy (costing, negotiation) stay on Claude.
+// Any task can be overridden via the AiControl UI or AI_ROUTE_* env vars.
+const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED === 'true'
+const OLLAMA_MODEL   = process.env.OLLAMA_DEFAULT_MODEL ?? 'qwen2.5:14b'
+const OLLAMA_FAST    = process.env.OLLAMA_FAST_MODEL    ?? 'qwen2.5:7b'
+
+function ollama(model: string): RouteResult {
+  return OLLAMA_ENABLED
+    ? { provider: 'ollama',    model }
+    : { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
 }
 
 const DEFAULTS: Record<AITask, RouteResult> = {
   costing:            { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-  bulk_costing:       { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  bulk_costing:       ollama(OLLAMA_MODEL),
   cad_costing:        { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-  kb_summary:         { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
-  supplier_suggest:   { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  kb_summary:         ollama(OLLAMA_FAST),
+  supplier_suggest:   ollama(OLLAMA_FAST),
   supplier_recommend: { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
   negotiation:        { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-  clarification:      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
-  extraction:         { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  clarification:      ollama(OLLAMA_FAST),
+  extraction:         ollama(OLLAMA_MODEL),
   generic:            { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
 }
 

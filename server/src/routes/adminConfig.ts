@@ -10,6 +10,7 @@ import {
   deleteRouteOverride,
 } from '../services/ai/aiRouter'
 import { activeProviders } from '../services/ai/providers'
+import { OllamaProvider } from '../services/ai/providers/ollama'
 import type { AITask } from '../services/ai/aiRouter'
 
 export const router = Router()
@@ -150,6 +151,17 @@ router.put('/routes/:task', async (req, res) => {
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// ─── GET locally-installed Ollama models ─────────────────────────────────────
+router.get('/ollama/models', async (_req, res) => {
+  try {
+    const ollama = new OllamaProvider()
+    const models = await ollama.listModels()
+    res.json({ success: true, data: models })
+  } catch (err) {
+    res.json({ success: true, data: [] })
   }
 })
 

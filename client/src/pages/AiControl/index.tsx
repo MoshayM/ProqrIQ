@@ -55,6 +55,12 @@ const AVAILABLE_MODELS = [
   { id: 'gpt-4o',                     label: 'GPT-4o',            tier: 'OpenAI',          color: 'text-emerald-600' },
   { id: 'gpt-4o-mini',                label: 'GPT-4o mini',       tier: 'OpenAI fast',     color: 'text-emerald-500' },
   { id: 'gemini-2.0-flash',           label: 'Gemini Flash 2.0',  tier: 'Google',          color: 'text-indigo-600' },
+  { id: 'qwen2.5:7b',                 label: 'Qwen 2.5 7B',       tier: 'Ollama — fast',   color: 'text-violet-600' },
+  { id: 'qwen2.5:14b',                label: 'Qwen 2.5 14B',      tier: 'Ollama — balanced', color: 'text-violet-600' },
+  { id: 'qwen2.5:72b',                label: 'Qwen 2.5 72B',      tier: 'Ollama — capable', color: 'text-violet-700' },
+  { id: 'llama3.1:8b',                label: 'Llama 3.1 8B',      tier: 'Ollama — fast',   color: 'text-violet-600' },
+  { id: 'llama3.2:3b',                label: 'Llama 3.2 3B',      tier: 'Ollama — ultra-fast', color: 'text-violet-500' },
+  { id: 'gemma2:9b',                  label: 'Gemma 2 9B',        tier: 'Ollama — efficient', color: 'text-violet-600' },
 ]
 
 const TASK_LABELS: Record<string, string> = {
@@ -74,6 +80,7 @@ const PROVIDER_COLORS: Record<string, { dot: string; label: string; bg: string }
   anthropic: { dot: '#e85c1a', label: 'Anthropic', bg: 'bg-orange-50' },
   openai:    { dot: '#22c55e', label: 'OpenAI',    bg: 'bg-green-50' },
   google:    { dot: '#3b82f6', label: 'Google',    bg: 'bg-blue-50' },
+  ollama:    { dot: '#7c3aed', label: 'Ollama',    bg: 'bg-violet-50' },
 }
 
 function ProviderDot({ provider }: { provider: string }) {
@@ -139,6 +146,13 @@ function AiControlInner() {
   const { data: routes, isLoading: routesLoading } = useQuery<RouteRow[]>({
     queryKey: ['admin-routes'],
     queryFn:  () => api.admin.getRoutes(),
+  })
+
+  const { data: ollamaModels, refetch: refetchOllama } = useQuery<Array<{ name: string; size: number; modified_at: string }>>({
+    queryKey:   ['admin-ollama-models'],
+    queryFn:    () => api.admin.getOllamaModels(),
+    retry:      false,
+    staleTime:  30_000,
   })
 
   const saveMut = useMutation({
@@ -225,11 +239,11 @@ function AiControlInner() {
   }
   // For each high-volume task, compute potential monthly saving if switched to gpt-4o-mini
   const CHEAPER_ALT: Record<string, { label: string; model: string }> = {
-    bulk_costing:       { label: 'switch to Haiku',          model: 'anthropic/claude-haiku-4-5-20251001' },
-    kb_summary:         { label: 'switch to Gemini Flash',   model: 'google/gemini-2.0-flash' },
-    supplier_suggest:   { label: 'switch to GPT-4o mini',    model: 'openai/gpt-4o-mini' },
-    extraction:         { label: 'switch to GPT-4o mini',    model: 'openai/gpt-4o-mini' },
-    clarification:      { label: 'switch to Haiku',          model: 'anthropic/claude-haiku-4-5-20251001' },
+    bulk_costing:       { label: 'switch to Ollama Qwen 2.5 14B', model: 'ollama/qwen2.5:14b' },
+    kb_summary:         { label: 'switch to Ollama Qwen 2.5 7B',  model: 'ollama/qwen2.5:7b' },
+    supplier_suggest:   { label: 'switch to Ollama Qwen 2.5 7B',  model: 'ollama/qwen2.5:7b' },
+    extraction:         { label: 'switch to Ollama Qwen 2.5 14B', model: 'ollama/qwen2.5:14b' },
+    clarification:      { label: 'switch to Ollama Qwen 2.5 7B',  model: 'ollama/qwen2.5:7b' },
   }
   const projectedSavings: { task: string; saving: number; alt: string }[] = []
   if (usage?.by_task) {
@@ -307,6 +321,7 @@ function AiControlInner() {
                 { id: 'anthropic', displayName: 'Anthropic (Claude)', envVar: 'ANTHROPIC_API_KEY' },
                 { id: 'openai',    displayName: 'OpenAI (GPT)',        envVar: 'OPENAI_API_KEY' },
                 { id: 'google',    displayName: 'Google (Gemini)',     envVar: 'GEMINI_API_KEY' },
+                { id: 'ollama',    displayName: 'Ollama (Local LLM)',  envVar: 'OLLAMA_ENABLED=true' },
               ].map(p => {
                 const live = providers.find(lp => lp.id === p.id)
                 const available = live?.available ?? false
@@ -467,7 +482,20 @@ function AiControlInner() {
                         }}
                         className="w-full bg-transparent px-3 py-1.5 text-xs text-[#0f1729] focus:outline-none focus:ring-1 focus:ring-brand/30 cursor-pointer"
                       >
-                        {['anthropic/claude-haiku-4-5-20251001','anthropic/claude-sonnet-4-20250514','anthropic/claude-opus-4-8','openai/gpt-4o','openai/gpt-4o-mini','google/gemini-2.0-flash'].map(opt => (
+                        {[
+                          'anthropic/claude-haiku-4-5-20251001',
+                          'anthropic/claude-sonnet-4-20250514',
+                          'anthropic/claude-opus-4-8',
+                          'openai/gpt-4o',
+                          'openai/gpt-4o-mini',
+                          'google/gemini-2.0-flash',
+                          'ollama/qwen2.5:7b',
+                          'ollama/qwen2.5:14b',
+                          'ollama/qwen2.5:72b',
+                          'ollama/llama3.1:8b',
+                          'ollama/llama3.2:3b',
+                          'ollama/gemma2:9b',
+                        ].map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
                         ))}
                       </select>
@@ -483,6 +511,95 @@ function AiControlInner() {
               })}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Ollama Local LLM Setup */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-violet-600" />
+            </div>
+            <div>
+              <CardTitle>Ollama — Local LLM</CardTitle>
+              <p className="text-xs text-[#9aa3b2] mt-0.5">Run open-weight models locally for zero token cost on high-volume tasks</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Live installed models */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide">Installed models (live)</p>
+              <button onClick={() => refetchOllama()} className="p-1 rounded hover:bg-surface-3 text-[#9aa3b2] transition-colors" title="Refresh">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {!ollamaModels || ollamaModels.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/50 p-4 text-center">
+                <p className="text-xs text-violet-700 font-medium">No models detected</p>
+                <p className="text-[10px] text-[#9aa3b2] mt-1">Set <code className="font-mono">OLLAMA_ENABLED=true</code> and start Ollama, then pull models below</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {ollamaModels.map(m => (
+                  <div key={m.name} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-violet-50 border border-violet-100">
+                    <span className="text-xs font-mono font-semibold text-violet-700">{m.name}</span>
+                    <span className="text-[10px] text-[#9aa3b2]">{(m.size / 1e9).toFixed(1)} GB</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-violet-100 bg-violet-50 p-4 space-y-3">
+            <p className="text-sm font-medium text-violet-800">Recommended models for this app</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { model: 'qwen2.5:14b',  role: 'Bulk Costing · Extraction',         why: 'Best structured JSON output, 128K context' },
+                { model: 'qwen2.5:7b',   role: 'KB Summary · Supplier · Clarify',   why: 'Fast inference, good instruction following' },
+                { model: 'qwen2.5:72b',  role: 'Complex Costing (optional)',         why: 'Near-Claude accuracy, requires 48GB VRAM' },
+              ].map(({ model, role, why }) => {
+                const installed = ollamaModels?.some(m => m.name === model || m.name.startsWith(model.split(':')[0]))
+                return (
+                  <div key={model} className={cn('bg-white rounded-lg border p-3', installed ? 'border-emerald-200' : 'border-violet-100')}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <p className="text-xs font-mono font-semibold text-violet-700">{model}</p>
+                      {installed && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">installed</span>}
+                    </div>
+                    <p className="text-xs text-[#4a5568]">{role}</p>
+                    <p className="text-[10px] text-[#9aa3b2] mt-1">{why}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide">Setup (server .env)</p>
+            <div className="bg-[#0f1729] rounded-xl p-4 font-mono text-xs space-y-1.5">
+              <p className="text-[#c8cdd8]"><span className="text-violet-400">OLLAMA_ENABLED</span>=<span className="text-emerald-400">true</span></p>
+              <p className="text-[#c8cdd8]"><span className="text-violet-400">OLLAMA_BASE_URL</span>=<span className="text-yellow-300">http://localhost:11434</span>  <span className="text-[#4a5568]"># default</span></p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide">Install & pull models</p>
+            <div className="bg-[#0f1729] rounded-xl p-4 font-mono text-xs space-y-1.5">
+              <p className="text-[#c8cdd8]"><span className="text-[#9aa3b2]"># Install Ollama from ollama.com, then:</span></p>
+              <p className="text-[#c8cdd8]">ollama pull <span className="text-yellow-300">qwen2.5:14b</span></p>
+              <p className="text-[#c8cdd8]">ollama pull <span className="text-yellow-300">qwen2.5:7b</span></p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 flex gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-800 space-y-1">
+              <p className="font-medium">Tasks that stay on Claude regardless of Ollama settings</p>
+              <p className="text-amber-700">Cost Estimation, CAD Costing (vision required), Negotiation Reports, Supplier Recommendation — these need high accuracy or image understanding that local models cannot match reliably.</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

@@ -17,6 +17,7 @@ export const TOKEN_COSTS: Record<string, { input: number; output: number }> = {
 }
 
 export function estimateCost(provider: string, model: string, inputTokens: number, outputTokens: number): number {
+  if (provider === 'ollama') return 0 // local inference — no token cost
   const key = `${provider}/${model}`
   const costs = TOKEN_COSTS[key]
   if (!costs) return 0
