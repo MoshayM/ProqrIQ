@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import path from 'path'
 import * as schema from './schema'
+import { runMigrations } from './migrate'
 
 const isCloud = !!process.env.TURSO_DATABASE_URL
 
@@ -22,4 +23,5 @@ export async function initDb(): Promise<void> {
     await client.execute('PRAGMA cache_size = -64000')
     await client.execute('PRAGMA temp_store = MEMORY')
   }
+  await runMigrations(client)
 }
