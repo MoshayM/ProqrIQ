@@ -88,7 +88,7 @@ router.get('/ai-usage', async (_req, res) => {
       byTask[row.task_type].calls++
       byTask[row.task_type].cost += row.estimated_cost_usd
 
-      const day = row.created_at.slice(0, 10)
+      const day = (row.created_at ?? '').slice(0, 10)
       byDay[day] = (byDay[day] ?? 0) + row.estimated_cost_usd
     }
 

@@ -210,7 +210,7 @@ router.post('/passkey/register/options', requireAuth, async (req: Request, res: 
     const options = await generateRegistrationOptions({
       rpName: RP_NAME,
       rpID: RP_ID,
-      userID: Buffer.from(userId),
+      userID: userId,
       userName: email,
       userDisplayName: full_name,
       attestationType: 'none',
