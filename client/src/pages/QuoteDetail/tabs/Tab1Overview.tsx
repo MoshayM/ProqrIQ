@@ -12,6 +12,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { Card, CardContent, CardHeader } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
+import { HelpTooltip } from '../../../components/ui/HelpTooltip';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -126,15 +127,19 @@ interface KpiCardProps {
   label: string;
   value: string;
   borderColor: string;
+  tooltip?: string;
 }
 
-function KpiCard({ label, value, borderColor }: KpiCardProps) {
+function KpiCard({ label, value, borderColor, tooltip }: KpiCardProps) {
   return (
     <div
       className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-1"
       style={{ borderLeft: `4px solid ${borderColor}` }}
     >
-      <span className="text-gray-500 text-sm">{label}</span>
+      <span className="text-gray-500 text-sm flex items-center gap-1">
+        {label}
+        {tooltip && <HelpTooltip content={tooltip} />}
+      </span>
       <span className="text-xl font-bold font-mono text-gray-900">{value}</span>
     </div>
   );
@@ -247,6 +252,7 @@ export default function Tab1Overview({ quotation, quotationId }: TabProps) {
               : '—'
           }
           borderColor="#10b981"
+          tooltip="Pepperl+Fuchs standard margin of 16%. Applied once at the parent level — individual components inside an assembly are stored pre-margin."
         />
         <KpiCard
           label="One-Time Cost"

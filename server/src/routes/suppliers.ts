@@ -7,6 +7,7 @@ import {
   costLines,
   auditLog,
   suppliers,
+  supplierCustomers,
   supplierQuotes,
   supplierQuoteLines,
   negotiationReports,
@@ -18,6 +19,7 @@ import { searchKB } from '../services/kb'
 import { parseAIJSON } from '../lib/parseAIJSON'
 import { completeWithRouter } from '../services/ai/aiRouter'
 import { compareQuoteToSupplier } from '../services/comparison'
+import { geocodeSupplier } from '../services/geocoding'
 
 const router = Router()
 
@@ -105,6 +107,9 @@ router.post('/', requireRole(WRITE_ROLES), validate(createSupplierSchema), async
     const userId = req.user!.id
     const body = req.body as z.infer<typeof createSupplierSchema>
 
+    // Geocode in background — don't block the response
+    const geoPromise = geocodeSupplier(body.city, body.country_code)
+
     const [row] = await db
       .insert(suppliers)
       .values({
@@ -131,6 +136,15 @@ router.post('/', requireRole(WRITE_ROLES), validate(createSupplierSchema), async
       entity_id:   row.id,
       details:     JSON.stringify({ name: row.name }),
     })
+
+    // Patch lat/lng once geocoding resolves
+    geoPromise.then(async (geo) => {
+      if (!geo) return
+      await db.update(suppliers).set({
+        lat: geo.lat, lng: geo.lng,
+        geocoded_at: new Date().toISOString(),
+      }).where(eq(suppliers.id, row.id))
+    }).catch(() => { /* non-fatal */ })
 
     return res.status(201).json({ success: true, data: row })
   } catch (err) {
@@ -182,6 +196,19 @@ router.patch('/:id', requireRole(WRITE_ROLES), validate(updateSupplierSchema), a
       entity_id:   id,
       details:     JSON.stringify(body),
     })
+
+    // Re-geocode if city or country changed
+    if (body.city !== undefined || body.country_code !== undefined) {
+      const cityVal   = body.city          ?? existing[0].city
+      const countryVal = body.country_code ?? existing[0].country_code
+      geocodeSupplier(cityVal, countryVal).then(async (geo) => {
+        if (!geo) return
+        await db.update(suppliers).set({
+          lat: geo.lat, lng: geo.lng,
+          geocoded_at: new Date().toISOString(),
+        }).where(eq(suppliers.id, id))
+      }).catch(() => { /* non-fatal */ })
+    }
 
     return res.json({ success: true, data: row })
   } catch (err) {
@@ -911,6 +938,98 @@ router.get('/negotiation/:quoteId', async (req: Request, res: Response) => {
     return res.json({ success: true, data: rows })
   } catch (err) {
     console.error('Get negotiation error:', err)
+    return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
+// ─── GET /api/suppliers/:id/customers ────────────────────────────────────────
+
+router.get('/:id/customers', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+
+    const rows = await db
+      .select()
+      .from(supplierCustomers)
+      .where(eq(supplierCustomers.supplier_id, id))
+
+    return res.json({ success: true, data: rows })
+  } catch (err) {
+    console.error('List supplier customers error:', err)
+    return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
+const createCustomerSchema = z.object({
+  customer_name:      z.string().min(1),
+  business_share_pct: z.number().min(0).max(100).optional(),
+  notes:              z.string().optional(),
+})
+
+// ─── POST /api/suppliers/:id/customers ───────────────────────────────────────
+
+router.post('/:id/customers', requireRole(WRITE_ROLES), validate(createCustomerSchema), async (req: Request, res: Response) => {
+  try {
+    const userId  = req.user!.id
+    const { id }  = req.params
+    const body    = req.body as z.infer<typeof createCustomerSchema>
+
+    const [supplier] = await db
+      .select({ id: suppliers.id })
+      .from(suppliers)
+      .where(and(eq(suppliers.id, id), eq(suppliers.is_active, true)))
+
+    if (!supplier) {
+      return res.status(404).json({ success: false, error: 'Supplier not found' })
+    }
+
+    const [row] = await db
+      .insert(supplierCustomers)
+      .values({
+        supplier_id:        id,
+        customer_name:      body.customer_name,
+        business_share_pct: body.business_share_pct,
+        notes:              body.notes,
+      })
+      .returning()
+
+    await db.insert(auditLog).values({
+      user_id:     userId,
+      action:      'supplier_customer_created',
+      entity_type: 'supplier_customer',
+      entity_id:   row.id,
+      details:     JSON.stringify({ supplier_id: id, customer_name: body.customer_name }),
+    })
+
+    return res.status(201).json({ success: true, data: row })
+  } catch (err) {
+    console.error('Create supplier customer error:', err)
+    return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
+// ─── DELETE /api/suppliers/:id/customers/:customerId ─────────────────────────
+
+router.delete('/:id/customers/:customerId', requireRole(ADMIN_ROLES), async (req: Request, res: Response) => {
+  try {
+    const userId       = req.user!.id
+    const { id, customerId } = req.params
+
+    await db
+      .delete(supplierCustomers)
+      .where(and(eq(supplierCustomers.id, customerId), eq(supplierCustomers.supplier_id, id)))
+
+    await db.insert(auditLog).values({
+      user_id:     userId,
+      action:      'supplier_customer_deleted',
+      entity_type: 'supplier_customer',
+      entity_id:   customerId,
+      details:     JSON.stringify({ supplier_id: id }),
+    })
+
+    return res.json({ success: true })
+  } catch (err) {
+    console.error('Delete supplier customer error:', err)
     return res.status(500).json({ success: false, error: String(err) })
   }
 })

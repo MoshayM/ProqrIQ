@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { Zap, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Loader2, X, Timer } from 'lucide-react'
+import { Zap, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Loader2, X, Timer, HelpCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '../../../lib/api';
 import { useQuoteContext } from '../../../contexts/QuoteContext';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
+import { HelpTooltip } from '../../../components/ui/HelpTooltip';
 import type { CostEstimateResult, AIValueEngineering } from '@shared/types';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -203,14 +204,17 @@ export default function Step4() {
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-2 text-sm">
-            <span className={`px-3 py-1 rounded-full font-medium ${
-              estimate.confidence_score >= 80
-                ? 'bg-green-100 text-green-800'
-                : estimate.confidence_score >= 70
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-red-100 text-red-800'
-            }`}>
-              {estimate.confidence_score}% confident
+            <span className="flex items-center gap-1">
+              <span className={`px-3 py-1 rounded-full font-medium ${
+                estimate.confidence_score >= 80
+                  ? 'bg-green-100 text-green-800'
+                  : estimate.confidence_score >= 70
+                  ? 'bg-yellow-100 text-yellow-800'
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {estimate.confidence_score}% confident
+              </span>
+              <HelpTooltip content="How certain the AI is about this estimate. Scores ≥80% are high confidence; ≥70% acceptable; below 70% the estimate is blocked and clarification questions are returned instead." />
             </span>
             <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">
               {estimate.kb_coverage_pct}% KB coverage
@@ -279,7 +283,12 @@ export default function Step4() {
                 <tr className="border-b border-gray-200">
                   <th className="py-3 px-3 text-left text-gray-500 font-medium">Description</th>
                   <th className="py-3 px-3 text-right text-gray-500 font-medium">Cost (EUR)</th>
-                  <th className="py-3 px-3 text-center text-gray-500 font-medium">Source</th>
+                  <th className="py-3 px-3 text-center text-gray-500 font-medium">
+                    <span className="flex items-center justify-center gap-1">
+                      Source
+                      <HelpTooltip content="Data source tier (1–5). KB = from your knowledge base (most reliable). User = manually entered. Std = industry standard. Bench = benchmark. Assumed = AI inference (least reliable)." />
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody>

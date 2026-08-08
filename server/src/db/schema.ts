@@ -516,9 +516,24 @@ export const suppliers = sqliteTable('suppliers', {
   // 5 = ai_suggested, 4 = external_api (promoted), 3 = manual
   is_active:      integer('is_active', { mode: 'boolean' }).notNull().default(true),
   notes:          text('notes'),
+  // Geocoded coordinates (Nominatim, cached)
+  lat:            real('lat'),
+  lng:            real('lng'),
+  geocoded_at:    text('geocoded_at'),
   created_by:     text('created_by').references(() => users.id),
   created_at:     text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at:     text('updated_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── supplier_customers ───────────────────────────────────────────────────────
+
+export const supplierCustomers = sqliteTable('supplier_customers', {
+  id:                 text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  supplier_id:        text('supplier_id').notNull().references(() => suppliers.id),
+  customer_name:      text('customer_name').notNull(),
+  business_share_pct: real('business_share_pct'),   // 0–100; null = unknown
+  notes:              text('notes'),
+  created_at:         text('created_at').$defaultFn(() => new Date().toISOString()),
 })
 
 // ─── supplier_quotes ──────────────────────────────────────────────────────────
@@ -582,10 +597,11 @@ export const negotiationReports = sqliteTable('negotiation_reports', {
 
 // ─── Supplier indexes ─────────────────────────────────────────────────────────
 
-export const suppliersActiveIdx         = index('idx_suppliers_active').on(suppliers.is_active)
-export const supplierQuotesQuotationIdx = index('idx_supplier_quotes_quotation').on(supplierQuotes.quotation_id)
-export const supplierQuotesSupplierIdx  = index('idx_supplier_quotes_supplier').on(supplierQuotes.supplier_id)
-export const negotiationQuotationIdx    = index('idx_negotiation_quotation').on(negotiationReports.quotation_id)
+export const suppliersActiveIdx           = index('idx_suppliers_active').on(suppliers.is_active)
+export const supplierQuotesQuotationIdx   = index('idx_supplier_quotes_quotation').on(supplierQuotes.quotation_id)
+export const supplierQuotesSupplierIdx    = index('idx_supplier_quotes_supplier').on(supplierQuotes.supplier_id)
+export const negotiationQuotationIdx      = index('idx_negotiation_quotation').on(negotiationReports.quotation_id)
+export const supplierCustomersSupplierIdx = index('idx_supplier_customers_supplier').on(supplierCustomers.supplier_id)
 
 // ─── organizations ────────────────────────────────────────────────────────────
 

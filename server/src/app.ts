@@ -178,7 +178,7 @@ app.post('/api/cron/reset-usage', async (req: Request, res: Response) => {
   }
   try {
     const { db } = await import('./db')
-    const { usage_counters } = await import('./db/schema')
+    const { usageCounters: usage_counters } = await import('./db/schema')
     const period = new Date().toISOString().slice(0, 7) + '-01'
     const result = await db.update(usage_counters).set({
       quotes_used: 0,

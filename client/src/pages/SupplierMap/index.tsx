@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   MapPin, Search, Loader2, Building2, Globe, TrendingDown, Plus,
   Star, ChevronRight, X, Upload, BarChart3, MessageSquare, RefreshCw,
-  CheckCircle, Zap, AlertTriangle,
+  CheckCircle, Zap, AlertTriangle, Users, Trash2,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
@@ -80,7 +80,16 @@ interface SupplierQuote {
   supplier?: Supplier
 }
 
-type RightPanelTab = 'info' | 'quotes' | 'compare' | 'negotiate'
+interface SupplierCustomer {
+  id: string
+  supplier_id: string
+  customer_name: string
+  business_share_pct: number | null
+  notes: string | null
+  created_at: string
+}
+
+type RightPanelTab = 'info' | 'quotes' | 'compare' | 'negotiate' | 'customers'
 
 const MapView = lazy(() => import('./MapView'))
 
@@ -274,9 +283,34 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
     }
   }
 
+  // ── Customer market share state ────────────────────────────────────────────
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerShare, setNewCustomerShare] = useState('')
+
+  const { data: customers = [], isLoading: customersLoading, refetch: refetchCustomers } = useQuery<SupplierCustomer[]>({
+    queryKey: ['supplier-customers', supplier.id],
+    queryFn: () => api.suppliers.getCustomers(supplier.id) as Promise<SupplierCustomer[]>,
+    enabled: tab === 'customers',
+  })
+
+  const addCustomerMut = useMutation({
+    mutationFn: (body: unknown) => api.suppliers.addCustomer(supplier.id, body),
+    onSuccess: () => { refetchCustomers(); setNewCustomerName(''); setNewCustomerShare(''); toast.success('Customer added') },
+    onError: () => toast.error('Failed to add customer'),
+  })
+
+  const delCustomerMut = useMutation({
+    mutationFn: (customerId: string) => api.suppliers.deleteCustomer(supplier.id, customerId),
+    onSuccess: () => { refetchCustomers(); toast.success('Customer removed') },
+    onError: () => toast.error('Failed to remove customer'),
+  })
+
+  const totalShare = customers.reduce((s, c) => s + (c.business_share_pct ?? 0), 0)
+
   const TABS: { key: RightPanelTab; label: string; icon: React.ReactNode }[] = [
     { key: 'info',      label: 'Info',      icon: <Building2 className="w-3.5 h-3.5" /> },
     { key: 'quotes',    label: 'Quotes',    icon: <Upload className="w-3.5 h-3.5" /> },
+    { key: 'customers', label: 'Customers', icon: <Users className="w-3.5 h-3.5" /> },
     { key: 'compare',  label: 'Compare',   icon: <BarChart3 className="w-3.5 h-3.5" /> },
     { key: 'negotiate', label: 'Negotiate', icon: <MessageSquare className="w-3.5 h-3.5" /> },
   ]
@@ -396,6 +430,90 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {tab === 'customers' && (
+          <div className="space-y-4">
+            {/* Total share indicator */}
+            {customers.length > 0 && (
+              <div className="p-3 rounded-xl bg-surface-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide">Business Share Allocated</span>
+                  <span className={cn('text-xs font-bold font-mono', totalShare > 100 ? 'text-red-600' : totalShare === 100 ? 'text-green-600' : 'text-[#4a5568]')}>
+                    {totalShare.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-[#e5e8ef] overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all', totalShare > 100 ? 'bg-red-500' : 'bg-brand')}
+                    style={{ width: `${Math.min(totalShare, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Customer list */}
+            {customersLoading ? (
+              <div className="space-y-2">{[0, 1].map(i => <Skeleton key={i} variant="rect" height="3rem" />)}</div>
+            ) : customers.length === 0 ? (
+              <p className="text-xs text-[#9aa3b2] text-center py-4">No customer relationships recorded yet.</p>
+            ) : (
+              customers.map(c => (
+                <div key={c.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-[#e5e8ef]">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#0f1729] truncate">{c.customer_name}</p>
+                    {c.notes && <p className="text-xs text-[#9aa3b2] truncate">{c.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {c.business_share_pct != null && (
+                      <span className="font-mono text-xs font-semibold text-brand">{c.business_share_pct}%</span>
+                    )}
+                    <button
+                      onClick={() => delCustomerMut.mutate(c.id)}
+                      className="p-1 rounded hover:bg-red-50 text-[#9aa3b2] hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+
+            {/* Add customer form */}
+            <div className="pt-2 border-t border-[#e5e8ef] space-y-2">
+              <p className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide">Add Customer</p>
+              <input
+                value={newCustomerName}
+                onChange={e => setNewCustomerName(e.target.value)}
+                placeholder="Customer / OEM name"
+                className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] focus:outline-none focus:ring-2 focus:ring-brand/30"
+              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={newCustomerShare}
+                  onChange={e => setNewCustomerShare(e.target.value)}
+                  placeholder="Share % (optional)"
+                  className="flex-1 border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] focus:outline-none focus:ring-2 focus:ring-brand/30"
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={!newCustomerName.trim() || addCustomerMut.isPending}
+                  loading={addCustomerMut.isPending}
+                  iconLeft={<Plus className="w-3.5 h-3.5" />}
+                  onClick={() => addCustomerMut.mutate({
+                    customer_name: newCustomerName.trim(),
+                    business_share_pct: newCustomerShare ? parseFloat(newCustomerShare) : undefined,
+                  })}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 

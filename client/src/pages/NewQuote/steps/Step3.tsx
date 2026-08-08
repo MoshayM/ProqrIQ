@@ -8,6 +8,7 @@ import { api } from '../../../lib/api';
 import { useQuoteContext } from '../../../contexts/QuoteContext';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
+import { HelpTooltip } from '../../../components/ui/HelpTooltip';
 
 const schema = z.object({
   supplier_country: z.string().min(1, 'Required'),
@@ -132,7 +133,10 @@ export default function Step3() {
                 <FieldError name="annual_volume" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lot Size (units)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                  Lot Size (units)
+                  <HelpTooltip content="Units produced per production run. Setup cost is amortised over the lot: a larger lot reduces the per-part setup cost, lowering the total." />
+                </label>
                 <input
                   type="number"
                   min="1"

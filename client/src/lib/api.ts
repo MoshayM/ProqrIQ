@@ -146,7 +146,10 @@ export const api = {
     extractQuote:   (body: unknown)             => client.post('/suppliers/extract-quote', body).then(d),
     compare:        (body: unknown)             => client.post('/suppliers/compare', body).then(d),
     negotiate:      (body: unknown)             => client.post('/suppliers/negotiate', body).then(d),
-    getNegotiation: (quoteId: string)           => client.get(`/suppliers/negotiation/${quoteId}`).then(d),
+    getNegotiation:  (quoteId: string)                    => client.get(`/suppliers/negotiation/${quoteId}`).then(d),
+    getCustomers:    (supplierId: string)                  => client.get(`/suppliers/${supplierId}/customers`).then(d),
+    addCustomer:     (supplierId: string, body: unknown)   => client.post(`/suppliers/${supplierId}/customers`, body).then(d),
+    deleteCustomer:  (supplierId: string, customerId: string) => client.delete(`/suppliers/${supplierId}/customers/${customerId}`).then(d),
   },
   subscription: {
     get:      ()              => client.get('/subscription').then(d),
