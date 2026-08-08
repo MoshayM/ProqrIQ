@@ -136,6 +136,7 @@ export const api = {
   },
   suppliers: {
     list:           ()                          => client.get('/suppliers').then(d),
+    getById:        (id: string)               => client.get(`/suppliers/${id}`).then(d),
     create:         (body: unknown)             => client.post('/suppliers', body).then(d),
     update:         (id: string, body: unknown) => client.patch(`/suppliers/${id}`, body).then(d),
     softDelete:     (id: string)                => client.delete(`/suppliers/${id}`).then(d),

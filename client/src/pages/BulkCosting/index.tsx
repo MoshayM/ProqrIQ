@@ -1,7 +1,7 @@
 ﻿import React, { useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
-import { format } from 'date-fns'
+import { format, differenceInSeconds } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, RefreshCw, X, Play, Eye, Trash2, ChevronLeft, AlertCircle, CheckCircle, Clock, Zap, AlertTriangle, Download } from 'lucide-react'
@@ -182,6 +182,20 @@ function BatchDetail({ id }: { id: string }) {
   const canRetry = batch.status === 'failed' || batch.status === 'completed_with_errors';
   const canCancel = batch.status === 'processing' || batch.status === 'queued';
 
+  // 7D.6 — Performance timing for completed batches
+  const batchDuration = batch.completed_at
+    ? differenceInSeconds(new Date(batch.completed_at), new Date(batch.created_at))
+    : null
+  const batchTimingLabel = batchDuration !== null && batch.total_items > 0
+    ? (() => {
+        const m = Math.floor(batchDuration / 60)
+        const s = batchDuration % 60
+        const durStr = m > 0 ? `${m}m ${s}s` : `${s}s`
+        const avg = (batchDuration / batch.total_items).toFixed(1)
+        return `${batch.total_items} part${batch.total_items !== 1 ? 's' : ''} estimated in ${durStr} (avg ${avg}s/part)`
+      })()
+    : null
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -219,6 +233,12 @@ function BatchDetail({ id }: { id: string }) {
               <span className="text-red-600 ml-2">• {batch.failed_items} failed</span>
             )}
           </p>
+          {batchTimingLabel && (
+            <p className="text-xs text-[#9aa3b2] flex items-center gap-1 mt-0.5">
+              <Clock className="w-3 h-3" />
+              {batchTimingLabel}
+            </p>
+          )}
           <div className="space-y-1.5">
             <ProgressBar value={pct} variant={batchProgressVariant(batch.status)} size="sm" />
             <p className="text-xs text-[#9aa3b2] text-right">{pct}%</p>
@@ -585,11 +605,17 @@ function HistoryTab() {
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.bulk.softDelete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['batches'] });
-      toast.success('Batch deleted');
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ['batches'] })
+      const prev = queryClient.getQueryData<CostingBatch[]>(['batches'])
+      queryClient.setQueryData<CostingBatch[]>(['batches'], old => old?.filter(b => b.id !== id) ?? [])
+      return { prev }
     },
-    onError: () => toast.error('Failed to delete'),
+    onSuccess: () => toast.success('Batch deleted'),
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['batches'], ctx.prev)
+      toast.error('Failed to delete')
+    },
   });
 
   if (isLoading) {

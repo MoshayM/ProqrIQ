@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   MapPin, Search, Loader2, Building2, Globe, TrendingDown, Plus,
   Star, ChevronRight, X, Upload, BarChart3, MessageSquare, RefreshCw,
-  CheckCircle, Zap, AlertTriangle, Users, Trash2,
+  CheckCircle, Zap, AlertTriangle, Users, Trash2, Filter,
 } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts'
 import { api } from '../../lib/api'
@@ -710,6 +710,8 @@ export default function SupplierMap() {
   const [searchText, setSearchText] = useState('')
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null)
+  const [filterMinTier, setFilterMinTier] = useState<number>(0)
+  const [filterCapability, setFilterCapability] = useState('')
 
   const { data: suppliers = [], isLoading: suppliersLoading } = useQuery<Supplier[]>({
     queryKey: ['suppliers'],
@@ -745,8 +747,20 @@ export default function SupplierMap() {
         (s.city ?? '').toLowerCase().includes(q)
       )
     }
+    if (filterMinTier > 0) {
+      list = list.filter(s => (s.tier_rating ?? 0) >= filterMinTier)
+    }
+    if (filterCapability.trim()) {
+      const cap = filterCapability.trim().toLowerCase()
+      list = list.filter(s => {
+        const caps: string[] = typeof s.capabilities === 'string'
+          ? (() => { try { return JSON.parse(s.capabilities as string) } catch { return [] } })()
+          : (s.capabilities ?? [])
+        return caps.some((c: string) => c.toLowerCase().includes(cap))
+      })
+    }
     return list
-  }, [suppliers, searchText])
+  }, [suppliers, searchText, filterMinTier, filterCapability])
 
   const mapPins = filteredSuppliers.map(s => ({
     code: s.country_code,
@@ -820,6 +834,50 @@ export default function SupplierMap() {
                 iconLeft={<Search className="w-4 h-4" />}>
                 Discover Suppliers
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* ── Supplier Filter ── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Filter className="w-4 h-4 text-[#4a5568]" />
+                Filter Suppliers
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[#4a5568] mb-1">Min Tier Rating</label>
+                <div className="flex gap-1">
+                  {[0,1,2,3,4,5].map(t => (
+                    <button key={t} onClick={() => setFilterMinTier(t)}
+                      className={cn('flex-1 py-1 text-xs rounded-md transition-all border',
+                        filterMinTier === t
+                          ? 'bg-brand text-white border-brand'
+                          : 'bg-surface-2 text-[#4a5568] border-[#e5e8ef] hover:border-brand/50')}>
+                      {t === 0 ? 'All' : `${t}+`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#4a5568] mb-1">Capability</label>
+                <input
+                  type="text"
+                  value={filterCapability}
+                  onChange={e => setFilterCapability(e.target.value)}
+                  placeholder="e.g. CNC, casting, welding…"
+                  className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+                />
+              </div>
+              {(filterMinTier > 0 || filterCapability.trim()) && (
+                <button
+                  onClick={() => { setFilterMinTier(0); setFilterCapability('') }}
+                  className="text-xs text-brand hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
             </CardContent>
           </Card>
         </div>

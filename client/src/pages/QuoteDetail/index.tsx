@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { format, differenceInDays, addDays } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -182,8 +182,6 @@ export default function QuoteDetail() {
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showRejectModal, setShowRejectModal]   = useState(false)
   const [isSubmitting, setIsSubmitting]     = useState(false)
-  const [isApproving, setIsApproving]       = useState(false)
-  const [isRejecting, setIsRejecting]       = useState(false)
   const [isArchiving, setIsArchiving]       = useState(false)
   const [isRestoring, setIsRestoring]       = useState(false)
   const [isExporting, setIsExporting]       = useState(false)
@@ -195,6 +193,49 @@ export default function QuoteDetail() {
     queryFn: () => api.quotes.get(id!),
     enabled: !!id,
     retry: false,
+  })
+
+  const approveMut = useMutation({
+    mutationFn: ({ notes }: { notes: string }) => api.quotes.approve(id!, { notes }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['quote', id] })
+      const prev = queryClient.getQueryData<Quotation>(['quote', id])
+      queryClient.setQueryData<Quotation>(['quote', id], old =>
+        old ? { ...old, status: 'approved' as const } : old
+      )
+      return { prev }
+    },
+    onError: (_err: unknown, _vars: { notes: string }, ctx?: { prev?: Quotation }) => {
+      if (ctx?.prev) queryClient.setQueryData(['quote', id], ctx.prev)
+      toast.error('Failed to approve')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      toast.success('Quote approved! 🎉')
+      setShowApproveModal(false)
+      burstConfetti()
+    },
+  })
+
+  const rejectMut = useMutation({
+    mutationFn: ({ notes }: { notes: string }) => api.quotes.reject(id!, { notes }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['quote', id] })
+      const prev = queryClient.getQueryData<Quotation>(['quote', id])
+      return { prev }
+    },
+    onError: (_err: unknown, _vars: { notes: string }, ctx?: { prev?: Quotation }) => {
+      if (ctx?.prev) queryClient.setQueryData(['quote', id], ctx.prev)
+      toast.error('Failed to reject')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['quote', id] })
+      queryClient.invalidateQueries({ queryKey: ['quotes'] })
+      toast.info('Quote rejected')
+      setShowRejectModal(false)
+      navigate('/quotes')
+    },
   })
 
   if (isLoading) return <QuoteDetailSkeleton />
@@ -230,18 +271,12 @@ export default function QuoteDetail() {
     finally { setIsSubmitting(false) }
   }
 
-  async function handleApproveConfirm(notes: string) {
-    setIsApproving(true)
-    try { await api.quotes.approve(id!, { notes }); await invalidateAll(); toast.success('Quote approved! 🎉'); setShowApproveModal(false); burstConfetti() }
-    catch (err: unknown) { toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to approve') }
-    finally { setIsApproving(false) }
+  function handleApproveConfirm(notes: string) {
+    approveMut.mutate({ notes })
   }
 
-  async function handleRejectConfirm(notes: string) {
-    setIsRejecting(true)
-    try { await api.quotes.reject(id!, { notes }); await invalidateAll(); toast.info('Quote rejected'); setShowRejectModal(false); navigate('/quotes') }
-    catch (err: unknown) { toast.error((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to reject') }
-    finally { setIsRejecting(false) }
+  function handleRejectConfirm(notes: string) {
+    rejectMut.mutate({ notes })
   }
 
   async function handleArchive() {
@@ -365,10 +400,10 @@ export default function QuoteDetail() {
           <Button
             className="bg-emerald-600 hover:bg-emerald-700 text-white border-none"
             onClick={() => setShowApproveModal(true)}
-            loading={isApproving}
-            iconLeft={!isApproving ? <CheckCircle className="h-4 w-4" /> : undefined}
+            loading={approveMut.isPending}
+            iconLeft={!approveMut.isPending ? <CheckCircle className="h-4 w-4" /> : undefined}
           >Approve</Button>
-          <Button variant="danger" onClick={() => setShowRejectModal(true)} loading={isRejecting} iconLeft={!isRejecting ? <XCircle className="h-4 w-4" /> : undefined}>
+          <Button variant="danger" onClick={() => setShowRejectModal(true)} loading={rejectMut.isPending} iconLeft={!rejectMut.isPending ? <XCircle className="h-4 w-4" /> : undefined}>
             Reject
           </Button>
         </>)}
@@ -442,14 +477,14 @@ export default function QuoteDetail() {
           <ConfirmModal
             title="Approve Quote" description="This quote will be marked as approved."
             confirmLabel="Approve" confirmVariant="primary"
-            onConfirm={handleApproveConfirm} onCancel={() => setShowApproveModal(false)} loading={isApproving}
+            onConfirm={handleApproveConfirm} onCancel={() => setShowApproveModal(false)} loading={approveMut.isPending}
           />
         )}
         {showRejectModal && (
           <ConfirmModal
             title="Reject Quote" description="This quote will be rejected and the team notified. Please provide a reason."
             confirmLabel="Reject" confirmVariant="danger"
-            onConfirm={handleRejectConfirm} onCancel={() => setShowRejectModal(false)} loading={isRejecting}
+            onConfirm={handleRejectConfirm} onCancel={() => setShowRejectModal(false)} loading={rejectMut.isPending}
           />
         )}
       </AnimatePresence>

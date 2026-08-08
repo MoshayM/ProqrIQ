@@ -142,6 +142,46 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+/* ─── 7E.4 Touch targets — 44px minimum for coarse pointer devices ────────── */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    min-height: 44px;
+  }
+  /* Expand small icon-button tap areas with a pseudo-element halo */
+  .tap-expand {
+    position: relative;
+  }
+  .tap-expand::after {
+    content: '';
+    position: absolute;
+    inset: min(0px, calc(22px - 50%));
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ─── 7E.5 Responsive typography — scale headings down one step on mobile ── */
+@media (max-width: 640px) {
+  .page-content h1 {
+    font-size: clamp(1.375rem, 6vw, 1.875rem);
+    line-height: 1.25;
+  }
+  .page-content h2 {
+    font-size: clamp(1.125rem, 5vw, 1.5rem);
+    line-height: 1.3;
+  }
+  .page-content h3 {
+    font-size: clamp(1rem, 4.5vw, 1.25rem);
+    line-height: 1.4;
+  }
+  /* Cost numbers (font-mono) stay the same size — always readable */
+  .page-content .font-mono {
+    font-size: inherit;
+  }
+}
+
 /* ─── Sonner toast custom styles ─────────────────────────────────────────── */
 [data-sonner-toast] {
   font-family: 'Inter', system-ui, sans-serif !important;

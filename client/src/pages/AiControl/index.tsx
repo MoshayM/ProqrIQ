@@ -70,6 +70,24 @@ const TASK_LABELS: Record<string, string> = {
   generic:            'Generic / Query',
 }
 
+const PROVIDER_COLORS: Record<string, { dot: string; label: string; bg: string }> = {
+  anthropic: { dot: '#e85c1a', label: 'Anthropic', bg: 'bg-orange-50' },
+  openai:    { dot: '#22c55e', label: 'OpenAI',    bg: 'bg-green-50' },
+  google:    { dot: '#3b82f6', label: 'Google',    bg: 'bg-blue-50' },
+}
+
+function ProviderDot({ provider }: { provider: string }) {
+  const cfg = PROVIDER_COLORS[provider]
+  if (!cfg) return <span className="w-2 h-2 rounded-full bg-[#c8cdd8] flex-shrink-0" />
+  return (
+    <span
+      className="w-2 h-2 rounded-full flex-shrink-0"
+      style={{ backgroundColor: cfg.dot }}
+      title={cfg.label}
+    />
+  )
+}
+
 const LABEL_CLS = 'block text-xs font-medium text-[#4a5568] mb-1'
 const INPUT_CLS = 'w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors'
 
@@ -374,36 +392,56 @@ function AiControlInner() {
             <div className="space-y-2">{[0, 1, 2].map(i => <Skeleton key={i} variant="rect" height="3rem" />)}</div>
           ) : (
             <div className="divide-y divide-[#f1f3f7]">
-              {(routes ?? []).map((row) => (
-                <div key={row.task} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <div className="w-36 flex-shrink-0">
-                    <p className="text-xs font-medium text-[#0f1729]">{TASK_LABELS[row.task] ?? row.task}</p>
+              {(routes ?? []).map((row) => {
+                const provCfg = PROVIDER_COLORS[row.provider]
+                return (
+                  <div key={row.task} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    {/* Task node */}
+                    <div className="w-36 flex-shrink-0 bg-surface-2 border border-[#e5e8ef] rounded-lg px-2.5 py-1.5">
+                      <p className="text-xs font-medium text-[#0f1729] leading-tight">{TASK_LABELS[row.task] ?? row.task}</p>
+                      {row.is_overridden && (
+                        <span className="text-[10px] text-purple-600 bg-purple-50 px-1 py-0.5 rounded mt-0.5 inline-block leading-none">
+                          Override
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Arrow with provider dot */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="w-6 h-px bg-[#c8cdd8]" />
+                      <ProviderDot provider={row.provider} />
+                      <div className="w-1 h-px bg-[#c8cdd8]" />
+                      {/* Arrowhead */}
+                      <svg width="6" height="8" viewBox="0 0 6 8" className="text-[#c8cdd8] flex-shrink-0">
+                        <path d="M0 0 L6 4 L0 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+
+                    {/* Model select — styled as a "model node" */}
+                    <div className={cn('flex-1 rounded-lg border overflow-hidden', provCfg?.bg ?? 'bg-surface-2', row.is_overridden ? 'border-purple-200' : 'border-[#e5e8ef]')}>
+                      <select
+                        key={`${row.task}-${row.provider}-${row.model}`}
+                        defaultValue={`${row.provider}/${row.model}`}
+                        onChange={e => {
+                          const [provider, ...rest] = e.target.value.split('/')
+                          setRouteMut.mutate({ task: row.task, provider, model: rest.join('/') })
+                        }}
+                        className="w-full bg-transparent px-3 py-1.5 text-xs text-[#0f1729] focus:outline-none focus:ring-1 focus:ring-brand/30 cursor-pointer"
+                      >
+                        {['anthropic/claude-haiku-4-5-20251001','anthropic/claude-sonnet-4-20250514','anthropic/claude-opus-4-8','openai/gpt-4o','openai/gpt-4o-mini','google/gemini-2.0-flash'].map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+
                     {row.is_overridden && (
-                      <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mt-0.5 inline-block">
-                        Overridden
-                      </span>
+                      <Button variant="ghost" size="sm" onClick={() => deleteRouteMut.mutate(row.task)} className="text-[#9aa3b2] hover:text-[#4a5568] flex-shrink-0">
+                        Reset
+                      </Button>
                     )}
                   </div>
-                  <select
-                    key={`${row.task}-${row.provider}-${row.model}`}
-                    defaultValue={`${row.provider}/${row.model}`}
-                    onChange={e => {
-                      const [provider, ...rest] = e.target.value.split('/')
-                      setRouteMut.mutate({ task: row.task, provider, model: rest.join('/') })
-                    }}
-                    className="flex-1 border border-[#e5e8ef] rounded-lg px-3 py-1.5 text-xs text-[#0f1729] bg-white focus:outline-none focus:ring-1 focus:ring-brand/30"
-                  >
-                    {['anthropic/claude-haiku-4-5-20251001','anthropic/claude-sonnet-4-20250514','anthropic/claude-opus-4-8','openai/gpt-4o','openai/gpt-4o-mini','google/gemini-2.0-flash'].map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                  {row.is_overridden && (
-                    <Button variant="ghost" size="sm" onClick={() => deleteRouteMut.mutate(row.task)} className="text-[#9aa3b2] hover:text-[#4a5568] flex-shrink-0">
-                      Reset
-                    </Button>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>

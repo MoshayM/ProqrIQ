@@ -88,10 +88,16 @@ const negotiateSchema = z.object({
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const rows = await db
-      .select()
-      .from(suppliers)
-      .where(eq(suppliers.is_active, true))
+    const { country_code, min_tier } = req.query
+    let rows = await db.select().from(suppliers).where(eq(suppliers.is_active, true))
+
+    if (country_code && typeof country_code === 'string') {
+      rows = rows.filter(r => r.country_code === country_code)
+    }
+    if (min_tier && !isNaN(Number(min_tier))) {
+      const tier = Number(min_tier)
+      rows = rows.filter(r => (r.tier_rating ?? 0) >= tier)
+    }
 
     return res.json({ success: true, data: rows })
   } catch (err) {
@@ -938,6 +944,24 @@ router.get('/negotiation/:quoteId', async (req: Request, res: Response) => {
     return res.json({ success: true, data: rows })
   } catch (err) {
     console.error('Get negotiation error:', err)
+    return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
+// ─── GET /api/suppliers/:id ───────────────────────────────────────────────────
+
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const [row] = await db
+      .select()
+      .from(suppliers)
+      .where(and(eq(suppliers.id, id), eq(suppliers.is_active, true)))
+
+    if (!row) return res.status(404).json({ success: false, error: 'Supplier not found' })
+    return res.json({ success: true, data: row })
+  } catch (err) {
+    console.error('Get supplier error:', err)
     return res.status(500).json({ success: false, error: String(err) })
   }
 })
