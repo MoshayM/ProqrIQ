@@ -21,11 +21,9 @@ import RegionalRates from './pages/RegionalRates'
 import Settings from './pages/Settings'
 import Account from './pages/Account'
 import AiControl from './pages/AiControl'
-import Plans from './pages/Plans'
 import Notifications from './pages/Notifications'
 import DevicePreview from './pages/DevicePreview'
 import SupplierMap from './pages/SupplierMap'
-import Billing from './pages/Billing'
 import Organization from './pages/Organization'
 import SearchPage from './pages/Search'
 import Pricing from './pages/Pricing'
@@ -118,11 +116,11 @@ function AppRoutes() {
       <Route path="/assemblies/:id" element={<ProtectedLayout><Assemblies /></ProtectedLayout>} />
       <Route path="/account"       element={<ProtectedLayout><Account /></ProtectedLayout>} />
       <Route path="/ai-control"   element={<ProtectedLayout><AiControl /></ProtectedLayout>} />
-      <Route path="/plans"          element={<ProtectedLayout><Plans /></ProtectedLayout>} />
+      <Route path="/plans"          element={<Navigate to="/account?tab=billing" replace />} />
       <Route path="/notifications"   element={<ProtectedLayout><Notifications /></ProtectedLayout>} />
       <Route path="/device-preview"  element={<ProtectedLayout><DevicePreview /></ProtectedLayout>} />
       <Route path="/supplier-map"    element={<ProtectedLayout><SupplierMap /></ProtectedLayout>} />
-      <Route path="/billing"         element={<ProtectedLayout><Billing /></ProtectedLayout>} />
+      <Route path="/billing"         element={<Navigate to="/account?tab=billing" replace />} />
       <Route path="/organization"    element={<ProtectedLayout><Organization /></ProtectedLayout>} />
       <Route path="/search"          element={<ProtectedLayout><SearchPage /></ProtectedLayout>} />
 

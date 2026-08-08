@@ -190,6 +190,103 @@ router.post('/subscription/cancel', requireAuth, async (req: Request, res: Respo
   }
 })
 
+// ─── POST /api/subscription/webhook ──────────────────────────────────────────
+// Stripe webhook — raw body is parsed by the middleware added in app.ts before json()
+
+router.post('/subscription/webhook', async (req: Request, res: Response) => {
+  const STRIPE_SECRET_KEY    = process.env.STRIPE_SECRET_KEY
+  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
+    res.status(200).json({ received: true })
+    return
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Stripe = (await import('stripe' as any)).default
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stripe = new (Stripe as any)(STRIPE_SECRET_KEY)
+
+    const sig     = req.headers['stripe-signature'] as string
+    const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody
+
+    if (!rawBody || !sig) {
+      res.status(400).json({ error: 'Missing signature or body' })
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let event: any
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET)
+    } catch {
+      res.status(400).json({ error: 'Invalid signature' })
+      return
+    }
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object
+      const userId  = session.metadata?.user_id as string | undefined
+      const rawPlan    = (session.metadata?.plan as string | undefined) ?? 'pro'
+      const rawBilling = (session.metadata?.billing as string | undefined) ?? 'monthly'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const plan    = rawPlan as any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const billing = rawBilling as any
+
+      if (userId) {
+        const existing = await db.select().from(subscriptions).where(eq(subscriptions.user_id, userId)).limit(1)
+        const now       = new Date().toISOString()
+        const periodEnd = new Date(Date.now() + (rawBilling === 'annual' ? 365 : 30) * 86_400_000).toISOString()
+
+        if (existing.length > 0) {
+          await db.update(subscriptions).set({
+            plan,
+            status: 'active',
+            billing_cycle: billing,
+            stripe_customer_id:      session.customer as string,
+            stripe_subscription_id:  session.subscription as string,
+            current_period_start: now,
+            current_period_end:   periodEnd,
+          }).where(eq(subscriptions.user_id, userId))
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (db.insert(subscriptions) as any).values({
+            user_id: userId,
+            plan: rawPlan,
+            status: 'active',
+            billing_cycle: rawBilling,
+            stripe_customer_id:     session.customer as string,
+            stripe_subscription_id: session.subscription as string,
+            current_period_start: now,
+            current_period_end:   periodEnd,
+          })
+        }
+
+        await db.insert(auditLog).values({
+          user_id:     userId,
+          action:      'subscription_activated',
+          entity_type: 'subscription',
+          entity_id:   userId,
+          details:     JSON.stringify({ plan, billing, session_id: session.id }),
+        })
+      }
+    }
+
+    if (event.type === 'customer.subscription.deleted') {
+      const sub = event.data.object
+      await db.update(subscriptions)
+        .set({ status: 'canceled', canceled_at: new Date().toISOString() })
+        .where(eq(subscriptions.stripe_subscription_id, sub.id as string))
+    }
+
+    res.json({ received: true })
+  } catch (err) {
+    console.error('Stripe webhook error:', err)
+    res.status(500).json({ error: 'Webhook processing failed' })
+  }
+})
+
 // ─── GET /api/organization ────────────────────────────────────────────────────
 
 router.get('/organization', requireAuth, requirePlan('organization'), async (req: Request, res: Response) => {

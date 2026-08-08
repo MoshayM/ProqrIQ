@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -9,7 +9,7 @@ import { format, startOfMonth, subMonths } from 'date-fns'
 import { toast } from 'sonner'
 import {
   TrendingUp, FileText, Clock, Layers, Plus, Package, ArrowRight, CheckCircle2, DollarSign,
-  Zap, AlertTriangle, Star,
+  Zap, AlertTriangle, Star, Search, X, Building2,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
@@ -41,6 +41,93 @@ interface CostingBatch {
 }
 
 const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner']
+
+function DashboardSearch() {
+  const navigate = useNavigate()
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ quotations: unknown[]; suppliers: unknown[]; batches: unknown[] } | null>(null)
+  const [loading, setLoading] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (query.length < 2) { setResults(null); return }
+    const t = setTimeout(async () => {
+      setLoading(true)
+      try { setResults(await api.search.query(query)) } catch { setResults(null) }
+      finally { setLoading(false) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  useEffect(() => {
+    function handle(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setQuery('') }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  const total = results ? results.quotations.length + results.suppliers.length + results.batches.length : 0
+
+  return (
+    <div ref={ref} className="relative mb-6">
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9aa3b2] pointer-events-none" />
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') setQuery('') }}
+          placeholder="Search quotes, suppliers, batches…"
+          className="w-full pl-11 pr-10 py-2.5 text-sm border border-[#e5e8ef] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand shadow-sm transition-all"
+        />
+        {query && (
+          <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#9aa3b2] hover:text-[#4a5568]">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      {query.length >= 2 && (
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-[#e5e8ef] rounded-xl shadow-lg z-50 max-h-80 overflow-y-auto">
+          {loading && <div className="px-4 py-3 text-xs text-[#9aa3b2]">Searching…</div>}
+          {!loading && results && total === 0 && <div className="px-4 py-3 text-xs text-[#9aa3b2]">No results for "{query}"</div>}
+          {!loading && results && total > 0 && (
+            <div className="py-1">
+              {(results.quotations as { id: string; status: string; part?: { part_name?: string; name?: string } }[]).map((q) => (
+                <button key={q.id} onClick={() => { setQuery(''); navigate(`/quotes/${q.id}`) }}
+                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-2 text-left transition-colors">
+                  <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[#0f1729] truncate font-medium">{q.part?.part_name ?? q.part?.name ?? 'Quote'}</p>
+                    <p className="text-xs text-[#9aa3b2] truncate">{q.status?.replace(/_/g, ' ')}</p>
+                  </div>
+                </button>
+              ))}
+              {(results.suppliers as { id: string; name: string; country_code?: string; city?: string }[]).map((s) => (
+                <button key={s.id} onClick={() => { setQuery(''); navigate('/supplier-map') }}
+                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-2 text-left transition-colors">
+                  <Building2 className="w-4 h-4 text-purple-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[#0f1729] truncate font-medium">{s.name}</p>
+                    <p className="text-xs text-[#9aa3b2]">{s.country_code}{s.city ? ` · ${s.city}` : ''}</p>
+                  </div>
+                </button>
+              ))}
+              {(results.batches as { id: string; name: string; total_items: number; status: string }[]).map((b) => (
+                <button key={b.id} onClick={() => { setQuery(''); navigate(`/bulk/${b.id}`) }}
+                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface-2 text-left transition-colors">
+                  <Layers className="w-4 h-4 text-navy flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-[#0f1729] truncate font-medium">{b.name}</p>
+                    <p className="text-xs text-[#9aa3b2]">{b.total_items} items · {b.status}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface AiUsage {
   since: string
@@ -337,6 +424,9 @@ export default function Dashboard() {
           </div>
         </motion.div>
       )}
+
+      {/* Inline search */}
+      <DashboardSearch />
 
       {/* KPI cards */}
       <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 ${kpiCards.length === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>

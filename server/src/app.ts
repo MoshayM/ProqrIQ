@@ -120,6 +120,11 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 })
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
+// Capture raw body for Stripe webhook signature verification (subscription router)
+app.use('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req: Request, _res: Response, next: NextFunction) => {
+  ;(req as unknown as { rawBody: Buffer }).rawBody = req.body as Buffer
+  next()
+})
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 

@@ -39,6 +39,7 @@ interface NavItem {
   label: string
   icon: React.ComponentType<{ className?: string }>
   adminOnly?: boolean
+  roles?: string[]
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -47,9 +48,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/bulk',          label: 'Bulk Costing',   icon: Layers },
   { to: '/assemblies',    label: 'Assemblies',     icon: Package },
   { to: '/supplier-map',  label: 'Supplier Map',   icon: MapPin },
-  { to: '/search',        label: 'Search',         icon: Search },
   { to: '/ai-control',    label: 'AI Control',     icon: Brain,    adminOnly: true },
-  { to: '/device-preview',label: 'Device Preview', icon: Monitor,  adminOnly: true },
+  { to: '/device-preview',label: 'Device Preview', icon: Monitor,  roles: ['admin', 'developer'] },
 ]
 
 const sidebarVariants = {
@@ -64,7 +64,7 @@ const SHORTCUT_TIP_THRESHOLD = 5
 
 const SHORTCUT_TIPS: Record<string, string> = {
   'n':   'Press N anywhere to start a new quote instantly',
-  '/':   'Press / to search quotes and suppliers',
+  '/':   'Press / to open Dashboard search',
   '?':   'Press ? to see all keyboard shortcuts',
   'g+d': 'G → D jumps to Dashboard from anywhere',
   'g+q': 'G → Q jumps to Quotations',
@@ -305,7 +305,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       // n → new quote
       if (key === 'n' && !e.metaKey && !e.ctrlKey) { navigate('/quotes/new'); fireTip('n'); return }
       // / → global search
-      if (key === '/' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); navigate('/search'); fireTip('/'); return }
+      if (key === '/' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); navigate('/dashboard'); fireTip('/'); return }
 
       // G-chord navigation
       if (key === 'g' && !e.metaKey && !e.ctrlKey) { pendingGRef.current = true; return }
@@ -337,9 +337,11 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
     navigate('/login')
   }
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.adminOnly || hasRole(['admin', 'ceo', 'developer', 'owner']),
-  )
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.roles) return hasRole(item.roles)
+    if (item.adminOnly) return hasRole(['admin', 'ceo', 'developer', 'owner'])
+    return true
+  })
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-2">
@@ -661,6 +663,13 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
                   <p className="text-xs text-white/40 capitalize mt-0.5">{user?.role?.replace('_', ' ')}</p>
                 </div>
               </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2.5 w-full rounded-lg p-1.5 hover:bg-white/10 transition-colors text-left text-white/60 hover:text-white"
+              >
+                <LogOut className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm font-medium">Sign out</span>
+              </button>
             </div>
           </motion.div>
         )}
@@ -705,7 +714,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
       {/* ── Floating Device Preview launcher (5D.2) ──────────────────────────── */}
-      {['admin', 'developer', 'owner'].includes(user?.role ?? '') && (
+      {['admin', 'developer'].includes(user?.role ?? '') && (
         <Link
           to="/device-preview"
           className="fixed bottom-6 right-6 z-[9998] w-11 h-11 flex items-center justify-center rounded-full bg-[#1e2d4e] text-white shadow-xl hover:bg-[#2d3e5c] transition-colors"

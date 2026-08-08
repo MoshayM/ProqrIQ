@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
-  Camera, Eye, EyeOff, Check, BookOpen, Globe, Users, Info, Plus, X, Loader2,
+  Camera, Eye, EyeOff, Check, BookOpen, Globe, Users, Info, Plus, X, Loader2, LogOut, CreditCard,
 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { api } from '../../lib/api'
@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils'
 import { usePageTitle } from '../../hooks/usePageTitle'
 import KBManager from '../KBManager'
 import RegionalRates from '../RegionalRates'
+import Billing from '../Billing'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { PlanBadge } from '../../components/ui/PlanBadge'
 import { useSubscription } from '../../hooks/useSubscription'
@@ -166,9 +167,15 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 // ─── Profile tab ─────────────────────────────────────────────────────────────
 
 function ProfileTab() {
-  const { user, updateUser, hasRole } = useAuth()
+  const { user, updateUser, hasRole, logout } = useAuth()
+  const navigate = useNavigate()
   const { plan } = useSubscription()
   const queryClient = useQueryClient()
+
+  async function handleSignOut() {
+    await logout()
+    navigate('/login')
+  }
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [avatarLoading,  setAvatarLoading]  = useState(false)
@@ -270,7 +277,7 @@ function ProfileTab() {
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5" />Active
               </span>
-              <Link to="/billing" className="flex items-center gap-1.5 text-xs text-[#e85c1a] hover:underline font-medium">
+              <Link to="/account?tab=billing" className="flex items-center gap-1.5 text-xs text-[#e85c1a] hover:underline font-medium">
                 <PlanBadge plan={plan} />
                 Manage billing →
               </Link>
@@ -450,6 +457,24 @@ function ProfileTab() {
           onSuccess={() => queryClient.invalidateQueries({ queryKey: ['users'] })}
         />
       )}
+
+      {/* Sign Out */}
+      <SectionCard title="Session">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-[#0f1729] font-medium">Sign out</p>
+            <p className="text-xs text-[#9aa3b2] mt-0.5">End your current session on this device</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSignOut}
+            iconLeft={<LogOut className="w-4 h-4" />}
+          >
+            Sign out
+          </Button>
+        </div>
+      </SectionCard>
     </div>
   )
 }
@@ -465,6 +490,7 @@ export default function Account() {
 
   const tabs = [
     { id: 'profile', label: 'Profile',        icon: null },
+    { id: 'billing', label: 'Plans & Billing', icon: CreditCard },
     ...(isAdmin ? [
       { id: 'kb',    label: 'Knowledge Base', icon: BookOpen },
       { id: 'rates', label: 'Regional Rates', icon: Globe },
@@ -514,6 +540,7 @@ export default function Account() {
       {/* Content */}
       <div className={activeTab === 'profile' ? 'max-w-2xl mx-auto p-8' : ''}>
         {activeTab === 'profile' && <ProfileTab />}
+        {activeTab === 'billing' && <Billing />}
         {activeTab === 'kb'      && isAdmin && <UpgradeGate requiredPlan="organization" feature="Knowledge Base Manager"><KBManager /></UpgradeGate>}
         {activeTab === 'rates'   && isAdmin && <UpgradeGate requiredPlan="organization" feature="Regional Rates"><RegionalRates /></UpgradeGate>}
       </div>
