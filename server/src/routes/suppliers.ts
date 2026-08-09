@@ -65,7 +65,9 @@ const updateQuoteSchema = createQuoteSchema.omit({ quotation_id: true, supplier_
 
 const suggestSchema = z.object({
   commodity_type: z.string().min(1),
-  country:        z.string().optional(),
+  description:    z.string().optional(),
+  countries:      z.array(z.string()).optional(),
+  country:        z.string().optional(), // legacy single-country field
 })
 
 const extractQuoteSchema = z.object({
@@ -428,10 +430,19 @@ router.delete('/quote/:id', requireRole(WRITE_ROLES), async (req: Request, res: 
 router.post('/suggest', requireRole(WRITE_ROLES), requirePlan('pro'), validate(suggestSchema), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id
-    const { commodity_type, country } = req.body as z.infer<typeof suggestSchema>
+    const { commodity_type, description, countries, country } = req.body as z.infer<typeof suggestSchema>
+
+    // Resolve target countries: prefer the array field sent by the UI, fall back to legacy string
+    const targetCountries = (countries && countries.length > 0)
+      ? countries
+      : (country ? [country] : [])
 
     // KB-FIRST: search before Anthropic
-    const kbResults = await searchKB(`supplier ${commodity_type} ${country ?? ''}`, commodity_type, 5)
+    const kbResults = await searchKB(
+      `supplier ${commodity_type} ${targetCountries.join(' ')}`,
+      commodity_type,
+      5,
+    )
     const kbContext = kbResults.map((r) => r.content).join('\n\n')
 
     const prompt = `You are a manufacturing supplier discovery expert.
@@ -441,7 +452,8 @@ ${kbContext}
 
 Task: Suggest 3–5 feasible suppliers for the following requirements:
 - Commodity type: ${commodity_type}
-${country ? `- Preferred country/region: ${country}` : ''}
+${description ? `- Part description: ${description}` : ''}
+${targetCountries.length > 0 ? `- Target countries (ISO codes): ${targetCountries.join(', ')}` : ''}
 
 Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
 
@@ -506,7 +518,7 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
       action:      'supplier_suggest',
       entity_type: 'supplier',
       entity_id:   null,
-      details:     JSON.stringify({ commodity_type, country, count: saved.length }),
+      details:     JSON.stringify({ commodity_type, description, countries: targetCountries, count: saved.length }),
     })
 
     return res.json({ success: true, data: saved })

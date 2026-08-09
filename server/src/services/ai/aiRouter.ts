@@ -216,7 +216,25 @@ export async function completeWithRouter(opts: {
         }
       }
     } else {
-      throw primaryErr
+      // Anthropic is the primary but failed. If it's a config/availability issue
+      // (not a live API error) try Together AI as a last resort before giving up.
+      const isConfigError = (primaryErr as Error).message.includes('is not configured')
+      const togetherKey   = process.env.TOGETHER_API_KEY
+      if (isConfigError && togetherKey) {
+        console.warn(`[AI Router] Anthropic not configured for task "${opts.task}" — trying Together AI fallback`)
+        try {
+          const together = getProvider('together')
+          // Use a capable instruction-tuned model as Anthropic stand-in
+          const toModel = 'meta-llama/Llama-3.1-70B-Instruct-Turbo'
+          response  = await together.complete({ ...opts.request, model: toModel })
+          usedRoute = { provider: 'together', model: toModel }
+        } catch (togetherErr) {
+          // Throw the original Anthropic config error so the message is actionable
+          throw primaryErr
+        }
+      } else {
+        throw primaryErr
+      }
     }
   }
 
