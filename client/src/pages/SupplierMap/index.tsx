@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -19,6 +19,7 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { SupplierEmptyIllustration } from '../../components/ui/illustrations'
 import { cn } from '../../lib/utils'
 import { usePageTitle } from '../../hooks/usePageTitle'
+import MapView from './MapView'
 
 import 'leaflet/dist/leaflet.css'
 
@@ -92,8 +93,6 @@ interface SupplierCustomer {
 }
 
 type RightPanelTab = 'info' | 'quotes' | 'compare' | 'negotiate' | 'customers'
-
-const MapView = lazy(() => import('./MapView'))
 
 // ─── TIER STARS ──────────────────────────────────────────────────────────────
 
@@ -1000,19 +999,13 @@ export default function SupplierMap() {
           {/* Map */}
           <Card className="overflow-hidden flex-shrink-0">
             <div className="h-56 relative">
-              <Suspense fallback={
-                <div className="h-full flex items-center justify-center bg-surface-2">
-                  <Loader2 className="w-6 h-6 animate-spin text-brand" />
-                </div>
-              }>
-                <MapView
-                  pins={mapPins}
-                  onPinClick={(code) => {
-                    const match = filteredSuppliers.find(s => s.country_code === code)
-                    if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
-                  }}
-                />
-              </Suspense>
+              <MapView
+                pins={mapPins}
+                onPinClick={(code) => {
+                  const match = filteredSuppliers.find(s => s.country_code === code)
+                  if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
+                }}
+              />
             </div>
           </Card>
 
