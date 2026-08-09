@@ -29,10 +29,22 @@ export class AnthropicProvider implements AIProvider {
     const userContent: Anthropic.MessageParam['content'] = []
 
     if (req.imageBase64) {
-      userContent.push({
-        type:   'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: req.imageBase64 },
-      })
+      const mediaType = req.imageMediaType ?? 'image/jpeg'
+      if (mediaType === 'application/pdf') {
+        // PDFs use the document content block type
+        userContent.push({
+          type:   'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: req.imageBase64 },
+        } as unknown as Anthropic.ImageBlockParam)
+      } else {
+        const imgType = (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mediaType)
+          ? mediaType
+          : 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+        userContent.push({
+          type:   'image',
+          source: { type: 'base64', media_type: imgType, data: req.imageBase64 },
+        })
+      }
     }
 
     userContent.push({ type: 'text', text: req.userPrompt })

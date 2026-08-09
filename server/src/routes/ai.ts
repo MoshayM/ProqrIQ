@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express'
+import path from 'path'
 import rateLimit from 'express-rate-limit'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { db, quotations, auditLog } from '../db/index'
 import { eq, isNull, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { validate } from '../middleware/validate'
+import { drawingUpload, saveUploadedFile } from '../middleware/upload'
 import { analyseDrawing, costOnePart, estimateAssemblyOps, queryOnQuote, regenerateQuote } from '../services/ai'
 import { CONFIDENCE_GATE } from '../config'
 
@@ -28,12 +30,6 @@ const aiLimiter = rateLimit({
 router.use(requireAuth, requireRole(['engineer', 'admin', 'developer']), aiLimiter)
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
-
-const analyseDrawingSchema = z.object({
-  file_path: z.string().min(1),
-  file_type: z.enum(['pdf', 'image', 'step', 'iges', 'dxf']),
-  file_name: z.string().min(1),
-})
 
 const estimateCostSchema = z.object({
   quotation_id: z.string().min(1),
@@ -95,12 +91,22 @@ const regenerateSchema = z.object({
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-// POST /ai/analyse-drawing
-router.post('/analyse-drawing', validate(analyseDrawingSchema), async (req: Request, res: Response) => {
+// POST /ai/analyse-drawing — accepts multipart/form-data with field 'file'
+router.post('/analyse-drawing', drawingUpload, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id ?? 'system'
-    const result = await analyseDrawing(req.body.file_path, req.body.file_type, req.body.file_name, userId)
-    return res.json({ success: true, data: result })
+    const file   = req.file
+
+    if (!file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded', error_code: 'FILE_MISSING' })
+    }
+
+    // Persist the file (Vercel Blob in prod, local disk in dev)
+    const drawingPath = await saveUploadedFile(file, 'drawings')
+    const ext         = path.extname(file.originalname).replace('.', '').toLowerCase()
+
+    const result = await analyseDrawing(drawingPath, ext, file.originalname, userId)
+    return res.json({ success: true, data: { ...result, drawing_path: drawingPath } })
   } catch (err) {
     console.error('Analyse drawing error:', err)
     return res.status(500).json({

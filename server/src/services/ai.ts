@@ -63,7 +63,11 @@ function validateSourceTier(tier: unknown, context: string): void {
   }
 }
 
+// Text-based 3D file extensions — sent as text content, not as an image
+const TEXT_3D_EXTS = new Set(['step', 'stp', 'iges', 'igs', 'dxf'])
+
 // ─── analyseDrawing ───────────────────────────────────────────────────────────
+// filePath may be a local path (dev) or a Vercel Blob URL (prod).
 
 export async function analyseDrawing(
   filePath: string,
@@ -71,34 +75,22 @@ export async function analyseDrawing(
   fileName: string,
   userId = 'system',
 ): Promise<DrawingAnalysisResult> {
-  const absPath = path.resolve(filePath)
-  const fileBuffer = fs.readFileSync(absPath)
-  const base64Data = fileBuffer.toString('base64')
-
-  // Determine MIME type
-  const mimeMap: Record<string, string> = {
-    pdf: 'application/pdf',
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    gif: 'image/gif',
-    webp: 'image/webp',
+  // Fetch buffer from URL or local filesystem
+  let fileBuffer: Buffer
+  if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+    const res = await fetch(filePath)
+    if (!res.ok) throw new Error(`Failed to fetch drawing from blob: ${res.status}`)
+    fileBuffer = Buffer.from(await res.arrayBuffer())
+  } else {
+    const absPath = path.resolve(filePath)
+    fileBuffer = fs.readFileSync(absPath)
   }
-  const ext = path.extname(fileName).replace('.', '').toLowerCase()
-  const mediaType = (mimeMap[ext] ?? mimeMap[fileType.toLowerCase()] ?? 'image/png') as
-    | 'image/jpeg'
-    | 'image/png'
-    | 'image/gif'
-    | 'image/webp'
-    | 'application/pdf'
+
+  const ext = path.extname(fileName).replace('.', '').toLowerCase() || fileType.toLowerCase()
 
   const systemPrompt = `You are a precision manufacturing and cost engineering expert specialised in reading technical drawings, part specifications, and manufacturing documents. Extract all available manufacturing information from the provided file.`
 
-  const userPrompt = `Analyse this technical drawing / manufacturing document and extract structured part information.
-
-Output ONLY valid JSON with exactly this structure. No markdown fences. No preamble. No trailing text.
-
-{
+  const jsonSchema = `{
   "part_name": "string — descriptive name from drawing or filename",
   "part_number": "string or null",
   "commodity_type": "one of: ${COMMODITY_TYPES.join(' | ')} — choose closest match or null",
@@ -116,16 +108,60 @@ Output ONLY valid JSON with exactly this structure. No markdown fences. No pream
   "confidence_score": number between 0 and 100
 }`
 
-  const rawText = await completeWithRouter({
-    task:    'cad_costing',
-    userId,
-    request: {
-      systemPrompt,
-      userPrompt,
-      imageBase64: base64Data,
-      maxTokens: 2048,
-    },
-  })
+  let rawText: string
+
+  if (TEXT_3D_EXTS.has(ext)) {
+    // 3D text-based formats: embed file content in the prompt instead of as an image
+    const fileText = fileBuffer.toString('utf-8').slice(0, 12000) // cap to avoid token overflow
+    const userPrompt = `Analyse this ${ext.toUpperCase()} 3D CAD file and extract structured part information.
+
+File name: ${fileName}
+
+CAD file content:
+\`\`\`
+${fileText}
+\`\`\`
+
+Output ONLY valid JSON with exactly this structure. No markdown fences. No preamble. No trailing text.
+
+${jsonSchema}`
+
+    rawText = await completeWithRouter({
+      task:    'cad_costing',
+      userId,
+      request: { systemPrompt, userPrompt, maxTokens: 2048 },
+    })
+  } else {
+    // Image / PDF: send as base64
+    const mimeMap: Record<string, string> = {
+      pdf:  'application/pdf',
+      png:  'image/png',
+      jpg:  'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif:  'image/gif',
+      webp: 'image/webp',
+    }
+    const mediaType = mimeMap[ext] ?? 'image/png'
+    const base64Data = fileBuffer.toString('base64')
+
+    const userPrompt = `Analyse this technical drawing / manufacturing document and extract structured part information.
+
+Output ONLY valid JSON with exactly this structure. No markdown fences. No preamble. No trailing text.
+
+${jsonSchema}`
+
+    rawText = await completeWithRouter({
+      task:    'cad_costing',
+      userId,
+      request: {
+        systemPrompt,
+        userPrompt,
+        imageBase64:     base64Data,
+        imageMediaType:  mediaType,
+        maxTokens:       2048,
+      },
+    })
+  }
 
   const parsed = parseAIJSON<Record<string, unknown>>(rawText)
 

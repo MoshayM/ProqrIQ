@@ -30,10 +30,11 @@ export class OpenAIProvider implements AIProvider {
     const messages: any[] = [{ role: 'system', content: req.systemPrompt }]
 
     if (req.imageBase64) {
+      const mediaType = req.imageMediaType ?? 'image/jpeg'
       messages.push({
         role: 'user',
         content: [
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${req.imageBase64}` } },
+          { type: 'image_url', image_url: { url: `data:${mediaType};base64,${req.imageBase64}` } },
           { type: 'text', text: req.userPrompt },
         ],
       })

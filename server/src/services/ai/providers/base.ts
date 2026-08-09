@@ -1,9 +1,10 @@
 export interface AIRequest {
-  model:             string
-  systemPrompt:      string
-  userPrompt:        string
-  imageBase64?:      string
-  maxTokens?:        number
+  model:              string
+  systemPrompt:       string
+  userPrompt:         string
+  imageBase64?:       string
+  imageMediaType?:    string  // e.g. 'image/png', 'image/jpeg', 'application/pdf'
+  maxTokens?:         number
   cacheSystemPrompt?: boolean
 }
 

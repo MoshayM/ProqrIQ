@@ -30,7 +30,7 @@ export class GeminiProvider implements AIProvider {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const parts: any[] = []
     if (req.imageBase64) {
-      parts.push({ inlineData: { mimeType: 'image/jpeg', data: req.imageBase64 } })
+      parts.push({ inlineData: { mimeType: req.imageMediaType ?? 'image/jpeg', data: req.imageBase64 } })
     }
     parts.push({ text: `${req.systemPrompt}\n\n${req.userPrompt}` })
 
