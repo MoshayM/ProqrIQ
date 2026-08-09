@@ -376,7 +376,7 @@ Required JSON structure:
     task:    input.is_bulk ? 'bulk_costing' : 'costing',
     userId:  input.user_id ?? 'system',
     quoteId: quotation_id,
-    request: { systemPrompt, userPrompt, maxTokens: 8192 },
+    request: { systemPrompt, userPrompt, maxTokens: 8192, temperature: 0 },
   })
 
   // ── Step 5: Parse JSON ───────────────────────────────────────────────────────

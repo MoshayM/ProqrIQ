@@ -5,6 +5,7 @@ export interface AIRequest {
   imageBase64?:       string
   imageMediaType?:    string  // e.g. 'image/png', 'image/jpeg', 'application/pdf'
   maxTokens?:         number
+  temperature?:       number
   cacheSystemPrompt?: boolean
 }
 
