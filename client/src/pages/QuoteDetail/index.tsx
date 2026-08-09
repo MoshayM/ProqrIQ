@@ -396,7 +396,7 @@ export default function QuoteDetail() {
             Submit for Review
           </Button>
         )}
-        {quotation.status === 'pending_approval' && (role === 'ceo' || role === 'admin') && (<>
+        {quotation.status === 'pending_approval' && (role === 'ceo' || role === 'admin' || role === 'developer') && (<>
           <Button
             className="bg-emerald-600 hover:bg-emerald-700 text-white border-none"
             onClick={() => setShowApproveModal(true)}
@@ -407,10 +407,10 @@ export default function QuoteDetail() {
             Reject
           </Button>
         </>)}
-        {!isArchived && role === 'admin' && (
+        {!isArchived && (role === 'admin' || role === 'developer') && (
           <Button variant="secondary" onClick={handleArchive} loading={isArchiving} iconLeft={!isArchiving ? <Archive className="h-4 w-4" /> : undefined}>Archive</Button>
         )}
-        {isArchived && role === 'admin' && (
+        {isArchived && (role === 'admin' || role === 'developer') && (
           <Button variant="secondary" onClick={handleRestore} loading={isRestoring} iconLeft={!isRestoring ? <RotateCcw className="h-4 w-4" /> : undefined}>Restore</Button>
         )}
         <div className="ml-auto flex items-center gap-1">

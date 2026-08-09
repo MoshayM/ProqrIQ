@@ -90,7 +90,7 @@ function InlineCell({
 export default function RegionalRates() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = user?.role === 'admin' || user?.role === 'developer'
 
   const [dirty, setDirty] = useState<EditMap>({})
   const [isSavingAll, setIsSavingAll] = useState(false)

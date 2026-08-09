@@ -25,7 +25,7 @@ const aiLimiter = rateLimit({
 })
 
 // All AI routes: requireAuth + engineer/admin + aiLimiter
-router.use(requireAuth, requireRole(['engineer', 'admin']), aiLimiter)
+router.use(requireAuth, requireRole(['engineer', 'admin', 'developer']), aiLimiter)
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 

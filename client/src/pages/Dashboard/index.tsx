@@ -227,7 +227,7 @@ export default function Dashboard() {
   )
 
   const pendingList = useMemo(() => quotes.filter(q => q.status === 'pending_approval'), [quotes])
-  const canApprove = user?.role === 'ceo' || user?.role === 'admin'
+  const canApprove = user?.role === 'ceo' || user?.role === 'admin' || user?.role === 'developer'
 
   // 7B.4 — optimistic approve
   const approveMut = useMutation({

@@ -20,7 +20,7 @@ import { BULK_MAX_ITEMS } from '../config'
 
 const router = Router()
 
-router.use(requireAuth, requireRole(['engineer', 'admin']), requirePlan('pro'))
+router.use(requireAuth, requireRole(['engineer', 'admin', 'developer']), requirePlan('pro'))
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 

@@ -158,7 +158,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 })
 
 // POST /quotations
-router.post('/', requireAuth, requireRole(['engineer', 'admin']), validate(createQuotationSchema), async (req: Request, res: Response) => {
+router.post('/', requireAuth, requireRole(['engineer', 'admin', 'developer']), validate(createQuotationSchema), async (req: Request, res: Response) => {
   try {
     const body = req.body
     const id = crypto.randomUUID()
@@ -263,7 +263,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 })
 
 // PATCH /quotations/:id
-router.patch('/:id', requireAuth, requireRole(['engineer', 'admin']), validate(updateQuotationSchema), async (req: Request, res: Response) => {
+router.patch('/:id', requireAuth, requireRole(['engineer', 'admin', 'developer']), validate(updateQuotationSchema), async (req: Request, res: Response) => {
   try {
     const user = (req as any).user
     const [quote] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
@@ -306,7 +306,7 @@ router.patch('/:id', requireAuth, requireRole(['engineer', 'admin']), validate(u
 })
 
 // POST /quotations/:id/submit
-router.post('/:id/submit', requireAuth, requireRole(['engineer', 'admin']), async (req: Request, res: Response) => {
+router.post('/:id/submit', requireAuth, requireRole(['engineer', 'admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [quote] = await db.select().from(quotations).where(and(
       eq(quotations.id, req.params.id),
@@ -373,7 +373,7 @@ router.post('/:id/submit', requireAuth, requireRole(['engineer', 'admin']), asyn
 })
 
 // POST /quotations/:id/approve
-router.post('/:id/approve', requireAuth, requireRole(['ceo', 'admin']), async (req: Request, res: Response) => {
+router.post('/:id/approve', requireAuth, requireRole(['ceo', 'admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [quote] = await db.select().from(quotations).where(and(
       eq(quotations.id, req.params.id),
@@ -448,7 +448,7 @@ router.post('/:id/approve', requireAuth, requireRole(['ceo', 'admin']), async (r
 })
 
 // POST /quotations/:id/reject
-router.post('/:id/reject', requireAuth, requireRole(['ceo', 'admin']), validate(rejectSchema), async (req: Request, res: Response) => {
+router.post('/:id/reject', requireAuth, requireRole(['ceo', 'admin', 'developer']), validate(rejectSchema), async (req: Request, res: Response) => {
   try {
     const [quote] = await db.select().from(quotations).where(and(
       eq(quotations.id, req.params.id),
@@ -560,7 +560,7 @@ router.post('/:id/soft-delete', requireAuth, validate(softDeleteSchema), async (
 })
 
 // POST /quotations/:id/restore
-router.post('/:id/restore', requireAuth, requireRole(['admin']), async (req: Request, res: Response) => {
+router.post('/:id/restore', requireAuth, requireRole(['admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [quote] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
 
@@ -721,7 +721,7 @@ router.get('/:id/assumptions', requireAuth, async (req: Request, res: Response) 
 // PATCH /assumptions/:assumptionId/confirm  (mounted at /quotations level via server index)
 // This is handled via a separate mount in server/src/index.ts: /api/assumptions
 // but we can also handle it here for convenience
-router.patch('/assumptions/:assumptionId/confirm', requireAuth, requireRole(['engineer', 'admin']), async (req: Request, res: Response) => {
+router.patch('/assumptions/:assumptionId/confirm', requireAuth, requireRole(['engineer', 'admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const { value } = req.body
     const now = new Date().toISOString()

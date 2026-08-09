@@ -29,7 +29,7 @@ router.use(requireAuth, requirePlan('pro'))
 // ─── Roles ────────────────────────────────────────────────────────────────────
 
 const WRITE_ROLES   = ['engineer', 'admin', 'cost_analyst', 'ceo', 'developer', 'owner']
-const ADMIN_ROLES   = ['admin']
+const ADMIN_ROLES   = ['admin', 'developer']
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 

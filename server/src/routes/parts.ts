@@ -51,7 +51,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
 })
 
 // POST /parts
-router.post('/', requireAuth, requireRole(['engineer', 'admin']), validate(createPartSchema), async (req: Request, res: Response) => {
+router.post('/', requireAuth, requireRole(['engineer', 'admin', 'developer']), validate(createPartSchema), async (req: Request, res: Response) => {
   try {
     const body = req.body
     const id = crypto.randomUUID()
@@ -135,7 +135,7 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
 })
 
 // PATCH /parts/:id
-router.patch('/:id', requireAuth, requireRole(['engineer', 'admin']), validate(updatePartSchema), async (req: Request, res: Response) => {
+router.patch('/:id', requireAuth, requireRole(['engineer', 'admin', 'developer']), validate(updatePartSchema), async (req: Request, res: Response) => {
   try {
     const { id } = req.params
     const [part] = await db.select().from(parts).where(eq(parts.id, id))

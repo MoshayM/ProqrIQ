@@ -24,7 +24,7 @@ const updateUserSchema = z.object({
 })
 
 // All users routes require admin + organization plan
-router.use(requireAuth, requireRole(['admin']), requirePlan('organization'))
+router.use(requireAuth, requireRole(['admin', 'developer']), requirePlan('organization'))
 
 // GET /users
 router.get('/', async (req: Request, res: Response) => {

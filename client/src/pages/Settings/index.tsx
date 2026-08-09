@@ -557,7 +557,7 @@ export default function Settings() {
 
       <ProfileSection user={user as unknown as Profile} />
       <PasswordSection userId={user.id} />
-      {user.role === 'admin' && <AdminSection currentUserId={user.id} />}
+      {(user.role === 'admin' || user.role === 'developer') && <AdminSection currentUserId={user.id} />}
       <AppInfoSection />
     </div>
   );

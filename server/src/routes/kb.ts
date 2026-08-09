@@ -88,7 +88,7 @@ router.get('/documents', async (req: Request, res: Response) => {
 // POST /kb/documents/upload — admin only; kbUpload middleware handles single PDF
 router.post(
   '/documents/upload',
-  requireRole(['admin']),
+  requireRole(['admin', 'developer']),
   kbUpload,
   async (req: Request, res: Response) => {
     try {
@@ -160,7 +160,7 @@ router.post(
 )
 
 // POST /kb/documents/:id/reindex — admin only
-router.post('/documents/:id/reindex', requireRole(['admin']), async (req: Request, res: Response) => {
+router.post('/documents/:id/reindex', requireRole(['admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [doc] = await db.select().from(kbDocuments).where(eq(kbDocuments.id, req.params.id))
     if (!doc) {
@@ -200,7 +200,7 @@ router.post('/documents/:id/reindex', requireRole(['admin']), async (req: Reques
 })
 
 // DELETE /kb/documents/:id — admin only (soft deactivate + delete chunks)
-router.delete('/documents/:id', requireRole(['admin']), async (req: Request, res: Response) => {
+router.delete('/documents/:id', requireRole(['admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [doc] = await db.select().from(kbDocuments).where(eq(kbDocuments.id, req.params.id))
     if (!doc) {
@@ -265,7 +265,7 @@ router.get('/entries', async (req: Request, res: Response) => {
 })
 
 // POST /kb/entries — admin only
-router.post('/entries', requireRole(['admin']), validate(kbEntrySchema), async (req: Request, res: Response) => {
+router.post('/entries', requireRole(['admin', 'developer']), validate(kbEntrySchema), async (req: Request, res: Response) => {
   try {
     const body = req.body
     const id = crypto.randomUUID()
@@ -311,7 +311,7 @@ router.post('/entries', requireRole(['admin']), validate(kbEntrySchema), async (
 })
 
 // PATCH /kb/entries/:id — admin only
-router.patch('/entries/:id', requireRole(['admin']), validate(kbEntryUpdateSchema), async (req: Request, res: Response) => {
+router.patch('/entries/:id', requireRole(['admin', 'developer']), validate(kbEntryUpdateSchema), async (req: Request, res: Response) => {
   try {
     const [entry] = await db.select().from(kbEntries).where(eq(kbEntries.id, req.params.id))
     if (!entry) {
@@ -350,7 +350,7 @@ router.patch('/entries/:id', requireRole(['admin']), validate(kbEntryUpdateSchem
 })
 
 // PATCH /kb/entries/:id/deactivate — admin only
-router.patch('/entries/:id/deactivate', requireRole(['admin']), async (req: Request, res: Response) => {
+router.patch('/entries/:id/deactivate', requireRole(['admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [entry] = await db.select().from(kbEntries).where(eq(kbEntries.id, req.params.id))
     if (!entry) {
@@ -405,7 +405,7 @@ router.get('/regional-rates', async (req: Request, res: Response) => {
 })
 
 // POST /kb/regional-rates — admin only
-router.post('/regional-rates', requireRole(['admin']), validate(regionalRateSchema), async (req: Request, res: Response) => {
+router.post('/regional-rates', requireRole(['admin', 'developer']), validate(regionalRateSchema), async (req: Request, res: Response) => {
   try {
     const body = req.body
     const id = crypto.randomUUID()
@@ -449,7 +449,7 @@ router.post('/regional-rates', requireRole(['admin']), validate(regionalRateSche
 })
 
 // PATCH /kb/regional-rates/:id — admin only
-router.patch('/regional-rates/:id', requireRole(['admin']), validate(regionalRateUpdateSchema), async (req: Request, res: Response) => {
+router.patch('/regional-rates/:id', requireRole(['admin', 'developer']), validate(regionalRateUpdateSchema), async (req: Request, res: Response) => {
   try {
     const [rate] = await db.select().from(regionalRates).where(eq(regionalRates.id, req.params.id))
     if (!rate) {

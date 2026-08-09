@@ -119,7 +119,7 @@ export default function AllQuotes() {
     const q = search.toLowerCase().trim()
     const filtered = quotes.filter(quote => {
       if (quote.status === 'archived') {
-        if (user?.role !== 'admin') return false
+        if (!['admin', 'developer'].includes(user?.role ?? '')) return false
         if (!showArchived) return false
       }
       if (q && !quote.part.name.toLowerCase().includes(q) && !(quote.part.part_number ?? '').toLowerCase().includes(q)) return false
@@ -160,7 +160,7 @@ export default function AllQuotes() {
   const handleArchive = (id: string) => withMutation(id, () => api.quotes.softDelete(id), 'Quote archived')
   const handleRestore = (id: string) => withMutation(id, () => api.quotes.restore(id), 'Quote restored')
 
-  const activeFiltersCount = [statusFilter, typeFilter, showArchived && user?.role === 'admin' ? 'archived' : ''].filter(Boolean).length
+  const activeFiltersCount = [statusFilter, typeFilter, showArchived && ['admin', 'developer'].includes(user?.role ?? '') ? 'archived' : ''].filter(Boolean).length
 
   return (
     <div className="page-content space-y-5">
@@ -267,7 +267,7 @@ export default function AllQuotes() {
                     <option value="component">Component</option>
                   </select>
                 </div>
-                {user?.role === 'admin' && (
+                {['admin', 'developer'].includes(user?.role ?? '') && (
                   <div className="flex items-end pb-0.5">
                     <label className="flex items-center gap-2 text-sm text-[#4a5568] cursor-pointer select-none">
                       <input
@@ -419,7 +419,7 @@ export default function AllQuotes() {
                                 {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                               </ActionIcon>
                             )}
-                            {quote.status === 'pending_approval' && (role === 'ceo' || role === 'admin') && (<>
+                            {quote.status === 'pending_approval' && (role === 'ceo' || role === 'admin' || role === 'developer') && (<>
                               <ActionIcon title="Approve" disabled={isMutating} onClick={() => handleApprove(quote.id)} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
                                 {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
                               </ActionIcon>
@@ -427,12 +427,12 @@ export default function AllQuotes() {
                                 {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
                               </ActionIcon>
                             </>)}
-                            {!isArchived && role === 'admin' && (
+                            {!isArchived && (role === 'admin' || role === 'developer') && (
                               <ActionIcon title="Archive" disabled={isMutating} onClick={() => handleArchive(quote.id)} className="text-[#9aa3b2] hover:text-[#4a5568] hover:bg-surface-3">
                                 {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
                               </ActionIcon>
                             )}
-                            {isArchived && role === 'admin' && (
+                            {isArchived && (role === 'admin' || role === 'developer') && (
                               <ActionIcon title="Restore" disabled={isMutating} onClick={() => handleRestore(quote.id)} className="text-amber-500 hover:text-amber-700 hover:bg-amber-50">
                                 {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                               </ActionIcon>

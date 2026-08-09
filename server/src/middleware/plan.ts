@@ -35,7 +35,7 @@ export function requirePlan(minPlan: 'pro' | 'organization') {
       res.status(401).json({ success: false, error: 'Not authenticated', error_code: 'AUTH_MISSING' })
       return
     }
-    if ((req as any).user?.role === 'admin') return next()
+    if (['admin', 'developer'].includes((req as any).user?.role)) return next()
     try {
       const plan = await getUserPlan(req.user.id)
       if ((PLAN_RANK[plan] ?? 0) < (PLAN_RANK[minPlan] ?? 0)) {
@@ -63,6 +63,7 @@ export function requireQuotaCheck(
       res.status(401).json({ success: false, error: 'Not authenticated', error_code: 'AUTH_MISSING' })
       return
     }
+    if (['admin', 'developer'].includes((req as any).user?.role)) { next(); return }
     if (limit === null) { next(); return }
 
     try {

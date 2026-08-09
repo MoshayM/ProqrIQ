@@ -102,7 +102,7 @@ const updateComponentSchema = z.object({
 // ─── POST /assemblies ─────────────────────────────────────────────────────────
 router.post(
   '/',
-  requireRole(['engineer', 'admin']),
+  requireRole(['engineer', 'admin', 'developer']),
   validate(createAssemblySchema),
   async (req: Request, res: Response) => {
     try {
@@ -187,7 +187,7 @@ router.post(
 // We export this handler so the main router can mount it under /quotations.
 router.post(
   '/quotations/:id/convert-to-assembly',
-  requireRole(['engineer', 'admin']),
+  requireRole(['engineer', 'admin', 'developer']),
   async (req: Request, res: Response) => {
     try {
       const [quote] = await db.select().from(quotations).where(and(
@@ -297,7 +297,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // ─── POST /assemblies/:id/components ─────────────────────────────────────────
 router.post(
   '/:id/components',
-  requireRole(['engineer', 'admin']),
+  requireRole(['engineer', 'admin', 'developer']),
   validate(addComponentSchema),
   async (req: Request, res: Response) => {
     try {
@@ -449,7 +449,7 @@ router.post(
 // ─── PATCH /assemblies/:id/components/:componentId ────────────────────────────
 router.patch(
   '/:id/components/:componentId',
-  requireRole(['engineer', 'admin']),
+  requireRole(['engineer', 'admin', 'developer']),
   validate(updateComponentSchema),
   async (req: Request, res: Response) => {
     try {
@@ -519,7 +519,7 @@ router.patch(
 // ─── DELETE /assemblies/:id/components/:componentId ───────────────────────────
 router.delete(
   '/:id/components/:componentId',
-  requireRole(['engineer', 'admin']),
+  requireRole(['engineer', 'admin', 'developer']),
   async (req: Request, res: Response) => {
     try {
       const [edge] = await db.select().from(assemblyComponents).where(and(
@@ -581,7 +581,7 @@ router.delete(
 )
 
 // ─── POST /assemblies/:id/cost-children ───────────────────────────────────────
-router.post('/:id/cost-children', requireRole(['engineer', 'admin']), async (req: Request, res: Response) => {
+router.post('/:id/cost-children', requireRole(['engineer', 'admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [assembly] = await db.select().from(quotations).where(and(
       eq(quotations.id, req.params.id),
@@ -685,7 +685,7 @@ router.post('/:id/cost-children', requireRole(['engineer', 'admin']), async (req
 })
 
 // ─── POST /assemblies/:id/rollup ──────────────────────────────────────────────
-router.post('/:id/rollup', requireRole(['engineer', 'admin']), async (req: Request, res: Response) => {
+router.post('/:id/rollup', requireRole(['engineer', 'admin', 'developer']), async (req: Request, res: Response) => {
   try {
     const [assembly] = await db.select().from(quotations).where(and(
       eq(quotations.id, req.params.id),
