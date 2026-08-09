@@ -23,7 +23,7 @@ import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { PlanBadge } from '../../components/ui/PlanBadge'
 import { useSubscription } from '../../hooks/useSubscription'
 
-const ADMIN_ROLES = ['admin', 'ceo']
+const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner']
 
 const ROLE_COLORS: Record<string, string> = {
   admin:        'bg-red-50 text-red-700',
