@@ -7,6 +7,7 @@ import {
   Brain, Sliders, BarChart3, RefreshCw, Save, RotateCcw, Zap,
   AlertTriangle, CheckCircle, TrendingUp, Clock, ChevronLeft,
   Route, CircleDot, DollarSign, PlayCircle, XCircle, Download,
+  Eye, EyeOff, Trash2, KeyRound, ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../../lib/api'
@@ -33,6 +34,64 @@ interface AiConfig {
   rate_limits: { interactive_per_hour: number; bulk_per_hour: number }
   confidence_gate: number; margin_pct: number; max_batch_items: number; bulk_concurrency: number
 }
+
+interface LlmKeyStatus { provider: string; key_preview: string; model: string | null; enabled: boolean }
+
+interface LlmPreference { preferred_provider: string }
+
+const PROVIDER_META = [
+  {
+    id: 'anthropic',
+    name: 'Anthropic (Claude)',
+    subtitle: 'Get your key at console.anthropic.com',
+    models: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-20250514', 'claude-sonnet-4-6', 'claude-opus-4-8'],
+    defaultModel: 'claude-sonnet-4-6',
+    placeholder: 'sk-ant-...',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+        <path d="M13.827 3.52h3.603L24 20h-3.603zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017L3.674 20H0zm4.132 9.959-1.794-4.745-1.794 4.745z"/>
+      </svg>
+    ),
+    iconBg: 'bg-orange-100 text-orange-700',
+    preferLabel: 'Claude (Anthropic)',
+    preferDesc: 'Always use Claude for all requests',
+    dotColor: '#e85c1a',
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI (GPT)',
+    subtitle: 'Get your key at platform.openai.com',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+    defaultModel: 'gpt-4o',
+    placeholder: 'sk-proj-...',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+        <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0L4.006 14.35A4.5 4.5 0 0 1 2.34 7.895zm16.597 3.855-5.833-3.387 2.02-1.168a.076.076 0 0 1 .071 0l4.816 2.806a4.5 4.5 0 0 1-.676 8.115v-5.678a.79.79 0 0 0-.398-.688zm2.009-3.023-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061L14.25 4.05a4.5 4.5 0 0 1 6.697 4.66zm-12.65 4.135-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365 2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"/>
+      </svg>
+    ),
+    iconBg: 'bg-emerald-100 text-emerald-700',
+    preferLabel: 'GPT-4o (OpenAI)',
+    preferDesc: 'Always use GPT for all requests',
+    dotColor: '#22c55e',
+  },
+  {
+    id: 'google',
+    name: 'Google Gemini',
+    subtitle: 'Get your key at aistudio.google.com',
+    models: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    defaultModel: 'gemini-2.0-flash',
+    placeholder: 'AIzaSy...',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+        <path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zm0 2c1.466 0 2.86.317 4.12.882L14.297 6.72A8.02 8.02 0 0 0 12 6.4a8 8 0 0 0-8 8c0 4.418 3.582 8 8 8s8-3.582 8-8a8.02 8.02 0 0 0-.32-2.297l3.838-1.823A10 10 0 0 1 22 12c0 5.514-4.486 10-10 10S2 17.514 2 12 6.486 2 12 2zm6.832 2.998-4.59 9.67a4 4 0 1 1-5.91-5.91l9.5-3.76z"/>
+      </svg>
+    ),
+    iconBg: 'bg-blue-100 text-blue-700',
+    preferLabel: 'Gemini (Google)',
+    preferDesc: 'Always use Gemini for all requests',
+    dotColor: '#3b82f6',
+  },
+] as const
 
 interface AiUsage {
   since: string
@@ -155,6 +214,78 @@ function AiControlInner() {
     retry:      false,
     staleTime:  30_000,
   })
+
+  const { data: llmKeys, isLoading: keysLoading } = useQuery<LlmKeyStatus[]>({
+    queryKey: ['admin-llm-keys'],
+    queryFn:  () => api.admin.getLlmKeys(),
+  })
+
+  const { data: llmPreference } = useQuery<LlmPreference>({
+    queryKey: ['admin-llm-preference'],
+    queryFn:  () => api.admin.getLlmPreference(),
+  })
+
+  // Per-provider form state: { newKey, showKey, replaceKey, showReplace, model, testing, testResult }
+  type ProviderForm = {
+    newKey: string; showKey: boolean
+    replaceKey: string; showReplace: boolean
+    model: string
+    testing: boolean; testResult: { ok: boolean; error?: string; elapsed_ms?: number } | null
+    saving: boolean; removing: boolean; toggling: boolean
+  }
+  const [providerForms, setProviderForms] = useState<Record<string, ProviderForm>>(() =>
+    Object.fromEntries(PROVIDER_META.map(p => [p.id, {
+      newKey: '', showKey: false, replaceKey: '', showReplace: false,
+      model: p.defaultModel, testing: false, testResult: null, saving: false, removing: false, toggling: false,
+    }]))
+  )
+
+  function pf(id: string, patch: Partial<ProviderForm>) {
+    setProviderForms(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
+
+  async function handleSaveKey(providerId: string, key: string) {
+    pf(providerId, { saving: true })
+    try {
+      const model = providerForms[providerId].model
+      await api.admin.saveLlmKey(providerId, { api_key: key, model })
+      queryClient.invalidateQueries({ queryKey: ['admin-llm-keys'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-providers'] })
+      pf(providerId, { newKey: '', replaceKey: '', testResult: null })
+      toast.success('API key saved')
+    } catch { toast.error('Failed to save key') }
+    finally { pf(providerId, { saving: false }) }
+  }
+
+  async function handleRemoveKey(providerId: string) {
+    pf(providerId, { removing: true })
+    try {
+      await api.admin.removeLlmKey(providerId)
+      queryClient.invalidateQueries({ queryKey: ['admin-llm-keys'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-providers'] })
+      pf(providerId, { testResult: null })
+      toast.success('API key removed')
+    } catch { toast.error('Failed to remove key') }
+    finally { pf(providerId, { removing: false }) }
+  }
+
+  async function handleToggleKey(providerId: string, enabled: boolean) {
+    pf(providerId, { toggling: true })
+    try {
+      await api.admin.toggleLlmKey(providerId, enabled)
+      queryClient.invalidateQueries({ queryKey: ['admin-llm-keys'] })
+    } catch { toast.error('Failed to update') }
+    finally { pf(providerId, { toggling: false }) }
+  }
+
+  async function handleTestKey(providerId: string, keyOverride?: string) {
+    pf(providerId, { testing: true, testResult: null })
+    try {
+      const result = await api.admin.testLlmKey(providerId, keyOverride)
+      pf(providerId, { testResult: result })
+    } catch { pf(providerId, { testResult: { ok: false, error: 'Network error' } }) }
+    finally { pf(providerId, { testing: false }) }
+  }
 
   const [ollamaTestResult, setOllamaTestResult] = useState<{
     ok: boolean; elapsed_ms?: number; raw?: string; error?: string
@@ -389,6 +520,313 @@ function AiControlInner() {
             disabled={!isDirty} iconLeft={<Save className="w-3.5 h-3.5" />}>Save Changes</Button>
         </div>
       </div>
+
+      {/* ── AI Providers ─────────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center">
+              <KeyRound className="w-4 h-4 text-brand" />
+            </div>
+            <div>
+              <CardTitle>AI Providers</CardTitle>
+              <p className="text-xs text-[#9aa3b2] mt-0.5">
+                Connect one or more AI providers. API keys saved here override the server <code className="font-mono bg-surface-3 px-1 py-0.5 rounded">.env</code> values.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {keysLoading ? (
+            <div className="space-y-3">{[0, 1, 2].map(i => <Skeleton key={i} variant="rect" height="8rem" />)}</div>
+          ) : (
+            PROVIDER_META.map(meta => {
+              const stored = llmKeys?.find(k => k.provider === meta.id)
+              const form   = providerForms[meta.id]
+              const connected = !!stored
+
+              return (
+                <div key={meta.id} className={cn(
+                  'rounded-xl border p-4 space-y-3',
+                  connected ? 'bg-white border-[#e5e8ef]' : 'bg-surface-2 border-[#e5e8ef]',
+                )}>
+                  {/* Header row */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0', meta.iconBg)}>
+                        {meta.icon}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[#0f1729]">{meta.name}</p>
+                        <p className="text-xs text-[#9aa3b2]">{meta.subtitle}</p>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      'flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0',
+                      connected ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-3 text-[#9aa3b2]',
+                    )}>
+                      <span className={cn('w-1.5 h-1.5 rounded-full', connected ? 'bg-emerald-500' : 'bg-[#c8cdd8]')} />
+                      {connected ? 'Connected' : 'Not configured'}
+                    </span>
+                  </div>
+
+                  {/* Connected state */}
+                  {connected && (
+                    <>
+                      {/* Masked key + remove */}
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-xs font-mono bg-surface-3 border border-[#e5e8ef] rounded-lg px-3 py-2 text-[#4a5568]">
+                          {stored!.key_preview}
+                        </code>
+                        <button
+                          onClick={() => handleRemoveKey(meta.id)}
+                          disabled={form.removing}
+                          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Remove
+                        </button>
+                      </div>
+
+                      {/* Model */}
+                      <div>
+                        <label className={LABEL_CLS}>MODEL</label>
+                        <select
+                          value={stored!.model ?? form.model}
+                          onChange={e => pf(meta.id, { model: e.target.value })}
+                          className={INPUT_CLS}
+                        >
+                          {meta.models.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+
+                      {/* Replace key */}
+                      <div>
+                        <label className={LABEL_CLS}>REPLACE API KEY</label>
+                        <div className="relative">
+                          <input
+                            type={form.showReplace ? 'text' : 'password'}
+                            placeholder="Enter new key to replace…"
+                            value={form.replaceKey}
+                            onChange={e => pf(meta.id, { replaceKey: e.target.value })}
+                            className={INPUT_CLS + ' pr-9'}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => pf(meta.id, { showReplace: !form.showReplace })}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9aa3b2] hover:text-[#4a5568]"
+                          >
+                            {form.showReplace ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Test result */}
+                      {form.testResult && (
+                        <div className={cn(
+                          'flex items-center gap-2 px-3 py-2 rounded-lg text-xs',
+                          form.testResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+                        )}>
+                          {form.testResult.ok
+                            ? <><CheckCircle className="w-3.5 h-3.5" /> Connection OK — {form.testResult.elapsed_ms}ms</>
+                            : <><XCircle className="w-3.5 h-3.5" /> {form.testResult.error ?? 'Connection failed'}</>}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleTestKey(meta.id, form.replaceKey || undefined)}
+                          disabled={form.testing}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e5e8ef] bg-white text-xs font-medium text-[#4a5568] hover:bg-surface-2 transition-colors disabled:opacity-50"
+                        >
+                          {form.testing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
+                          Test Connection
+                        </button>
+                        {form.replaceKey && (
+                          <button
+                            onClick={() => handleSaveKey(meta.id, form.replaceKey)}
+                            disabled={form.saving}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0f1729] text-white text-xs font-medium hover:bg-[#1a2840] transition-colors disabled:opacity-50"
+                          >
+                            {form.saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            Update Key
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Not configured state */}
+                  {!connected && (
+                    <>
+                      <div>
+                        <label className={LABEL_CLS}>API KEY</label>
+                        <div className="relative">
+                          <input
+                            type={form.showKey ? 'text' : 'password'}
+                            placeholder={meta.placeholder}
+                            value={form.newKey}
+                            onChange={e => pf(meta.id, { newKey: e.target.value })}
+                            className={INPUT_CLS + ' pr-9'}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => pf(meta.id, { showKey: !form.showKey })}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9aa3b2] hover:text-[#4a5568]"
+                          >
+                            {form.showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className={LABEL_CLS}>MODEL</label>
+                        <select
+                          value={form.model}
+                          onChange={e => pf(meta.id, { model: e.target.value })}
+                          className={INPUT_CLS}
+                        >
+                          {meta.models.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                      </div>
+
+                      {form.testResult && (
+                        <div className={cn(
+                          'flex items-center gap-2 px-3 py-2 rounded-lg text-xs',
+                          form.testResult.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+                        )}>
+                          {form.testResult.ok
+                            ? <><CheckCircle className="w-3.5 h-3.5" /> Connection OK — {form.testResult.elapsed_ms}ms</>
+                            : <><XCircle className="w-3.5 h-3.5" /> {form.testResult.error ?? 'Connection failed'}</>}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleTestKey(meta.id, form.newKey || undefined)}
+                          disabled={form.testing || !form.newKey}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e5e8ef] bg-white text-xs font-medium text-[#4a5568] hover:bg-surface-2 transition-colors disabled:opacity-50"
+                        >
+                          {form.testing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
+                          Test Connection
+                        </button>
+                        <button
+                          onClick={() => handleSaveKey(meta.id, form.newKey)}
+                          disabled={form.saving || !form.newKey}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0f1729] text-white text-xs font-medium hover:bg-[#1a2840] transition-colors disabled:opacity-50"
+                        >
+                          {form.saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                          Save &amp; Connect
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── My AI Preference ─────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+              <Brain className="w-4 h-4 text-purple-600" />
+            </div>
+            <div>
+              <CardTitle>My AI Preference</CardTitle>
+              <p className="text-xs text-[#9aa3b2] mt-0.5">
+                Choose which AI provider handles requests. <strong>Auto</strong> picks the best provider per task type (drawing analysis → Claude/Gemini; cost reasoning → Claude; queries → GPT → Gemini).
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide mb-3">PREFERRED PROVIDER</p>
+            <div className="space-y-2">
+              {[
+                { value: 'auto', label: 'Auto (Smart Selection)', desc: 'Best provider per task: vision, reasoning, or query' },
+                ...PROVIDER_META.map(p => ({
+                  value: p.id,
+                  label: p.preferLabel,
+                  desc: p.preferDesc + (llmKeys?.find(k => k.provider === p.id) ? '' : ' — not configured'),
+                  disabled: !llmKeys?.find(k => k.provider === p.id),
+                })),
+              ].map(opt => {
+                const selected = (llmPreference?.preferred_provider ?? 'auto') === opt.value
+                return (
+                  <label key={opt.value} className={cn(
+                    'flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors',
+                    selected ? 'border-brand bg-brand/5' : 'border-[#e5e8ef] hover:bg-surface-2',
+                    (opt as any).disabled ? 'opacity-50 cursor-not-allowed' : '',
+                  )}>
+                    <input
+                      type="radio"
+                      name="preferred_provider"
+                      value={opt.value}
+                      checked={selected}
+                      disabled={(opt as any).disabled}
+                      onChange={() => {
+                        api.admin.setLlmPreference(opt.value)
+                          .then(() => queryClient.invalidateQueries({ queryKey: ['admin-llm-preference'] }))
+                          .catch(() => toast.error('Failed to save preference'))
+                      }}
+                      className="mt-0.5 accent-brand"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-[#0f1729]">{opt.label}</p>
+                      <p className="text-xs text-[#9aa3b2] mt-0.5">{opt.desc}</p>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Enable / Disable per provider */}
+          <div className="pt-2 border-t border-[#e5e8ef]">
+            <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide mb-1">ENABLE / DISABLE PROVIDERS</p>
+            <p className="text-xs text-[#9aa3b2] mb-3">Disabled providers are skipped even in Auto mode.</p>
+            <div className="space-y-2">
+              {PROVIDER_META.map(meta => {
+                const stored = llmKeys?.find(k => k.provider === meta.id)
+                const enabled = stored?.enabled ?? false
+                const configured = !!stored
+                return (
+                  <div key={meta.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-surface-2 border border-[#e5e8ef]">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: configured && enabled ? meta.dotColor : '#c8cdd8' }}
+                      />
+                      <span className="text-sm text-[#0f1729]">{meta.preferLabel}</span>
+                      {!configured && <span className="text-xs text-[#9aa3b2]">(not configured)</span>}
+                    </div>
+                    <button
+                      onClick={() => configured && handleToggleKey(meta.id, !enabled)}
+                      disabled={!configured || providerForms[meta.id].toggling}
+                      className={cn(
+                        'flex items-center gap-1 text-xs font-medium transition-colors',
+                        configured ? 'cursor-pointer' : 'cursor-not-allowed opacity-40',
+                        enabled ? 'text-emerald-600' : 'text-[#9aa3b2]',
+                      )}
+                    >
+                      {enabled
+                        ? <ToggleRight className="w-5 h-5" />
+                        : <ToggleLeft className="w-5 h-5" />}
+                      {enabled ? 'On' : 'Off'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Provider status */}
       {providers && (

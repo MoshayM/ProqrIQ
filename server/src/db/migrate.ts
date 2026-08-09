@@ -247,4 +247,22 @@ export async function runMigrations(client: Client): Promise<void> {
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id)`)
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(org_id)`)
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_usage_user_period ON usage_counters(user_id, period_start)`)
+
+  // ── LLM API Keys + System Settings ────────────────────────────────────────
+  await exec(client, `
+    CREATE TABLE IF NOT EXISTS llm_api_keys (
+      provider   TEXT PRIMARY KEY,
+      api_key    TEXT NOT NULL,
+      model      TEXT,
+      enabled    INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT,
+      updated_at TEXT
+    )`)
+
+  await exec(client, `
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TEXT
+    )`)
 }

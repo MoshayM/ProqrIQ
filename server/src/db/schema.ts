@@ -663,3 +663,22 @@ export const usageCounters = sqliteTable('usage_counters', {
 export const subscriptionsUserIdx = index('idx_subscriptions_user').on(subscriptions.user_id)
 export const orgMembersOrgIdx     = index('idx_org_members_org').on(organizationMembers.org_id)
 export const usageUserPeriodIdx   = index('idx_usage_user_period').on(usageCounters.user_id, usageCounters.period_start)
+
+// ─── LLM API Keys (admin-managed at runtime) ─────────────────────────────────
+
+export const llmApiKeys = sqliteTable('llm_api_keys', {
+  provider:   text('provider').primaryKey(),  // 'anthropic' | 'openai' | 'google'
+  api_key:    text('api_key').notNull(),
+  model:      text('model'),                  // preferred model for this provider
+  enabled:    integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── System settings (key-value store) ───────────────────────────────────────
+
+export const systemSettings = sqliteTable('system_settings', {
+  key:        text('key').primaryKey(),
+  value:      text('value').notNull(),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+})

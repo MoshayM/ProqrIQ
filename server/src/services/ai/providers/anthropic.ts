@@ -1,19 +1,23 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { AIProvider, AIRequest, AIResponse } from './base'
+import { getStoredKey } from '../keyStore'
 
 export class AnthropicProvider implements AIProvider {
   id          = 'anthropic'
   displayName = 'Anthropic (Claude)'
 
-  private client: Anthropic | null = null
+  private client:    Anthropic | null = null
+  private clientKey: string | null    = null
 
   isAvailable(): boolean {
-    return !!process.env.ANTHROPIC_API_KEY
+    return !!(getStoredKey('anthropic') ?? process.env.ANTHROPIC_API_KEY)
   }
 
   private getClient(): Anthropic {
-    if (!this.client) {
-      this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+    const key = getStoredKey('anthropic') ?? process.env.ANTHROPIC_API_KEY ?? ''
+    if (!this.client || this.clientKey !== key) {
+      this.client    = new Anthropic({ apiKey: key })
+      this.clientKey = key
     }
     return this.client
   }

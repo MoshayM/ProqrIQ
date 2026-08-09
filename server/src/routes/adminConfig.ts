@@ -3,8 +3,8 @@ import { spawn } from 'child_process'
 import { existsSync } from 'fs'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { requirePlan } from '../middleware/plan'
-import { db, auditLog, aiUsageLog, aiRouteOverrides, users } from '../db/index'
-import { desc, sql, gte } from 'drizzle-orm'
+import { db, auditLog, aiUsageLog, aiRouteOverrides, users, llmApiKeys, systemSettings } from '../db/index'
+import { desc, sql, gte, eq } from 'drizzle-orm'
 import { getAiConfig, patchAiConfig, resetAiConfig } from '../services/aiConfig'
 import {
   getModelForTask,
@@ -13,6 +13,7 @@ import {
 } from '../services/ai/aiRouter'
 import { activeProviders } from '../services/ai/providers'
 import { OllamaProvider } from '../services/ai/providers/ollama'
+import { invalidateKeyCache } from '../services/ai/keyStore'
 import type { AITask } from '../services/ai/aiRouter'
 
 // Locate the ollama executable (works on Windows and Unix)
@@ -321,6 +322,166 @@ router.delete('/routes/:task', async (req, res) => {
       entity_type: 'ai_route', details: JSON.stringify({ task }),
     })
 
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// ─── LLM API Key management ───────────────────────────────────────────────────
+
+const MASKED_PROVIDERS = ['anthropic', 'openai', 'google'] as const
+
+function maskKey(key: string): string {
+  if (key.length <= 12) return '***'
+  return key.slice(0, 7) + '...' + key.slice(-4)
+}
+
+// GET /admin/llm-keys — list providers with masked key + status
+router.get('/llm-keys', async (_req, res) => {
+  try {
+    const rows = await db.select().from(llmApiKeys)
+    const data = rows
+      .filter(r => MASKED_PROVIDERS.includes(r.provider as (typeof MASKED_PROVIDERS)[number]))
+      .map(r => ({
+        provider:    r.provider,
+        key_preview: maskKey(r.api_key),
+        model:       r.model,
+        enabled:     r.enabled,
+      }))
+    res.json({ success: true, data })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// POST /admin/llm-keys/:provider — save or update key
+router.post('/llm-keys/:provider', async (req, res) => {
+  try {
+    const { provider } = req.params
+    if (!MASKED_PROVIDERS.includes(provider as (typeof MASKED_PROVIDERS)[number])) {
+      res.status(400).json({ success: false, error: 'Unknown provider' }); return
+    }
+    const { api_key, model } = req.body as { api_key: string; model?: string }
+    if (!api_key?.trim()) { res.status(400).json({ success: false, error: 'api_key is required' }); return }
+
+    const now = new Date().toISOString()
+    await db.insert(llmApiKeys)
+      .values({ provider, api_key: api_key.trim(), model: model ?? null, enabled: true, created_at: now, updated_at: now })
+      .onConflictDoUpdate({ target: llmApiKeys.provider, set: { api_key: api_key.trim(), model: model ?? null, enabled: true, updated_at: now } })
+
+    invalidateKeyCache(provider)
+
+    const userId = (req as unknown as { user: { id: string } }).user.id
+    await db.insert(auditLog).values({
+      user_id: userId, action: 'llm_key_saved',
+      entity_type: 'llm_api_keys', details: JSON.stringify({ provider, model }),
+    })
+
+    res.json({ success: true, data: { provider, key_preview: maskKey(api_key.trim()), model, enabled: true } })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// DELETE /admin/llm-keys/:provider — remove key
+router.delete('/llm-keys/:provider', async (req, res) => {
+  try {
+    const { provider } = req.params
+    await db.delete(llmApiKeys).where(eq(llmApiKeys.provider, provider))
+    invalidateKeyCache(provider)
+
+    const userId = (req as unknown as { user: { id: string } }).user.id
+    await db.insert(auditLog).values({
+      user_id: userId, action: 'llm_key_removed',
+      entity_type: 'llm_api_keys', details: JSON.stringify({ provider }),
+    })
+
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// PATCH /admin/llm-keys/:provider/enabled — enable/disable
+router.patch('/llm-keys/:provider/enabled', async (req, res) => {
+  try {
+    const { provider } = req.params
+    const { enabled } = req.body as { enabled: boolean }
+    const now = new Date().toISOString()
+    await db.update(llmApiKeys).set({ enabled, updated_at: now }).where(eq(llmApiKeys.provider, provider))
+    invalidateKeyCache(provider)
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// POST /admin/llm-keys/:provider/test — test connection with optional one-off key
+router.post('/llm-keys/:provider/test', async (req, res) => {
+  const { provider } = req.params
+  const { api_key: bodyKey } = req.body as { api_key?: string }
+  const start = Date.now()
+
+  try {
+    // Use supplied key or fall back to stored/env key
+    const keyToTest = bodyKey?.trim()
+      || (await db.select().from(llmApiKeys).where(eq(llmApiKeys.provider, provider)).then(r => r[0]?.api_key))
+      || (provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY
+        : provider === 'openai'    ? process.env.OPENAI_API_KEY
+        : provider === 'google'    ? process.env.GEMINI_API_KEY
+        : undefined)
+
+    if (!keyToTest) {
+      res.json({ success: true, data: { ok: false, error: 'No key configured' } }); return
+    }
+
+    const testPrompt = { systemPrompt: 'You are a test assistant. Output ONLY valid JSON. No markdown.', userPrompt: 'Reply with: {"ok":true}', maxTokens: 32 }
+
+    if (provider === 'anthropic') {
+      const { default: Anthropic } = await import('@anthropic-ai/sdk')
+      const client = new Anthropic({ apiKey: keyToTest })
+      await client.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 32, system: testPrompt.systemPrompt, messages: [{ role: 'user', content: testPrompt.userPrompt }] })
+    } else if (provider === 'openai') {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      let OpenAI = require('openai'); if (OpenAI.default) OpenAI = OpenAI.default
+      const client = new OpenAI({ apiKey: keyToTest })
+      await client.chat.completions.create({ model: 'gpt-4o-mini', max_tokens: 32, messages: [{ role: 'system', content: testPrompt.systemPrompt }, { role: 'user', content: testPrompt.userPrompt }] })
+    } else if (provider === 'google') {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mod = require('@google/generative-ai')
+      const GoogleGenerativeAI = mod.GoogleGenerativeAI ?? mod.default?.GoogleGenerativeAI
+      const genAI = new GoogleGenerativeAI(keyToTest)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+      await model.generateContent({ contents: [{ role: 'user', parts: [{ text: `${testPrompt.systemPrompt}\n${testPrompt.userPrompt}` }] }] })
+    } else {
+      res.status(400).json({ success: false, error: 'Unknown provider' }); return
+    }
+
+    res.json({ success: true, data: { ok: true, elapsed_ms: Date.now() - start } })
+  } catch (err) {
+    res.json({ success: true, data: { ok: false, error: (err as Error).message, elapsed_ms: Date.now() - start } })
+  }
+})
+
+// ─── Preferred provider (system-wide setting) ─────────────────────────────────
+
+router.get('/llm-preference', async (_req, res) => {
+  try {
+    const rows = await db.select().from(systemSettings).where(eq(systemSettings.key, 'preferred_ai_provider'))
+    res.json({ success: true, data: { preferred_provider: rows[0]?.value ?? 'auto' } })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+router.post('/llm-preference', async (req, res) => {
+  try {
+    const { preferred_provider } = req.body as { preferred_provider: string }
+    const now = new Date().toISOString()
+    await db.insert(systemSettings)
+      .values({ key: 'preferred_ai_provider', value: preferred_provider, updated_at: now })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value: preferred_provider, updated_at: now } })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })

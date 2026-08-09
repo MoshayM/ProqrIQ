@@ -129,6 +129,13 @@ export const api = {
     getOllamaModels: ()                           => client.get('/admin/ollama/models').then(d),
     testOllama:      (model?: string)             => client.post('/admin/ollama/test', { model }).then(d),
     ollamaPullBase:  ()                           => (client.defaults.baseURL ?? '/api'),
+    getLlmKeys:      ()                           => client.get('/admin/llm-keys').then(d),
+    saveLlmKey:      (provider: string, data: { api_key: string; model?: string }) => client.post(`/admin/llm-keys/${provider}`, data).then(d),
+    removeLlmKey:    (provider: string)           => client.delete(`/admin/llm-keys/${provider}`).then(d),
+    toggleLlmKey:    (provider: string, enabled: boolean) => client.patch(`/admin/llm-keys/${provider}/enabled`, { enabled }).then(d),
+    testLlmKey:      (provider: string, api_key?: string) => client.post(`/admin/llm-keys/${provider}/test`, { api_key }).then(d),
+    getLlmPreference:()                           => client.get('/admin/llm-preference').then(d),
+    setLlmPreference:(preferred_provider: string) => client.post('/admin/llm-preference', { preferred_provider }).then(d),
   },
   passkey: {
     authOptions:     (email?: string) => client.post('/auth/passkey/auth/options', { email }).then(d),

@@ -1,15 +1,17 @@
 import type { AIProvider, AIRequest, AIResponse } from './base'
+import { getStoredKey } from '../keyStore'
 
 export class GeminiProvider implements AIProvider {
   id          = 'google'
   displayName = 'Google (Gemini)'
 
   isAvailable(): boolean {
-    return !!process.env.GEMINI_API_KEY
+    return !!(getStoredKey('google') ?? process.env.GEMINI_API_KEY)
   }
 
   async complete(req: AIRequest): Promise<AIResponse> {
-    if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set')
+    const apiKey = getStoredKey('google') ?? process.env.GEMINI_API_KEY
+    if (!apiKey) throw new Error('GEMINI_API_KEY not set')
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let GoogleGenerativeAI: any
@@ -22,7 +24,7 @@ export class GeminiProvider implements AIProvider {
       throw new Error("@google/generative-ai not installed — run: npm install @google/generative-ai --workspace=server")
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({ model: req.model })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

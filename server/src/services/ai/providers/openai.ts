@@ -1,15 +1,17 @@
 import type { AIProvider, AIRequest, AIResponse } from './base'
+import { getStoredKey } from '../keyStore'
 
 export class OpenAIProvider implements AIProvider {
   id          = 'openai'
   displayName = 'OpenAI (GPT)'
 
   isAvailable(): boolean {
-    return !!process.env.OPENAI_API_KEY
+    return !!(getStoredKey('openai') ?? process.env.OPENAI_API_KEY)
   }
 
   async complete(req: AIRequest): Promise<AIResponse> {
-    if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set')
+    const apiKey = getStoredKey('openai') ?? process.env.OPENAI_API_KEY
+    if (!apiKey) throw new Error('OPENAI_API_KEY not set')
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let OpenAI: any
@@ -22,7 +24,7 @@ export class OpenAIProvider implements AIProvider {
       throw new Error("openai package not installed — run: npm install openai --workspace=server")
     }
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const client = new OpenAI({ apiKey })
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const messages: any[] = [{ role: 'system', content: req.systemPrompt }]
