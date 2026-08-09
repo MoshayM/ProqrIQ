@@ -16,6 +16,8 @@ function PhoneShell({ width, height, children, scale = 1 }: { width: number; hei
   const radius = 44
   const outer_w = width + bezelH * 2
   const outer_h = height + bezelV * 2
+  // Unique mask id so multiple shells on the same page don't conflict
+  const maskId = `phone-screen-mask-${width}-${height}`
 
   return (
     <div
@@ -31,33 +33,7 @@ function PhoneShell({ width, height, children, scale = 1 }: { width: number; hei
         style={{ width: outer_w, height: outer_h, transformOrigin: 'top center' }}
         className="relative"
       >
-        {/* Phone body */}
-        <svg
-          width={outer_w}
-          height={outer_h}
-          viewBox={`0 0 ${outer_w} ${outer_h}`}
-          className="absolute inset-0 pointer-events-none"
-          style={{ zIndex: 2 }}
-        >
-          {/* Outer shell */}
-          <rect x="0" y="0" width={outer_w} height={outer_h} rx={radius} ry={radius}
-            fill="#1e2d4e" />
-          {/* Inner screen cutout */}
-          <rect x={bezelH} y={bezelV} width={width} height={height} rx="4" ry="4"
-            fill="white" />
-          {/* Dynamic island */}
-          <rect x={outer_w / 2 - 40} y="8" width="80" height="12" rx="6" ry="6"
-            fill="#0a1120" />
-          {/* Home indicator */}
-          <rect x={outer_w / 2 - 50} y={outer_h - 10} width="100" height="4" rx="2" ry="2"
-            fill="white" opacity="0.3" />
-          {/* Side buttons */}
-          <rect x="-3" y={outer_h * 0.3} width="3" height="32" rx="2" fill="#162040" />
-          <rect x="-3" y={outer_h * 0.3 + 44} width="3" height="32" rx="2" fill="#162040" />
-          <rect x={outer_w} y={outer_h * 0.38} width="3" height="52" rx="2" fill="#162040" />
-        </svg>
-
-        {/* Content iframe area */}
+        {/* iframe area — rendered first so SVG frame paints on top */}
         <div
           style={{
             position: 'absolute',
@@ -72,6 +48,38 @@ function PhoneShell({ width, height, children, scale = 1 }: { width: number; hei
         >
           {children}
         </div>
+
+        {/* Phone frame SVG — sits on top, but the screen area is masked out
+            so the iframe beneath shows through. */}
+        <svg
+          width={outer_w}
+          height={outer_h}
+          viewBox={`0 0 ${outer_w} ${outer_h}`}
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 2 }}
+        >
+          <defs>
+            {/* White = visible, black = cut out (transparent) */}
+            <mask id={maskId}>
+              <rect x="0" y="0" width={outer_w} height={outer_h} fill="white" />
+              <rect x={bezelH} y={bezelV} width={width} height={height} rx="4" ry="4" fill="black" />
+            </mask>
+          </defs>
+
+          {/* Phone body — dark bezel only, screen area is transparent via mask */}
+          <rect x="0" y="0" width={outer_w} height={outer_h} rx={radius} ry={radius}
+            fill="#1e2d4e" mask={`url(#${maskId})`} />
+          {/* Dynamic island */}
+          <rect x={outer_w / 2 - 40} y="8" width="80" height="12" rx="6" ry="6"
+            fill="#0a1120" />
+          {/* Home indicator */}
+          <rect x={outer_w / 2 - 50} y={outer_h - 10} width="100" height="4" rx="2" ry="2"
+            fill="white" opacity="0.3" />
+          {/* Side buttons */}
+          <rect x="-3" y={outer_h * 0.3} width="3" height="32" rx="2" fill="#162040" />
+          <rect x="-3" y={outer_h * 0.3 + 44} width="3" height="32" rx="2" fill="#162040" />
+          <rect x={outer_w} y={outer_h * 0.38} width="3" height="52" rx="2" fill="#162040" />
+        </svg>
       </div>
     </div>
   )
@@ -83,6 +91,7 @@ function TabletShell({ width, height, children, scale = 1 }: { width: number; he
   const outer_w = width + bezelH * 2
   const outer_h = height + bezelV * 2
   const radius = 28
+  const maskId = `tablet-screen-mask-${width}-${height}`
 
   return (
     <div
@@ -95,18 +104,27 @@ function TabletShell({ width, height, children, scale = 1 }: { width: number; he
       }}
     >
       <div style={{ width: outer_w, height: outer_h }} className="relative">
+        {/* iframe area */}
+        <div style={{ position: 'absolute', top: bezelV, left: bezelH, width, height, overflow: 'hidden', borderRadius: 4, zIndex: 1 }}>
+          {children}
+        </div>
+
+        {/* Tablet frame SVG with transparent screen cutout */}
         <svg width={outer_w} height={outer_h} viewBox={`0 0 ${outer_w} ${outer_h}`}
           className="absolute inset-0 pointer-events-none" style={{ zIndex: 2 }}>
-          <rect x="0" y="0" width={outer_w} height={outer_h} rx={radius} ry={radius} fill="#1e2d4e" />
-          <rect x={bezelH} y={bezelV} width={width} height={height} rx="4" ry="4" fill="white" />
+          <defs>
+            <mask id={maskId}>
+              <rect x="0" y="0" width={outer_w} height={outer_h} fill="white" />
+              <rect x={bezelH} y={bezelV} width={width} height={height} rx="4" ry="4" fill="black" />
+            </mask>
+          </defs>
+          <rect x="0" y="0" width={outer_w} height={outer_h} rx={radius} ry={radius}
+            fill="#1e2d4e" mask={`url(#${maskId})`} />
           {/* Home button */}
           <circle cx={outer_w / 2} cy={outer_h - 14} r="6" fill="none" stroke="white" strokeOpacity="0.3" strokeWidth="1.5" />
           {/* Front camera */}
           <circle cx={outer_w / 2} cy="14" r="3" fill="#0a1120" />
         </svg>
-        <div style={{ position: 'absolute', top: bezelV, left: bezelH, width, height, overflow: 'hidden', borderRadius: 4, zIndex: 1 }}>
-          {children}
-        </div>
       </div>
     </div>
   )
