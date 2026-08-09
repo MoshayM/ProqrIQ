@@ -35,17 +35,17 @@ test.describe('Sidebar Navigation', () => {
   });
 
   test('navigates to Knowledge Base (admin)', async ({ page }) => {
-    // /kb redirects to /account?tab=kb
+    // /kb redirects to /account?tab=kb — two h1s render (Account + KB Manager)
     await page.goto('/kb');
     await expect(page).toHaveURL(/\/account/);
-    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible({ timeout: 15000 });
   });
 
   test('navigates to Settings', async ({ page }) => {
     // /settings redirects to /account
     await page.goto('/settings');
     await expect(page).toHaveURL(/\/account/);
-    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible({ timeout: 15000 });
   });
 
   test('navigates back to Dashboard', async ({ page }) => {
