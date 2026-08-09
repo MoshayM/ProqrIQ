@@ -620,6 +620,21 @@ router.post('/:id/cost-children', requireRole(['engineer', 'admin', 'developer']
     const now = new Date().toISOString()
     const batchId = crypto.randomUUID()
 
+    // Inherit production parameters from the parent assembly so children are
+    // costed under the same country/currency/volume assumptions.
+    const sharedParams = {
+      supplier_country:        assembly.supplier_country        ?? 'DE',
+      supplier_currency:       assembly.supplier_currency       ?? 'EUR',
+      annual_volume:           assembly.annual_volume           ?? 5000,
+      lot_size:                assembly.lot_size                ?? 500,
+      lots_per_year:           assembly.lots_per_year           ?? 10,
+      shifts_per_day:          assembly.shifts_per_day          ?? 2,
+      annual_production_hours: assembly.annual_production_hours ?? 3500,
+      procurement_type:        assembly.procurement_type        ?? 'in_house',
+      exchange_rate:           assembly.exchange_rate           ?? 1.0,
+      exchange_rate_source:    assembly.exchange_rate_source    ?? 'manual',
+    }
+
     await db.insert(costingBatches).values({
       id: batchId,
       name: `Assembly Children – ${req.params.id}`,
@@ -630,6 +645,7 @@ router.post('/:id/cost-children', requireRole(['engineer', 'admin', 'developer']
       completed_items: 0,
       failed_items: 0,
       clarification_items: 0,
+      shared_params_json: JSON.stringify(sharedParams),
       created_by: userId,
       created_at: now,
     })

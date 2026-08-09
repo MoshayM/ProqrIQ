@@ -53,16 +53,16 @@ function ollama(model: string): RouteResult {
 }
 
 const DEFAULTS: Record<AITask, RouteResult> = {
-  costing:            { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  costing:            { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   bulk_costing:       ollama(OLLAMA_MODEL),
-  cad_costing:        { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  cad_costing:        { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   kb_summary:         ollama(OLLAMA_FAST),
   supplier_suggest:   ollama(OLLAMA_FAST),
-  supplier_recommend: { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
-  negotiation:        { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  supplier_recommend: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+  negotiation:        { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   clarification:      ollama(OLLAMA_FAST),
   extraction:         ollama(OLLAMA_MODEL),
-  generic:            { provider: 'anthropic', model: 'claude-sonnet-4-20250514' },
+  generic:            { provider: 'anthropic', model: 'claude-sonnet-4-5' },
 }
 
 function parseRoute(raw: string): RouteResult {

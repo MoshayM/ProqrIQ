@@ -201,18 +201,25 @@ export async function runBatch(batchId: string): Promise<void> {
 
     const tasks = items.map((item) =>
       limit(async () => {
-        // Create a draft quotation row so we have an ID for cost sub-rows
-        const quotationInsert = await db
-          .insert(quotations)
-          .values({
-            part_id: item.part_id ?? null,
-            batch_id: batchId,
-            quote_type: 'individual',
-            status: 'draft',
-            margin_applied: false,
-          })
-          .returning({ id: quotations.id })
-        const quotationId = quotationInsert[0].id
+        // For assembly_children each batch item already carries the child quotation
+        // id — reuse it so the rollup can see the persisted cost result.
+        // For regular bulk there is no prior quotation; create a fresh draft.
+        let quotationId: string
+        if ((item as any).quotation_id) {
+          quotationId = (item as any).quotation_id
+        } else {
+          const quotationInsert = await db
+            .insert(quotations)
+            .values({
+              part_id: item.part_id ?? null,
+              batch_id: batchId,
+              quote_type: 'individual',
+              status: 'draft',
+              margin_applied: false,
+            })
+            .returning({ id: quotations.id })
+          quotationId = quotationInsert[0].id
+        }
 
         try {
           // ── Phase 1: analyse drawing ─────────────────────────────────────────

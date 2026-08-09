@@ -168,6 +168,21 @@ const del    = (p)    => api('DELETE', p)
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
+// Poll a costing batch until it reaches a terminal status (max 3 minutes).
+async function pollBatch(batchId, maxMs = 180000) {
+  const INTERVAL = 4000
+  const start = Date.now()
+  while (Date.now() - start < maxMs) {
+    await sleep(INTERVAL)
+    const status = await get(`/bulk-batches/${batchId}`)
+    if (['completed', 'completed_with_errors', 'failed'].includes(status.status)) {
+      return status
+    }
+    log(`  batch ${batchId}: ${status.status} (${status.completed_items ?? 0}/${status.total_items ?? '?'})`)
+  }
+  throw new Error(`Batch ${batchId} timed out after ${maxMs / 1000}s`)
+}
+
 // ─── 1. Authenticate ──────────────────────────────────────────────────────────
 
 async function authenticate() {
@@ -606,18 +621,18 @@ async function scenario8_Assembly1(s1, s4) {
       await post(`/assemblies/${asmQuote.id}/components`, {
         variant:                 'link_existing',
         component_quotation_id:  s1.quoteId,
-        qty:                     2,
+        quantity_per_assembly:   2,
         notes:                   'Left and right mounting brackets',
       })
       ok('Linked existing bracket component (qty 2)')
     } else {
       await post(`/assemblies/${asmQuote.id}/components`, {
-        variant:        'new_part',
-        part_name:      'SS304 Mounting Bracket',
-        commodity_type: 'sheet_metal',
-        material_grade: 'Steel DC01',
-        qty:            2,
-        notes:          'Left and right mounting brackets',
+        variant:               'new_part',
+        part_name:             'SS304 Mounting Bracket',
+        commodity_type:        'sheet_metal',
+        material_grade:        'Steel DC01',
+        quantity_per_assembly: 2,
+        notes:                 'Left and right mounting brackets',
       })
       ok('Added new bracket component (qty 2)')
     }
@@ -627,37 +642,52 @@ async function scenario8_Assembly1(s1, s4) {
       await post(`/assemblies/${asmQuote.id}/components`, {
         variant:                'link_existing',
         component_quotation_id: s4.quoteId,
-        qty:                    1,
+        quantity_per_assembly:  1,
         notes:                  'Main control PCB',
       })
       ok('Linked existing PCB component (qty 1)')
     } else {
       await post(`/assemblies/${asmQuote.id}/components`, {
-        variant:        'new_part',
-        part_name:      'Main Control PCB',
-        commodity_type: 'pcb_rigid',
-        material_grade: 'FR4',
-        qty:            1,
+        variant:               'new_part',
+        part_name:             'Main Control PCB',
+        commodity_type:        'pcb_rigid',
+        material_grade:        'FR4',
+        quantity_per_assembly: 1,
       })
       ok('Added new PCB component (qty 1)')
     }
 
     // Add purchased standard: M3 bolts
     await post(`/assemblies/${asmQuote.id}/components`, {
-      variant:             'purchased_standard',
-      part_name:           'M3×8 Stainless Steel Hex Bolt DIN 912',
+      variant:                 'purchased_standard',
+      part_name:               'M3×8 Stainless Steel Hex Bolt DIN 912',
       purchased_unit_cost_eur: 0.06,
-      qty:                 4,
-      notes:               'Assembly fasteners',
+      quantity_per_assembly:   4,
+      notes:                   'Assembly fasteners',
     })
     ok('Added purchased standard fasteners (qty 4)')
 
-    // Cost children (this runs costOnePart for each non-purchased, non-linked child)
+    // Cost children — fire-and-forget on server; poll until batch completes
+    let costChildrenBatchId = null
     try {
       const costResult = await post(`/assemblies/${asmQuote.id}/cost-children`, {})
-      ok(`Cost-children complete: ${costResult.completed ?? '?'} items processed`)
+      costChildrenBatchId = costResult.id
+      ok(`Cost-children batch started: ${costChildrenBatchId}`)
     } catch (err) {
-      warn(`cost-children warning: ${err.message}`)
+      if (err?.response?.error_code === 'NO_UNCOSTED_CHILDREN') {
+        ok('All children already costed — skipping batch')
+      } else {
+        warn(`cost-children: ${err.message}`)
+      }
+    }
+
+    if (costChildrenBatchId) {
+      try {
+        const batchStatus = await pollBatch(costChildrenBatchId)
+        ok(`Children costed: ${batchStatus.completed_items ?? 0} done, ${batchStatus.failed_items ?? 0} failed`)
+      } catch (pollErr) {
+        warn(`Batch polling timeout: ${pollErr.message}`)
+      }
     }
 
     // Rollup
@@ -731,12 +761,27 @@ async function scenario9_Assembly2() {
     })
     ok('Added purchased retaining ring')
 
-    // Cost children
+    // Cost children — fire-and-forget on server; poll until batch completes
+    let s9BatchId = null
     try {
-      await post(`/assemblies/${asmQuote.id}/cost-children`, {})
-      ok('Cost-children triggered')
+      const costResult = await post(`/assemblies/${asmQuote.id}/cost-children`, {})
+      s9BatchId = costResult.id
+      ok(`Cost-children batch started: ${s9BatchId}`)
     } catch (err) {
-      warn(`cost-children: ${err.message}`)
+      if (err?.response?.error_code === 'NO_UNCOSTED_CHILDREN') {
+        ok('All children already costed — skipping batch')
+      } else {
+        warn(`cost-children: ${err.message}`)
+      }
+    }
+
+    if (s9BatchId) {
+      try {
+        const batchStatus = await pollBatch(s9BatchId)
+        ok(`Children costed: ${batchStatus.completed_items ?? 0} done, ${batchStatus.failed_items ?? 0} failed`)
+      } catch (pollErr) {
+        warn(`Batch polling timeout: ${pollErr.message}`)
+      }
     }
 
     // Rollup
