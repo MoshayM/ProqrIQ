@@ -11,6 +11,7 @@ import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer } from '
 import { api } from '../../lib/api'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { useSubscription } from '../../hooks/useSubscription'
+import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Skeleton } from '../../components/ui/skeleton'
@@ -771,9 +772,12 @@ function CompareDrawer({ suppliers, onClose }: { suppliers: Supplier[]; onClose:
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
+const SUPPLIER_BYPASS_ROLES = ['admin', 'ceo', 'developer', 'owner']
+
 export default function SupplierMap() {
   usePageTitle('Supplier Discovery')
   const { canUse, isLoading: subLoading } = useSubscription()
+  const { user } = useAuth()
   const qc = useQueryClient()
 
   // All hooks must be declared before any conditional return to avoid
@@ -847,8 +851,9 @@ export default function SupplierMap() {
     return list
   }, [suppliers, searchText, filterMinTier, filterCapability])
 
-  // Guard: only show upgrade gate after subscription has loaded
-  if (!subLoading && !canUse('supplier_search')) {
+  // Guard: bypass for admin/ceo/developer/owner regardless of plan or plan preview
+  const isPrivilegedRole = user && SUPPLIER_BYPASS_ROLES.includes(user.role)
+  if (!subLoading && !canUse('supplier_search') && !isPrivilegedRole) {
     return (
       <div className="page-content space-y-6">
         <div>

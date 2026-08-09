@@ -64,13 +64,15 @@ function AccessDenied() {
 
 function DevicePreviewInner() {
   usePageTitle('Device Preview')
-  const { hasRole, setPreviewRole } = useAuth()
+  const { user, setPreviewRole } = useAuth()
   const [viewport, setViewport] = useState<Viewport>(VIEWPORTS[0])
   const [selectedRole, setSelectedRole] = useState(ROLES[0])
   const [selectedPage, setSelectedPage] = useState(PREVIEW_PAGES[0])
   const [iframeKey, setIframeKey] = useState(0)
 
-  if (!hasRole(ADMIN_ROLES)) return <AccessDenied />
+  // Use real user role — not the effective/preview role — so role simulation
+  // inside this tool never locks the admin out of the tool itself.
+  if (!user || !ADMIN_ROLES.includes(user.role)) return <AccessDenied />
 
   function handleRoleChange(role: typeof ROLES[number]) {
     setSelectedRole(role)
