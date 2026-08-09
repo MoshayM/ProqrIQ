@@ -7,6 +7,26 @@ import { BULK_CONCURRENCY } from '../config'
 import type { CostInput } from '../../../shared/types/ai'
 import type { SharedBatchParams } from '../../../shared/types/batch'
 
+// ─── Inline concurrency limiter (replaces p-limit, which is ESM-only) ───────
+
+function makeLimiter(concurrency: number) {
+  let active = 0
+  const queue: Array<() => void> = []
+  return function limit<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const run = () => {
+        active++
+        fn().then(resolve, reject).finally(() => {
+          active--
+          if (queue.length > 0) queue.shift()!()
+        })
+      }
+      if (active < concurrency) run()
+      else queue.push(run)
+    })
+  }
+}
+
 // ─── In-memory guard (prevents double-run within same process) ────────────────
 
 const running = new Set<string>()
@@ -195,9 +215,8 @@ export async function runBatch(batchId: string): Promise<void> {
           exchange_rate_source: 'default',
         }
 
-    // p-limit — ESM-only package, MUST use dynamic import
-    const { default: pLimit } = await import('p-limit')
-    const limit = pLimit(BULK_CONCURRENCY)
+    // Inline concurrency limiter — replaces p-limit (ESM-only, breaks CJS builds)
+    const limit = makeLimiter(BULK_CONCURRENCY)
 
     const tasks = items.map((item) =>
       limit(async () => {

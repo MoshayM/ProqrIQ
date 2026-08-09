@@ -1,8 +1,35 @@
 /**
  * Robustly extract and parse JSON from an AI response.
  * Handles: bare JSON, markdown fences, preamble text before JSON,
- * postamble text after JSON, and nested code fences inside preamble.
+ * postamble text after JSON, nested code fences, and literal newlines
+ * inside string values (common with instruction-following models).
  */
+
+// Replace literal control characters inside JSON string values with their
+// escape sequences so JSON.parse accepts the output.
+function sanitizeJSONStrings(json: string): string {
+  let result = ''
+  let inStr = false
+  let esc   = false
+  for (const ch of json) {
+    if (esc)              { result += ch; esc = false; continue }
+    if (ch === '\\' && inStr) { result += ch; esc = true;  continue }
+    if (ch === '"')       { inStr = !inStr; result += ch; continue }
+    if (inStr) {
+      if (ch === '\n') { result += '\\n'; continue }
+      if (ch === '\r') { result += '\\r'; continue }
+      if (ch === '\t') { result += '\\t'; continue }
+    }
+    result += ch
+  }
+  return result
+}
+
+function tryParse<T>(text: string): T | null {
+  try { return JSON.parse(text) as T } catch { /* fall through */ }
+  try { return JSON.parse(sanitizeJSONStrings(text)) as T } catch { /* fall through */ }
+  return null
+}
 
 function extractFirstObject(text: string): string | null {
   let depth = 0
@@ -35,26 +62,30 @@ export function parseAIJSON<T = unknown>(raw: string): T {
   let text = raw.trim()
 
   // 1. Strip markdown code fence if the whole response is wrapped
-  const fenceMatch = text.match(/^```(?:json)?\s*\n([\s\S]+?)\n?```\s*$/)
+  const fenceMatch = text.match(/^```(?:json)?\s*\n?([\s\S]+?)\n?```\s*$/)
   if (fenceMatch) text = fenceMatch[1].trim()
 
-  // 2. Try direct parse (happy path — well-behaved model)
-  try { return JSON.parse(text) as T } catch { /* fall through */ }
+  // 2. Try direct parse (happy path) + sanitized variant
+  const direct = tryParse<T>(text)
+  if (direct !== null) return direct
 
   // 3. Extract first balanced JSON object (handles preamble / postamble)
   const extracted = extractFirstObject(text)
   if (extracted) {
-    try { return JSON.parse(extracted) as T } catch { /* fall through */ }
+    const fromExtracted = tryParse<T>(extracted)
+    if (fromExtracted !== null) return fromExtracted
   }
 
-  // 4. Last resort: find any ```json ... ``` block and extract
-  const innerFence = text.match(/```(?:json)?\s*\n([\s\S]+?)\n?```/)
+  // 4. Last resort: find any ```json ... ``` block anywhere in the text
+  const innerFence = text.match(/```(?:json)?\s*\n?([\s\S]+?)\n?```/)
   if (innerFence) {
     const inner = innerFence[1].trim()
-    try { return JSON.parse(inner) as T } catch { /* fall through */ }
+    const fromInner = tryParse<T>(inner)
+    if (fromInner !== null) return fromInner
     const obj = extractFirstObject(inner)
     if (obj) {
-      try { return JSON.parse(obj) as T } catch { /* fall through */ }
+      const fromObj = tryParse<T>(obj)
+      if (fromObj !== null) return fromObj
     }
   }
 
