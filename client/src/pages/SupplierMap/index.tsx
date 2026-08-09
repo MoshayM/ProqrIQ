@@ -773,23 +773,11 @@ function CompareDrawer({ suppliers, onClose }: { suppliers: Supplier[]; onClose:
 
 export default function SupplierMap() {
   usePageTitle('Supplier Discovery')
-  const { canUse } = useSubscription()
+  const { canUse, isLoading: subLoading } = useSubscription()
   const qc = useQueryClient()
 
-  if (!canUse('supplier_search')) {
-    return (
-      <div className="page-content space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-[#0f1729]">Supplier Discovery</h1>
-          <p className="text-sm text-[#9aa3b2] mt-1">Find and evaluate global manufacturing suppliers</p>
-        </div>
-        <UpgradeGate requiredPlan="pro" feature="Supplier Discovery">
-          <span />
-        </UpgradeGate>
-      </div>
-    )
-  }
-
+  // All hooks must be declared before any conditional return to avoid
+  // "rendered more hooks than previous render" when subscription loads.
   const [selectedCountries, setSelectedCountries] = useState<string[]>(['DE', 'CN', 'PL'])
   const [commodityType, setCommodityType] = useState('cnc_machining')
   const [partDescription, setPartDescription] = useState('')
@@ -858,6 +846,21 @@ export default function SupplierMap() {
     }
     return list
   }, [suppliers, searchText, filterMinTier, filterCapability])
+
+  // Guard: only show upgrade gate after subscription has loaded
+  if (!subLoading && !canUse('supplier_search')) {
+    return (
+      <div className="page-content space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-[#0f1729]">Supplier Discovery</h1>
+          <p className="text-sm text-[#9aa3b2] mt-1">Find and evaluate global manufacturing suppliers</p>
+        </div>
+        <UpgradeGate requiredPlan="pro" feature="Supplier Discovery">
+          <span />
+        </UpgradeGate>
+      </div>
+    )
+  }
 
   const mapPins = filteredSuppliers.map(s => ({
     code: s.country_code,
