@@ -89,5 +89,18 @@ export function parseAIJSON<T = unknown>(raw: string): T {
     }
   }
 
+  // 5. Try stripping any leading fence prefix (incomplete fence — no closing ```)
+  const orphanFence = text.match(/^```(?:json)?\s*\n?([\s\S]+)$/)
+  if (orphanFence) {
+    const inner = orphanFence[1].trim()
+    const direct5 = tryParse<T>(inner)
+    if (direct5 !== null) return direct5
+    const obj5 = extractFirstObject(inner)
+    if (obj5) {
+      const fromObj5 = tryParse<T>(obj5)
+      if (fromObj5 !== null) return fromObj5
+    }
+  }
+
   throw new Error(`AI_INVALID_JSON: Could not parse response: ${text.slice(0, 300)}`)
 }
