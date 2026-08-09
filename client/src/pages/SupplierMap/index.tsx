@@ -23,6 +23,29 @@ import MapView from './MapView'
 
 import 'leaflet/dist/leaflet.css'
 
+// Local error boundary: if react-leaflet crashes (known Vite prod compat issue)
+// the map degrades to a plain message and the rest of the page stays up.
+class MapErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { failed: false }
+  }
+  static getDerivedStateFromError() { return { failed: true } }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="h-full flex items-center justify-center bg-surface-2 rounded-xl">
+          <p className="text-xs text-[#9aa3b2]">Map unavailable — use the supplier list below.</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -999,13 +1022,15 @@ export default function SupplierMap() {
           {/* Map */}
           <Card className="overflow-hidden flex-shrink-0">
             <div className="h-56 relative">
-              <MapView
-                pins={mapPins}
-                onPinClick={(code) => {
-                  const match = filteredSuppliers.find(s => s.country_code === code)
-                  if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
-                }}
-              />
+              <MapErrorBoundary>
+                <MapView
+                  pins={mapPins}
+                  onPinClick={(code) => {
+                    const match = filteredSuppliers.find(s => s.country_code === code)
+                    if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
+                  }}
+                />
+              </MapErrorBoundary>
             </div>
           </Card>
 
