@@ -74,7 +74,8 @@ router.get('/subscription', requireAuth, async (req: Request, res: Response) => 
       .limit(1)
 
     const sub = subRows[0]
-    const plan = sub?.plan ?? 'free'
+    // Admin role always gets organization-level access on the client
+    const plan = req.user!.role === 'admin' ? 'organization' : (sub?.plan ?? 'free')
     const status = sub?.status ?? 'active'
 
     const usage = await getOrCreateUsage(userId)

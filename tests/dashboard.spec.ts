@@ -3,11 +3,12 @@ import { test, expect } from '@playwright/test';
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.locator('h1').filter({ hasText: 'Dashboard' })).toBeVisible({ timeout: 15000 });
+    // h1 shows personalised greeting e.g. "Good morning, Admin"
+    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
   });
 
   test('shows page heading', async ({ page }) => {
-    await expect(page.locator('h1').filter({ hasText: 'Dashboard' })).toBeVisible();
+    await expect(page.locator('h1')).toBeVisible();
   });
 
   test('shows current date beside heading', async ({ page }) => {

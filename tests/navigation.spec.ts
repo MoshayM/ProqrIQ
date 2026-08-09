@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Sidebar Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.locator('h1').filter({ hasText: 'Dashboard' })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
   });
 
   test('sidebar is visible', async ({ page }) => {
@@ -49,6 +49,6 @@ test.describe('Sidebar Navigation', () => {
     await expect(page).toHaveURL(/\/bulk/);
     await page.locator('a[href="/dashboard"]').click();
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.locator('h1').filter({ hasText: 'Dashboard' })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
   });
 });
