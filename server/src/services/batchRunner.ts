@@ -108,8 +108,9 @@ function buildCostInput(
     material_grade: string | null
     dimensions_json: string | null
     net_weight_g: number | null
-    surface_finish: string | null
-    tolerance_class: string | null
+    surface_finish:        string | null
+    tolerance_class:       string | null
+    manufacturing_process: string | null
   } | null,
 ): CostInput {
   // Merge shared params with per-item overrides
@@ -130,20 +131,22 @@ function buildCostInput(
           ? JSON.parse(partData.dimensions_json)
           : drawingAnalysis?.dimensions_json ?? null,
         net_weight_g: partData.net_weight_g ?? drawingAnalysis?.net_weight_g ?? null,
-        surface_finish: partData.surface_finish ?? drawingAnalysis?.surface_finish ?? null,
-        tolerance_class: partData.tolerance_class ?? drawingAnalysis?.tolerance_class ?? null,
+        surface_finish:        partData.surface_finish ?? drawingAnalysis?.surface_finish ?? null,
+        tolerance_class:       partData.tolerance_class ?? drawingAnalysis?.tolerance_class ?? null,
+        manufacturing_process: partData.manufacturing_process ?? null,
       }
     : {
         id: item.part_id ?? item.id,
         part_name: item.part_name,
         part_number: null,
         drawing_number: null,
-        commodity_type: drawingAnalysis?.commodity_type ?? null,
-        material_grade: drawingAnalysis?.material_grade ?? null,
-        dimensions_json: drawingAnalysis?.dimensions_json ?? null,
-        net_weight_g: drawingAnalysis?.net_weight_g ?? null,
-        surface_finish: drawingAnalysis?.surface_finish ?? null,
-        tolerance_class: drawingAnalysis?.tolerance_class ?? null,
+        commodity_type:        drawingAnalysis?.commodity_type ?? null,
+        material_grade:        drawingAnalysis?.material_grade ?? null,
+        dimensions_json:       drawingAnalysis?.dimensions_json ?? null,
+        net_weight_g:          drawingAnalysis?.net_weight_g ?? null,
+        surface_finish:        drawingAnalysis?.surface_finish ?? null,
+        tolerance_class:       drawingAnalysis?.tolerance_class ?? null,
+        manufacturing_process: null,
       }
 
   return {

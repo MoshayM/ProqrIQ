@@ -263,6 +263,7 @@ Dimensions: ${dimText}
 Net Weight: ${part.net_weight_g ?? 'unknown'} g
 Surface Finish: ${part.surface_finish ?? 'N/A'}
 Tolerance Class: ${part.tolerance_class ?? 'N/A'}
+Manufacturing Process: ${part.manufacturing_process ?? 'N/A'}
 ${drawingText}
 ${modifiedStepsText}
 

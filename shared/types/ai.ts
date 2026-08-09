@@ -119,8 +119,9 @@ export interface CostInputPart {
   material_grade: string | null;
   dimensions_json: DimensionsJson | null;
   net_weight_g: number | null;
-  surface_finish: string | null;
-  tolerance_class: string | null;
+  surface_finish:        string | null;
+  tolerance_class:       string | null;
+  manufacturing_process: string | null;
 }
 
 // ─── Production context passed into cost estimator ───────────────────────────

@@ -42,8 +42,9 @@ const estimateCostSchema = z.object({
     material_grade: z.string().nullable().optional(),
     dimensions_json: z.record(z.any()).nullable().optional(),
     net_weight_g: z.number().nullable().optional(),
-    surface_finish: z.string().nullable().optional(),
-    tolerance_class: z.string().nullable().optional(),
+    surface_finish:        z.string().nullable().optional(),
+    tolerance_class:       z.string().nullable().optional(),
+    manufacturing_process: z.string().nullable().optional(),
   }),
   production: z.object({
     supplier_country: z.string(),
