@@ -1,8 +1,10 @@
 import { Router } from 'express'
+import { spawn } from 'child_process'
+import { existsSync } from 'fs'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { requirePlan } from '../middleware/plan'
 import { db, auditLog, aiUsageLog, aiRouteOverrides, users } from '../db/index'
-import { desc, sql, gte, sum } from 'drizzle-orm'
+import { desc, sql, gte } from 'drizzle-orm'
 import { getAiConfig, patchAiConfig, resetAiConfig } from '../services/aiConfig'
 import {
   getModelForTask,
@@ -12,6 +14,23 @@ import {
 import { activeProviders } from '../services/ai/providers'
 import { OllamaProvider } from '../services/ai/providers/ollama'
 import type { AITask } from '../services/ai/aiRouter'
+
+// Locate the ollama executable (works on Windows and Unix)
+function findOllamaBin(): string {
+  const candidates = [
+    process.env.OLLAMA_BIN ?? '',
+    'ollama',
+    `${process.env.LOCALAPPDATA ?? ''}\\Programs\\Ollama\\ollama.exe`,
+    '/usr/local/bin/ollama',
+    '/usr/bin/ollama',
+  ]
+  for (const c of candidates) {
+    if (!c) continue
+    if (c === 'ollama') return c   // rely on PATH
+    if (existsSync(c)) return c
+  }
+  return 'ollama'
+}
 
 export const router = Router()
 
@@ -210,6 +229,83 @@ router.post('/ollama/test', async (req, res) => {
       error:   (err as Error).message,
       hint:    `Is Ollama running? Try: ollama serve   then: ollama pull ${testModel}`,
     })
+  }
+})
+
+// ─── POST /api/admin/ollama/pull — stream pull progress via SSE ───────────────
+// Body: { model: "qwen2.5:14b" }
+// Response: text/event-stream  data: { status, completed, total, percent }
+router.post('/ollama/pull', async (req, res) => {
+  const { model } = req.body as { model?: string }
+  if (!model) { res.status(400).json({ success: false, error: 'model is required' }); return }
+
+  const bin = findOllamaBin()
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+
+  const send = (data: Record<string, unknown>) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`)
+  }
+
+  send({ status: 'starting', model })
+
+  try {
+    const child = spawn(bin, ['pull', model], { stdio: ['ignore', 'pipe', 'pipe'] })
+
+    // Ollama outputs progress lines to stdout
+    child.stdout.on('data', (chunk: Buffer) => {
+      const text = chunk.toString()
+      // Parse lines like: "pulling abc123:  42% ▕████     ▏ 2.0 GB/4.7 GB"
+      for (const line of text.split('\n')) {
+        const clean = line.replace(/\x1b\[[^m]*m|\r/g, '').trim()
+        if (!clean) continue
+        const pctMatch = clean.match(/(\d+)%/)
+        const bytesMatch = clean.match(/([\d.]+\s*[KMGT]?B)\/([\d.]+\s*[KMGT]?B)/)
+        send({
+          status: 'downloading',
+          model,
+          message: clean,
+          percent: pctMatch ? parseInt(pctMatch[1]) : null,
+          progress: bytesMatch ? `${bytesMatch[1]} / ${bytesMatch[2]}` : null,
+        })
+      }
+    })
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      const msg = chunk.toString().replace(/\x1b\[[^m]*m|\r/g, '').trim()
+      if (msg) send({ status: 'info', model, message: msg })
+    })
+
+    child.on('close', async (code) => {
+      if (code === 0) {
+        send({ status: 'done', model, success: true })
+        await db.insert(auditLog).values({
+          user_id:     (req as unknown as { user: { id: string } }).user?.id,
+          action:      'ollama_model_pulled',
+          entity_type: 'ollama',
+          details:     JSON.stringify({ model }),
+        }).catch(() => {/* non-fatal */})
+      } else {
+        send({ status: 'error', model, error: `ollama pull exited with code ${code}` })
+      }
+      res.end()
+    })
+
+    child.on('error', (err) => {
+      send({ status: 'error', model, error: err.message, hint: 'Is Ollama installed? Get it from https://ollama.com' })
+      res.end()
+    })
+
+    // Clean up if client disconnects
+    req.on('close', () => { child.kill() })
+
+  } catch (err) {
+    send({ status: 'error', model, error: (err as Error).message })
+    res.end()
   }
 })
 

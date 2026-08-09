@@ -128,6 +128,7 @@ export const api = {
     deleteRoute:     (task: string)               => client.delete(`/admin/routes/${task}`).then(d),
     getOllamaModels: ()                           => client.get('/admin/ollama/models').then(d),
     testOllama:      (model?: string)             => client.post('/admin/ollama/test', { model }).then(d),
+    ollamaPullBase:  ()                           => (client.defaults.baseURL ?? '/api'),
   },
   passkey: {
     authOptions:     (email?: string) => client.post('/auth/passkey/auth/options', { email }).then(d),

@@ -2,6 +2,7 @@ import { db } from '../../db/index'
 import { eq, sql } from 'drizzle-orm'
 import { aiRouteOverrides, aiUsageLog, users } from '../../db/schema'
 import { getProvider, estimateCost } from './providers'
+import { toTogetherModel } from './providers/together'
 import type { AIRequest, AIResponse } from './providers'
 
 // ─── Task types ───────────────────────────────────────────────────────────────
@@ -181,20 +182,38 @@ export async function completeWithRouter(opts: {
     const provider = getProvider(route.provider)
     response = await provider.complete({ ...opts.request, model: route.model })
   } catch (primaryErr) {
-    // If a non-Anthropic provider (Ollama, OpenAI, Gemini) fails, fall back to Haiku
+    // Non-Anthropic failure: try Together AI cloud fallback for Ollama routes, then Haiku
     if (route.provider !== 'anthropic') {
       console.warn(
-        `[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}" — falling back to Haiku. Error: ${(primaryErr as Error).message}`,
+        `[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}". Error: ${(primaryErr as Error).message}`,
       )
-      try {
-        const fallback = getProvider(HAIKU_FALLBACK.provider)
-        response = await fallback.complete({ ...opts.request, model: HAIKU_FALLBACK.model })
-        usedRoute = HAIKU_FALLBACK
-      } catch (fallbackErr) {
-        throw new Error(
-          `AI Router: primary (${route.provider}) and fallback (anthropic/haiku) both failed. ` +
-          `Primary: ${(primaryErr as Error).message}. Fallback: ${(fallbackErr as Error).message}`,
-        )
+
+      // If route was Ollama and Together AI is configured, use it as intermediate fallback
+      const togetherKey = process.env.TOGETHER_API_KEY
+      if (route.provider === 'ollama' && togetherKey) {
+        try {
+          const together  = getProvider('together')
+          const toModel   = toTogetherModel(route.model)
+          console.warn(`[AI Router] Falling back to Together AI: ${toModel}`)
+          response  = await together.complete({ ...opts.request, model: toModel })
+          usedRoute = { provider: 'together', model: toModel }
+        } catch (togetherErr) {
+          console.warn(`[AI Router] Together AI also failed — falling back to Haiku. Error: ${(togetherErr as Error).message}`)
+          const fallback = getProvider(HAIKU_FALLBACK.provider)
+          response  = await fallback.complete({ ...opts.request, model: HAIKU_FALLBACK.model })
+          usedRoute = HAIKU_FALLBACK
+        }
+      } else {
+        try {
+          const fallback = getProvider(HAIKU_FALLBACK.provider)
+          response  = await fallback.complete({ ...opts.request, model: HAIKU_FALLBACK.model })
+          usedRoute = HAIKU_FALLBACK
+        } catch (fallbackErr) {
+          throw new Error(
+            `AI Router: primary (${route.provider}) and fallback (anthropic/haiku) both failed. ` +
+            `Primary: ${(primaryErr as Error).message}. Fallback: ${(fallbackErr as Error).message}`,
+          )
+        }
       }
     } else {
       throw primaryErr

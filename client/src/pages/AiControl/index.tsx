@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Brain, Sliders, BarChart3, RefreshCw, Save, RotateCcw, Zap,
   AlertTriangle, CheckCircle, TrendingUp, Clock, ChevronLeft,
-  Route, CircleDot, DollarSign, PlayCircle, XCircle,
+  Route, CircleDot, DollarSign, PlayCircle, XCircle, Download,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../../lib/api'
@@ -81,6 +81,7 @@ const PROVIDER_COLORS: Record<string, { dot: string; label: string; bg: string }
   openai:    { dot: '#22c55e', label: 'OpenAI',    bg: 'bg-green-50' },
   google:    { dot: '#3b82f6', label: 'Google',    bg: 'bg-blue-50' },
   ollama:    { dot: '#7c3aed', label: 'Ollama',    bg: 'bg-violet-50' },
+  together:  { dot: '#0ea5e9', label: 'Together AI', bg: 'bg-sky-50' },
 }
 
 function ProviderDot({ provider }: { provider: string }) {
@@ -159,6 +160,71 @@ function AiControlInner() {
     ok: boolean; elapsed_ms?: number; raw?: string; error?: string
   } | null>(null)
   const [ollamaTestLoading, setOllamaTestLoading] = useState(false)
+
+  // Pull state
+  const [pullModel, setPullModel] = useState('')
+  const [pullStatus, setPullStatus] = useState<{
+    active: boolean; model: string; message: string; percent: number | null; done: boolean; error: string | null
+  } | null>(null)
+  const pullEsRef = useRef<EventSource | null>(null)
+
+  function startPull(modelName: string) {
+    const model = modelName.trim()
+    if (!model) { toast.error('Enter a model name'); return }
+    if (pullEsRef.current) { pullEsRef.current.close() }
+
+    const token = localStorage.getItem('aq_token') ?? ''
+    const base  = api.admin.ollamaPullBase()
+
+    // Use fetch + ReadableStream for SSE with auth header
+    setPullStatus({ active: true, model, message: 'Starting…', percent: null, done: false, error: null })
+
+    fetch(`${base}/admin/ollama/pull`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body:    JSON.stringify({ model }),
+    }).then(async (resp) => {
+      if (!resp.ok || !resp.body) {
+        setPullStatus(p => p ? { ...p, active: false, error: `HTTP ${resp.status}` } : null)
+        return
+      }
+      const reader  = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const ev = JSON.parse(line.slice(6)) as {
+              status: string; message?: string; percent?: number | null; error?: string; progress?: string
+            }
+            setPullStatus(p => {
+              if (!p) return p
+              const done = ev.status === 'done'
+              const isErr = ev.status === 'error'
+              if (done) { refetchOllama(); toast.success(`${model} downloaded`) }
+              if (isErr) toast.error(ev.error ?? 'Pull failed')
+              return {
+                ...p,
+                active:  !done && !isErr,
+                message: ev.message ?? (done ? 'Complete' : p.message),
+                percent: ev.percent ?? p.percent,
+                done,
+                error:   isErr ? (ev.error ?? 'Pull failed') : null,
+              }
+            })
+          } catch { /* malformed SSE line */ }
+        }
+      }
+    }).catch(err => {
+      setPullStatus(p => p ? { ...p, active: false, error: err.message } : null)
+    })
+  }
 
   async function runOllamaTest() {
     setOllamaTestLoading(true)
@@ -342,6 +408,7 @@ function AiControlInner() {
                 { id: 'openai',    displayName: 'OpenAI (GPT)',        envVar: 'OPENAI_API_KEY' },
                 { id: 'google',    displayName: 'Google (Gemini)',     envVar: 'GEMINI_API_KEY' },
                 { id: 'ollama',    displayName: 'Ollama (Local LLM)',  envVar: 'OLLAMA_ENABLED=true' },
+                { id: 'together',  displayName: 'Together AI (Cloud)', envVar: 'TOGETHER_API_KEY' },
               ].map(p => {
                 const live = providers.find(lp => lp.id === p.id)
                 const available = live?.available ?? false
@@ -515,6 +582,10 @@ function AiControlInner() {
                           'ollama/llama3.1:8b',
                           'ollama/llama3.2:3b',
                           'ollama/gemma2:9b',
+                          'together/qwen2.5:14b',
+                          'together/qwen2.5:7b',
+                          'together/llama3.1:70b',
+                          'together/llama3.1:8b',
                         ].map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
                         ))}
@@ -644,13 +715,81 @@ function AiControlInner() {
             </div>
           </div>
 
+          {/* Interactive pull */}
           <div className="space-y-2">
-            <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide">Install & pull models</p>
-            <div className="bg-[#0f1729] rounded-xl p-4 font-mono text-xs space-y-1.5">
-              <p className="text-[#c8cdd8]"><span className="text-[#9aa3b2]"># Install Ollama from ollama.com, then:</span></p>
-              <p className="text-[#c8cdd8]">ollama pull <span className="text-yellow-300">qwen2.5:14b</span></p>
-              <p className="text-[#c8cdd8]">ollama pull <span className="text-yellow-300">qwen2.5:7b</span></p>
+            <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide">Pull a model</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="e.g. qwen2.5:14b"
+                value={pullModel}
+                onChange={e => setPullModel(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && startPull(pullModel)}
+                className={INPUT_CLS + ' flex-1'}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => startPull(pullModel)}
+                disabled={pullStatus?.active}
+                iconLeft={<Download className="w-3.5 h-3.5" />}
+              >
+                Pull
+              </Button>
             </div>
+
+            {/* Quick-pull chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {['qwen2.5:7b', 'qwen2.5:14b', 'qwen2.5:72b', 'llama3.1:8b', 'gemma2:9b'].map(m => {
+                const installed = ollamaModels?.some(om => om.name === m || om.name.startsWith(m.split(':')[0]))
+                return (
+                  <button
+                    key={m}
+                    onClick={() => { setPullModel(m); startPull(m) }}
+                    disabled={!!installed || pullStatus?.active}
+                    className={cn(
+                      'px-2 py-1 rounded-lg text-[10px] font-mono border transition-colors',
+                      installed
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 cursor-default'
+                        : 'bg-violet-50 border-violet-100 text-violet-700 hover:bg-violet-100 disabled:opacity-40',
+                    )}
+                  >
+                    {installed ? '✓ ' : ''}{m}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Pull progress panel */}
+            {pullStatus && (
+              <div className={cn(
+                'rounded-xl border p-3 space-y-2',
+                pullStatus.error   ? 'bg-red-50 border-red-200' :
+                pullStatus.done    ? 'bg-emerald-50 border-emerald-200' :
+                                     'bg-violet-50 border-violet-100',
+              )}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {pullStatus.active && <RefreshCw className="w-3.5 h-3.5 text-violet-600 animate-spin" />}
+                    {pullStatus.done   && <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />}
+                    {pullStatus.error  && <XCircle className="w-3.5 h-3.5 text-red-500" />}
+                    <span className="text-xs font-mono font-semibold text-[#0f1729]">{pullStatus.model}</span>
+                    {pullStatus.percent != null && (
+                      <span className="text-xs font-mono text-violet-700">{pullStatus.percent}%</span>
+                    )}
+                  </div>
+                  <button onClick={() => setPullStatus(null)} className="text-[#9aa3b2] hover:text-[#4a5568]">
+                    <XCircle className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {pullStatus.percent != null && (
+                  <ProgressBar value={pullStatus.percent} size="sm" variant="navy" />
+                )}
+                <p className="text-[10px] font-mono text-[#4a5568] truncate">
+                  {pullStatus.error ?? pullStatus.message}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 flex gap-2.5">

@@ -233,6 +233,9 @@ export async function runMigrations(client: Client): Promise<void> {
   await exec(client, `ALTER TABLE suppliers ADD COLUMN lng REAL`)
   await exec(client, `ALTER TABLE suppliers ADD COLUMN geocoded_at TEXT`)
 
+  // subscriptions — Razorpay support
+  await exec(client, `ALTER TABLE subscriptions ADD COLUMN razorpay_subscription_id TEXT`)
+
   // ── Indexes (IF NOT EXISTS is supported for indexes) ──────────────────────
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_ai_usage_log_user ON ai_usage_log(user_id)`)
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_ai_usage_log_task ON ai_usage_log(task_type)`)

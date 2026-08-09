@@ -4,6 +4,7 @@ import { GeminiProvider }   from './gemini'
 import { GrokProvider }     from './grok'
 import { CopilotProvider }  from './copilot'
 import { OllamaProvider }   from './ollama'
+import { TogetherProvider } from './together'
 import type { AIProvider }  from './base'
 
 export * from './base'
@@ -16,6 +17,7 @@ export const ALL_PROVIDERS: AIProvider[] = [
   new GrokProvider(),
   new CopilotProvider(),
   new OllamaProvider(),
+  new TogetherProvider(),
 ]
 
 export function activeProviders(): AIProvider[] {
