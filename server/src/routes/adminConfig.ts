@@ -165,6 +165,54 @@ router.get('/ollama/models', async (_req, res) => {
   }
 })
 
+// ─── POST /api/admin/ollama/test — send a quick JSON prompt to verify end-to-end ──
+router.post('/ollama/test', async (req, res) => {
+  const { model } = req.body as { model?: string }
+  const ollama = new OllamaProvider()
+
+  if (!ollama.isAvailable()) {
+    res.status(400).json({ success: false, error: 'Ollama is disabled — set OLLAMA_ENABLED=true in server/.env' })
+    return
+  }
+
+  const testModel = model ?? (process.env.OLLAMA_FAST_MODEL ?? 'qwen2.5:7b')
+  const start = Date.now()
+
+  try {
+    const response = await ollama.complete({
+      model:        testModel,
+      systemPrompt: 'You are a JSON-only assistant. Output ONLY valid JSON. No markdown. No explanation.',
+      userPrompt:   'Respond with exactly this JSON and nothing else: {"status":"ok","model":"' + testModel + '"}',
+      maxTokens:    64,
+    })
+
+    const elapsed = Date.now() - start
+    const raw = response.content.trim()
+
+    // Try to parse what came back
+    let parsed: unknown = null
+    try { parsed = JSON.parse(raw) } catch { /* raw shown below */ }
+
+    res.json({
+      success:      true,
+      data: {
+        model:        testModel,
+        elapsed_ms:   elapsed,
+        raw_response: raw,
+        parsed_ok:    parsed !== null,
+        tokens_in:    response.inputTokens,
+        tokens_out:   response.outputTokens,
+      },
+    })
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error:   (err as Error).message,
+      hint:    `Is Ollama running? Try: ollama serve   then: ollama pull ${testModel}`,
+    })
+  }
+})
+
 // ─── DELETE route override (revert to default) ────────────────────────────────
 router.delete('/routes/:task', async (req, res) => {
   try {

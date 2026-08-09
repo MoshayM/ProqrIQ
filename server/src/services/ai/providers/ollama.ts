@@ -60,10 +60,11 @@ export class OllamaProvider implements AIProvider {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model:      req.model,
-        max_tokens: req.maxTokens ?? 4096,
+        model:       req.model,
+        max_tokens:  req.maxTokens ?? 4096,
+        temperature: 0,      // deterministic — critical for structured JSON output
         messages,
-        stream:     false,
+        stream:      false,
       }),
     })
 

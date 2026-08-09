@@ -161,6 +161,8 @@ export function trackUsage(opts: {
 
 // ─── Main completion helper (drop-in for callers) ─────────────────────────────
 
+const HAIKU_FALLBACK = { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
+
 export async function completeWithRouter(opts: {
   task:       AITask
   request:    Omit<AIRequest, 'model'>
@@ -170,14 +172,39 @@ export async function completeWithRouter(opts: {
 }): Promise<string> {
   await checkBudget(opts.userId)
 
-  const route    = await getModelForTask(opts.task)
-  const provider = getProvider(route.provider)
-  const response = await provider.complete({ ...opts.request, model: route.model })
+  const route = await getModelForTask(opts.task)
+
+  let response: AIResponse
+  let usedRoute = route
+
+  try {
+    const provider = getProvider(route.provider)
+    response = await provider.complete({ ...opts.request, model: route.model })
+  } catch (primaryErr) {
+    // If a non-Anthropic provider (Ollama, OpenAI, Gemini) fails, fall back to Haiku
+    if (route.provider !== 'anthropic') {
+      console.warn(
+        `[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}" — falling back to Haiku. Error: ${(primaryErr as Error).message}`,
+      )
+      try {
+        const fallback = getProvider(HAIKU_FALLBACK.provider)
+        response = await fallback.complete({ ...opts.request, model: HAIKU_FALLBACK.model })
+        usedRoute = HAIKU_FALLBACK
+      } catch (fallbackErr) {
+        throw new Error(
+          `AI Router: primary (${route.provider}) and fallback (anthropic/haiku) both failed. ` +
+          `Primary: ${(primaryErr as Error).message}. Fallback: ${(fallbackErr as Error).message}`,
+        )
+      }
+    } else {
+      throw primaryErr
+    }
+  }
 
   trackUsage({
     userId:  opts.userId,
     task:    opts.task,
-    response,
+    response: { ...response, provider: usedRoute.provider, model: usedRoute.model },
     quoteId: opts.quoteId,
     batchId: opts.batchId,
   })

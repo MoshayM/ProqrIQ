@@ -127,6 +127,7 @@ export const api = {
     setRoute:        (task: string, data: unknown) => client.put(`/admin/routes/${task}`, data).then(d),
     deleteRoute:     (task: string)               => client.delete(`/admin/routes/${task}`).then(d),
     getOllamaModels: ()                           => client.get('/admin/ollama/models').then(d),
+    testOllama:      (model?: string)             => client.post('/admin/ollama/test', { model }).then(d),
   },
   passkey: {
     authOptions:     (email?: string) => client.post('/auth/passkey/auth/options', { email }).then(d),

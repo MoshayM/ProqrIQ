@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Brain, Sliders, BarChart3, RefreshCw, Save, RotateCcw, Zap,
   AlertTriangle, CheckCircle, TrendingUp, Clock, ChevronLeft,
-  Route, CircleDot, DollarSign,
+  Route, CircleDot, DollarSign, PlayCircle, XCircle,
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { api } from '../../lib/api'
@@ -154,6 +154,26 @@ function AiControlInner() {
     retry:      false,
     staleTime:  30_000,
   })
+
+  const [ollamaTestResult, setOllamaTestResult] = useState<{
+    ok: boolean; elapsed_ms?: number; raw?: string; error?: string
+  } | null>(null)
+  const [ollamaTestLoading, setOllamaTestLoading] = useState(false)
+
+  async function runOllamaTest() {
+    setOllamaTestLoading(true)
+    setOllamaTestResult(null)
+    try {
+      const d = await api.admin.testOllama()
+      setOllamaTestResult({ ok: d.parsed_ok, elapsed_ms: d.elapsed_ms, raw: d.raw_response })
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+             ?? (e as Error).message
+      setOllamaTestResult({ ok: false, error: msg })
+    } finally {
+      setOllamaTestLoading(false)
+    }
+  }
 
   const saveMut = useMutation({
     mutationFn: () => api.admin.patchAiConfig(localConfig!),
@@ -532,10 +552,50 @@ function AiControlInner() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-[#4a5568] uppercase tracking-wide">Installed models (live)</p>
-              <button onClick={() => refetchOllama()} className="p-1 rounded hover:bg-surface-3 text-[#9aa3b2] transition-colors" title="Refresh">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={runOllamaTest}
+                  disabled={ollamaTestLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-violet-50 text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-50"
+                  title="Send a test JSON prompt to verify Ollama end-to-end"
+                >
+                  {ollamaTestLoading
+                    ? <RefreshCw className="w-3 h-3 animate-spin" />
+                    : <PlayCircle className="w-3 h-3" />}
+                  Test
+                </button>
+                <button onClick={() => refetchOllama()} className="p-1 rounded hover:bg-surface-3 text-[#9aa3b2] transition-colors" title="Refresh">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
+
+            {/* Test result panel */}
+            {ollamaTestResult && (
+              <div className={cn(
+                'rounded-xl border px-3 py-2.5 flex items-start gap-2',
+                ollamaTestResult.ok ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200',
+              )}>
+                {ollamaTestResult.ok
+                  ? <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  : <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />}
+                <div className="min-w-0 flex-1">
+                  {ollamaTestResult.ok ? (
+                    <p className="text-xs font-medium text-emerald-700">
+                      Connection OK — {ollamaTestResult.elapsed_ms}ms
+                      <span className="ml-2 font-mono text-[10px] text-emerald-600">{ollamaTestResult.raw}</span>
+                    </p>
+                  ) : (
+                    <p className="text-xs font-medium text-red-700">
+                      {ollamaTestResult.error ?? 'Test failed'}
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => setOllamaTestResult(null)} className="text-[#9aa3b2] hover:text-[#4a5568]">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             {!ollamaModels || ollamaModels.length === 0 ? (
               <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/50 p-4 text-center">
                 <p className="text-xs text-violet-700 font-medium">No models detected</p>
