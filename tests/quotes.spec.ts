@@ -15,7 +15,7 @@ test.describe('All Quotes Page', () => {
   });
 
   test('New Quote button is present', async ({ page }) => {
-    await expect(page.locator('a[href="/quotes/new"]').first()).toBeVisible();
+    await expect(page.locator('main').getByRole('button', { name: /new quote/i })).toBeVisible();
   });
 
   test('search input is present', async ({ page }) => {
@@ -29,7 +29,7 @@ test.describe('All Quotes Page', () => {
   });
 
   test('clicking New Quote navigates to quote creation', async ({ page }) => {
-    await page.locator('a[href="/quotes/new"]').first().click();
+    await page.locator('main').getByRole('button', { name: /new quote/i }).click();
     await expect(page).toHaveURL(/\/quotes\/new/);
   });
 });

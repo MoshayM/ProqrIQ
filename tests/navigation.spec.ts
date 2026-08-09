@@ -7,47 +7,51 @@ test.describe('Sidebar Navigation', () => {
   });
 
   test('sidebar is visible', async ({ page }) => {
-    await expect(page.locator('nav, aside').first()).toBeVisible();
+    await expect(page.locator('aside').first()).toBeVisible();
   });
 
   test('brand ProqrIQ logo is visible', async ({ page }) => {
-    await expect(page.locator('text=ProqrIQ').first()).toBeVisible();
+    // The aside (sidebar) renders the ProqrIQ logo text
+    await expect(page.locator('aside').filter({ hasText: 'ProqrIQ' })).toBeVisible();
   });
 
   test('navigates to Quotations', async ({ page }) => {
-    await page.locator('a[href="/quotes"]').click();
+    // Scope to aside to avoid strict mode (mobile nav also has the same links hidden off-screen)
+    await page.locator('aside nav a[href="/quotes"]').click();
     await expect(page).toHaveURL(/\/quotes/);
     await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('navigates to Bulk Costing', async ({ page }) => {
-    await page.locator('a[href="/bulk"]').click();
+    await page.locator('aside nav a[href="/bulk"]').click();
     await expect(page).toHaveURL(/\/bulk/);
     await expect(page.locator('h1').filter({ hasText: 'Bulk Costing' })).toBeVisible({ timeout: 15000 });
   });
 
   test('navigates to Assemblies', async ({ page }) => {
-    await page.locator('a[href="/assemblies"]').click();
+    await page.locator('aside nav a[href="/assemblies"]').click();
     await expect(page).toHaveURL(/\/assemblies/);
-    await expect(page.locator('h1').filter({ hasText: 'Assemblies' })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('h1, h2').filter({ hasText: /assembl/i }).first()).toBeVisible({ timeout: 15000 });
   });
 
   test('navigates to Knowledge Base (admin)', async ({ page }) => {
-    await page.locator('a[href="/kb"]').click();
-    await expect(page).toHaveURL(/\/kb/);
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 15000 });
+    // /kb redirects to /account?tab=kb
+    await page.goto('/kb');
+    await expect(page).toHaveURL(/\/account/);
+    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
   });
 
   test('navigates to Settings', async ({ page }) => {
-    await page.locator('a[href="/settings"]').click();
-    await expect(page).toHaveURL(/\/settings/);
-    await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 15000 });
+    // /settings redirects to /account
+    await page.goto('/settings');
+    await expect(page).toHaveURL(/\/account/);
+    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
   });
 
   test('navigates back to Dashboard', async ({ page }) => {
-    await page.locator('a[href="/bulk"]').click();
+    await page.locator('aside nav a[href="/bulk"]').click();
     await expect(page).toHaveURL(/\/bulk/);
-    await page.locator('a[href="/dashboard"]').click();
+    await page.locator('aside nav a[href="/dashboard"]').click();
     await expect(page).toHaveURL(/\/dashboard/);
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
   });

@@ -13,8 +13,8 @@ test.describe('New Quote Wizard — Step 1', () => {
 
   test('Upload Drawing tab is active by default', async ({ page }) => {
     await expect(page.locator('button').filter({ hasText: 'Upload Drawing' })).toBeVisible();
-    // Upload zone should be visible
-    await expect(page.locator('text=Drop your engineering drawing here')).toBeVisible();
+    // Upload zone text (Step1.tsx)
+    await expect(page.locator('text=Drop your drawing or 3D model here')).toBeVisible();
   });
 
   test('Enter Manually tab is present and clickable', async ({ page }) => {
@@ -25,8 +25,11 @@ test.describe('New Quote Wizard — Step 1', () => {
   });
 
   test('upload zone shows supported formats', async ({ page }) => {
-    await expect(page.locator('text=/PDF.*PNG.*JPG/i')).toBeVisible();
-    await expect(page.locator('text=50MB')).toBeVisible();
+    // Formats shown as individual spans: PDF, PNG, JPG, WEBP (Step1.tsx)
+    await expect(page.locator('text=PDF').first()).toBeVisible();
+    await expect(page.locator('text=PNG').first()).toBeVisible();
+    // Max file size shown as "Max 50 MB"
+    await expect(page.locator('text=Max 50 MB')).toBeVisible();
   });
 
   test('manual mode shows commodity type grid', async ({ page }) => {

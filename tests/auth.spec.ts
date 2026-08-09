@@ -23,9 +23,9 @@ test.describe('Authentication', () => {
     await expect(page.locator('button[type="submit"]')).toHaveText('Sign in');
   });
 
-  test('shows demo credentials on login page', async ({ page }) => {
+  test('shows sign-in description on login page', async ({ page }) => {
     await page.goto('/login');
-    await expect(page.locator('text=admin@autoquote.com').first()).toBeVisible();
+    await expect(page.locator('text=Sign in to continue')).toBeVisible();
   });
 
   test('shows validation error for invalid email format', async ({ page }) => {
