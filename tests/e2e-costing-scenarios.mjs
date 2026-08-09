@@ -558,15 +558,15 @@ async function scenario8_Assembly1(s1) {
 
     // Component B: PCB — pre-cost with full details
     const { part: pcbPart, quote: pcbQuote, result: pcbResult } = await createAndCostComponent({
-      part_name:             '4-layer Control PCB for Assembly',
+      part_name:             '4-layer FR4 Control PCB 80×60mm SMT Assembly',
       part_number:           'PCB-ASM-001A',
       commodity_type:        'pcb_rigid',
-      material_grade:        'FR4 Tg150, 4-layer, 1.6mm, HASL',
+      material_grade:        'FR4 Tg150, 4-layer, 1.6mm, 1oz copper inner/outer, HASL lead-free',
       net_weight_g:          40,
-      dimensions_json:       { l_mm: 80, w_mm: 60, h_mm: 1.6, layers: 4 },
-      surface_finish:        'HASL Lead-free, IPC Class 2',
-      tolerance_class:       'IPC-A-600 Class 2',
-      manufacturing_process: '4-layer PCB fab + SMT assembly + reflow + AOI test',
+      dimensions_json:       { l_mm: 80, w_mm: 60, h_mm: 1.6, layers: 4, components: 42, smd_pads: 186 },
+      surface_finish:        'HASL lead-free, green soldermask both sides, white silkscreen, IPC Class 2',
+      tolerance_class:       'IPC-A-600 Class 2, track/gap 0.15/0.15mm, via drill Ø0.3mm ±0.05mm',
+      manufacturing_process: '4-layer rigid FR4 PCB fabrication + HASL lead-free + SMT component placement + reflow soldering + AOI inspection + electrical test',
     }, { supplier_country: 'CN', supplier_currency: 'CNY', annual_volume: 3000, lot_size: 300,
          lots_per_year: 10, exchange_rate: 7.8, exchange_rate_source: 'manual' })
 
@@ -742,15 +742,15 @@ async function scenario10_BulkCosting() {
         manufacturing_process: 'Laser cutting SS304 1.5mm → CNC press brake 90° bend → deburr → passivation',
       },
       {
-        part_name:             'PA6-GF30 Cable Entry Grommet M25',
+        part_name:             'SS304 Cable Entry Plate 150×100mm punched',
         part_number:           `BULK-${Math.random().toString(36).slice(2,8).toUpperCase()}`,
-        commodity_type:        'plastic_injection',
-        material_grade:        'Polyamide PA6 30% glass-filled, UL94 V-0, IP67',
-        net_weight_g:          28,
-        dimensions_json:       { l_mm: 38, w_mm: 38, h_mm: 22, thread_mm: 25 },
-        surface_finish:        'Matte black, Ra 3.2µm, draft angle 1.5°',
-        tolerance_class:       'IT12, thread ISO 6H, snap-fit feature ±0.15mm',
-        manufacturing_process: '2-cavity injection moulding PA6-GF30 + automated removal + 100% visual inspection',
+        commodity_type:        'sheet_metal',
+        material_grade:        'Stainless steel SS304 (1.4301), t=2.0mm sheet, 7.93g/cm³',
+        net_weight_g:          240,
+        dimensions_json:       { l_mm: 150, w_mm: 100, h_mm: 2, holes: 8, hole_dia_mm: 20 },
+        surface_finish:        'Brushed Ra 1.6µm, deburr all edges and holes, passivated',
+        tolerance_class:       'IT10, hole diameter ±0.1mm, hole position ±0.3mm, flatness 0.5mm',
+        manufacturing_process: 'Laser cutting SS304 2.0mm outline + 8×Ø20mm holes → deburr → passivation',
       },
       {
         part_name:             'AL6082-T6 Sensor Adapter Flange Ø60mm',
