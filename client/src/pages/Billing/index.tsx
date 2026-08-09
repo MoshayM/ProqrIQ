@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { CreditCard, XCircle, Calendar, CheckCircle, ArrowRight } from 'lucide-react'
+import { CreditCard, XCircle, Calendar, CheckCircle, ArrowRight, IndianRupee, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { useSubscription } from '../../hooks/useSubscription'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
@@ -9,6 +10,17 @@ import { Modal } from '../../components/ui/modal'
 import { Skeleton } from '../../components/ui/skeleton'
 import { usePageTitle } from '../../hooks/usePageTitle'
 import { api } from '../../lib/api'
+
+function loadRazorpayScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as unknown as Record<string, unknown>).Razorpay) { resolve(); return }
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load Razorpay script'))
+    document.body.appendChild(script)
+  })
+}
 
 // Arc gauge SVG component
 function ArcGauge({ used, limit, label, unit = '' }: { used: number; limit: number | null; label: string; unit?: string }) {
@@ -57,31 +69,20 @@ const PLAN_FEATURES: Record<string, string[]> = {
 
 export default function Billing() {
   usePageTitle('Billing')
-  const { plan, status, daysUntilRenewal, usage, limits, isLoading } = useSubscription()
+  const { plan, status, daysUntilRenewal, usage, limits, isLoading, refetch } = useSubscription()
   const navigate = useNavigate()
-  const [cancelModalOpen, setCancelModalOpen] = useState(false)
-  const [canceling, setCanceling] = useState(false)
-  const [upgrading, setUpgrading] = useState(false)
-
-  async function handleUpgrade() {
-    setUpgrading(true)
-    try {
-      const data = await api.subscription.checkout({ plan: 'pro', billing: 'monthly' })
-      if (data?.url) window.location.href = data.url
-    } catch {
-      // Stripe not configured or error
-    } finally {
-      setUpgrading(false)
-    }
-  }
+  const [cancelModalOpen, setCancelModalOpen]   = useState(false)
+  const [rzpModalOpen,    setRzpModalOpen]       = useState(false)
+  const [canceling,       setCanceling]          = useState(false)
+  const [rzpPlan,         setRzpPlan]            = useState<'pro' | 'organization'>('pro')
+  const [rzpBilling,      setRzpBilling]         = useState<'monthly' | 'annual'>('monthly')
+  const [rzpLoading,      setRzpLoading]         = useState(false)
 
   async function handlePortal() {
     try {
       const data = await api.subscription.portal()
       if (data?.url) window.location.href = data.url
-    } catch {
-      // not configured
-    }
+    } catch { /* not configured */ }
   }
 
   async function handleCancel() {
@@ -91,6 +92,44 @@ export default function Billing() {
       setCancelModalOpen(false)
     } finally {
       setCanceling(false)
+    }
+  }
+
+  async function handleRazorpayCheckout() {
+    setRzpLoading(true)
+    try {
+      await loadRazorpayScript()
+      const data = await api.subscription.razorpayCheckout({ plan: rzpPlan, billing: rzpBilling })
+      if (!data?.subscription_id) { toast.error('Razorpay not configured on server'); return }
+
+      const RazorpayConstructor = (window as unknown as Record<string, unknown>).Razorpay as new (opts: unknown) => { open(): void }
+      const rzp = new RazorpayConstructor({
+        key:             data.key_id,
+        subscription_id: data.subscription_id,
+        name:            'ProqrIQ',
+        description:     `${rzpPlan === 'pro' ? 'Pro' : 'Organization'} — ${rzpBilling}`,
+        image:           '/logo.png',
+        theme:           { color: '#e85c1a' },
+        handler: async (response: Record<string, string>) => {
+          try {
+            await api.subscription.razorpayVerify({
+              razorpay_payment_id:      response.razorpay_payment_id,
+              razorpay_subscription_id: response.razorpay_subscription_id,
+              razorpay_signature:       response.razorpay_signature,
+              plan:    rzpPlan,
+              billing: rzpBilling,
+            })
+            toast.success('Payment successful! Your plan has been upgraded.')
+            setRzpModalOpen(false)
+            refetch?.()
+          } catch { toast.error('Payment verification failed. Contact support.') }
+        },
+      } as unknown as object)
+      rzp.open()
+    } catch (err) {
+      toast.error((err as Error).message || 'Razorpay checkout failed')
+    } finally {
+      setRzpLoading(false)
     }
   }
 
@@ -174,7 +213,18 @@ export default function Billing() {
                 onClick={() => navigate('/pricing')}
                 iconRight={<ArrowRight className="w-3.5 h-3.5" />}
               >
-                Upgrade Plan
+                Upgrade via Stripe
+              </Button>
+            )}
+            {plan === 'free' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRzpModalOpen(true)}
+                className="border-[#2d9c6a]/60 text-[#2d9c6a] hover:bg-[#2d9c6a]/10"
+                iconLeft={<IndianRupee className="w-3.5 h-3.5" />}
+              >
+                Pay with Razorpay
               </Button>
             )}
             {plan !== 'free' && (
@@ -246,6 +296,60 @@ export default function Billing() {
           </CardContent>
         </Card>
       )}
+
+      {/* Razorpay plan selector modal */}
+      <Modal open={rzpModalOpen} onClose={() => setRzpModalOpen(false)} title="Pay with Razorpay">
+        <div className="space-y-5">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-[#2d9c6a]/5 border border-[#2d9c6a]/20">
+            <IndianRupee className="w-4 h-4 text-[#2d9c6a] shrink-0" />
+            <p className="text-xs text-[#2d9c6a] font-medium">Payments processed in INR via Razorpay — UPI, cards &amp; netbanking accepted</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#4a5568] mb-2">Plan</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['pro', 'organization'] as const).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setRzpPlan(p)}
+                  className={`p-3 rounded-xl border text-left transition-all ${rzpPlan === p ? 'border-[#e85c1a] bg-[#e85c1a]/5' : 'border-[#e5e8ef] hover:border-[#c8cdd8]'}`}
+                >
+                  <p className="text-sm font-semibold text-[#0f1729] capitalize">{p}</p>
+                  <p className="text-xs text-[#9aa3b2] mt-0.5">
+                    {p === 'pro' ? '₹3,999/mo · ₹39,990/yr' : '₹14,999/mo · ₹1,49,990/yr'}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#4a5568] mb-2">Billing cycle</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(['monthly', 'annual'] as const).map(b => (
+                <button
+                  key={b}
+                  onClick={() => setRzpBilling(b)}
+                  className={`p-3 rounded-xl border text-left transition-all ${rzpBilling === b ? 'border-[#e85c1a] bg-[#e85c1a]/5' : 'border-[#e5e8ef] hover:border-[#c8cdd8]'}`}
+                >
+                  <p className="text-sm font-semibold text-[#0f1729] capitalize">{b}</p>
+                  {b === 'annual' && <p className="text-[10px] text-[#2d9c6a] mt-0.5">Save 2 months</p>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Button
+            variant="primary"
+            className="w-full"
+            onClick={handleRazorpayCheckout}
+            loading={rzpLoading}
+            iconLeft={<Zap className="w-4 h-4" />}
+          >
+            Continue to Razorpay
+          </Button>
+        </div>
+      </Modal>
 
       {/* Cancel Modal */}
       <Modal

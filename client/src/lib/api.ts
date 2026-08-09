@@ -155,10 +155,12 @@ export const api = {
     deleteCustomer:  (supplierId: string, customerId: string) => client.delete(`/suppliers/${supplierId}/customers/${customerId}`).then(d),
   },
   subscription: {
-    get:      ()              => client.get('/subscription').then(d),
-    checkout: (body: unknown) => client.post('/subscription/checkout', body).then(d),
-    portal:   ()              => client.post('/subscription/portal', {}).then(d),
-    cancel:   ()              => client.post('/subscription/cancel', {}).then(d),
+    get:              ()              => client.get('/subscription').then(d),
+    checkout:         (body: unknown) => client.post('/subscription/checkout', body).then(d),
+    portal:           ()              => client.post('/subscription/portal', {}).then(d),
+    cancel:           ()              => client.post('/subscription/cancel', {}).then(d),
+    razorpayCheckout: (body: unknown) => client.post('/subscription/razorpay/checkout', body).then(d),
+    razorpayVerify:   (body: unknown) => client.post('/subscription/razorpay/verify', body).then(d),
   },
   organization: {
     get:          ()                => client.get('/organization').then(d),

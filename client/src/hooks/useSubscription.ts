@@ -46,9 +46,9 @@ const PREVIEW_LIMITS: Record<string, { quotes_per_month: number | null; bulk_bat
   organization: { quotes_per_month: null, bulk_batch_items: 50,  supplier_searches_per_month: null },
 }
 
-export function useSubscription(): SubscriptionData & { isLoading: boolean } {
+export function useSubscription(): SubscriptionData & { isLoading: boolean; refetch: () => void } {
   const { previewPlan } = usePlan()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['subscription'],
     queryFn: () => api.subscription.get(),
     staleTime: 60_000,
@@ -114,5 +114,6 @@ export function useSubscription(): SubscriptionData & { isLoading: boolean } {
     predictedDaysRemaining,
     canUse,
     isLoading,
+    refetch,
   }
 }

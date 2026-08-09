@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express'
+import Stripe from 'stripe'
 import { requireAuth } from '../middleware/auth'
 import { requirePlan } from '../middleware/plan'
 import { db } from '../db'
@@ -10,6 +11,11 @@ import {
   auditLog,
 } from '../db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
+import {
+  getRazorpayClient,
+  isRazorpayConfigured,
+  verifyPaymentSignature,
+} from '../services/razorpay'
 
 export const router = Router()
 
@@ -91,7 +97,7 @@ router.get('/subscription', requireAuth, async (req: Request, res: Response) => 
   }
 })
 
-// ─── POST /api/subscription/checkout ─────────────────────────────────────────
+// ─── POST /api/subscription/checkout (Stripe) ────────────────────────────────
 
 router.post('/subscription/checkout', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -103,23 +109,15 @@ router.post('/subscription/checkout', requireAuth, async (req: Request, res: Res
 
     const { plan, billing } = req.body as { plan: 'pro' | 'organization'; billing: 'monthly' | 'annual' }
     const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
+    const stripe     = new Stripe(STRIPE_SECRET_KEY)
+    const priceId    = process.env[`STRIPE_PRICE_${plan.toUpperCase()}_${billing.toUpperCase()}`] ?? ''
 
-    // Dynamically import stripe to avoid requiring it when unconfigured
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Stripe = (await import('stripe' as any)).default
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stripe = new (Stripe as any)(STRIPE_SECRET_KEY)
-
-    // Price IDs would be configured per env in production
-    const priceId = process.env[`STRIPE_PRICE_${plan.toUpperCase()}_${billing.toUpperCase()}`] ?? ''
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const session = await (stripe as any).checkout.sessions.create({
-      mode: 'subscription',
-      line_items: priceId ? [{ price: priceId, quantity: 1 }] : [],
-      success_url: `${CLIENT_URL}/billing?success=1`,
-      cancel_url: `${CLIENT_URL}/billing?canceled=1`,
-      metadata: { user_id: req.user!.id, plan, billing },
+    const session = await stripe.checkout.sessions.create({
+      mode:         'subscription',
+      line_items:   priceId ? [{ price: priceId, quantity: 1 }] : [],
+      success_url:  `${CLIENT_URL}/billing?success=1`,
+      cancel_url:   `${CLIENT_URL}/billing?canceled=1`,
+      metadata:     { user_id: req.user!.id, plan, billing },
     })
 
     res.json({ success: true, data: { url: session.url } })
@@ -128,7 +126,7 @@ router.post('/subscription/checkout', requireAuth, async (req: Request, res: Res
   }
 })
 
-// ─── POST /api/subscription/portal ───────────────────────────────────────────
+// ─── POST /api/subscription/portal (Stripe) ──────────────────────────────────
 
 router.post('/subscription/portal', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -138,28 +136,129 @@ router.post('/subscription/portal', requireAuth, async (req: Request, res: Respo
       return
     }
 
-    const userId = req.user!.id
+    const userId  = req.user!.id
     const subRows = await db.select().from(subscriptions).where(eq(subscriptions.user_id, userId)).limit(1)
-    const sub = subRows[0]
+    const sub     = subRows[0]
 
     if (!sub?.stripe_customer_id) {
       res.status(400).json({ success: false, error: 'No Stripe customer found' })
       return
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Stripe = (await import('stripe' as any)).default
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stripe = new (Stripe as any)(STRIPE_SECRET_KEY)
+    const stripe     = new Stripe(STRIPE_SECRET_KEY)
     const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const session = await (stripe as any).billingPortal.sessions.create({
-      customer: sub.stripe_customer_id,
+    const session    = await stripe.billingPortal.sessions.create({
+      customer:   sub.stripe_customer_id,
       return_url: `${CLIENT_URL}/billing`,
     })
 
     res.json({ success: true, data: { url: session.url } })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// ─── POST /api/subscription/razorpay/checkout ────────────────────────────────
+
+router.post('/subscription/razorpay/checkout', requireAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isRazorpayConfigured()) {
+      res.status(404).json({ success: false, error: 'Razorpay not configured' })
+      return
+    }
+
+    const { plan, billing } = req.body as { plan: 'pro' | 'organization'; billing: 'monthly' | 'annual' }
+    const planId = process.env[`RAZORPAY_PLAN_${plan.toUpperCase()}_${billing.toUpperCase()}`]
+    if (!planId) {
+      res.status(400).json({ success: false, error: 'Razorpay plan not configured — run npm run razorpay:setup' })
+      return
+    }
+
+    const rzp          = getRazorpayClient()
+    const total_count  = billing === 'annual' ? 12 : 120
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subscription = await (rzp.subscriptions as any).create({
+      plan_id:        planId,
+      customer_notify: 1,
+      total_count,
+      notes: { user_id: req.user!.id, plan, billing },
+    })
+
+    res.json({
+      success: true,
+      data: {
+        subscription_id: subscription.id,
+        key_id:          process.env.RAZORPAY_KEY_ID,
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// ─── POST /api/subscription/razorpay/verify ──────────────────────────────────
+// Called by the client after Razorpay popup succeeds
+
+router.post('/subscription/razorpay/verify', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const {
+      razorpay_payment_id,
+      razorpay_subscription_id,
+      razorpay_signature,
+      plan,
+      billing,
+    } = req.body as {
+      razorpay_payment_id:      string
+      razorpay_subscription_id: string
+      razorpay_signature:       string
+      plan:    string
+      billing: string
+    }
+
+    if (!verifyPaymentSignature(razorpay_payment_id, razorpay_subscription_id, razorpay_signature)) {
+      res.status(400).json({ success: false, error: 'Invalid payment signature' })
+      return
+    }
+
+    const userId    = req.user!.id
+    const now       = new Date().toISOString()
+    const periodEnd = new Date(Date.now() + (billing === 'annual' ? 365 : 30) * 86_400_000).toISOString()
+
+    const existing = await db.select().from(subscriptions).where(eq(subscriptions.user_id, userId)).limit(1)
+
+    if (existing.length > 0) {
+      await db.update(subscriptions).set({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        plan:                   plan as any,
+        status:                 'active',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        billing_cycle:          billing as any,
+        razorpay_subscription_id,
+        current_period_start:   now,
+        current_period_end:     periodEnd,
+      }).where(eq(subscriptions.user_id, userId))
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (db.insert(subscriptions) as any).values({
+        user_id:                userId,
+        plan,
+        status:                 'active',
+        billing_cycle:          billing,
+        razorpay_subscription_id,
+        current_period_start:   now,
+        current_period_end:     periodEnd,
+      })
+    }
+
+    await db.insert(auditLog).values({
+      user_id:     userId,
+      action:      'subscription_activated',
+      entity_type: 'subscription',
+      entity_id:   userId,
+      details:     JSON.stringify({ plan, billing, gateway: 'razorpay', razorpay_payment_id }),
+    })
+
+    res.json({ success: true })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })
   }

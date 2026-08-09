@@ -4,8 +4,10 @@ import helmet from 'helmet'
 import morgan from 'morgan'
 import { rateLimit } from 'express-rate-limit'
 import path from 'path'
+import Stripe from 'stripe'
 
 import { NODE_ENV } from './config'
+import { verifyWebhookSignature } from './services/razorpay'
 
 // ─── Route imports ────────────────────────────────────────────────────────────
 import { router as authRouter }  from './routes/auth'
@@ -45,80 +47,123 @@ app.use(cors({
 }))
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'))
 
-// ─── Stripe webhook (raw body needed — must come BEFORE json parser) ─────────
-// Canonical webhook URL to configure in Stripe dashboard: POST /api/webhooks/stripe
-// Events handled: checkout.session.completed, customer.subscription.updated,
-//                 customer.subscription.deleted, invoice.payment_failed
+// ─── Stripe webhook — POST /api/webhooks/stripe ───────────────────────────────
+// Register this URL in Stripe dashboard → Developers → Webhooks
+// Events: checkout.session.completed | customer.subscription.updated | .deleted | invoice.payment_failed
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
-  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+  const KEY    = process.env.STRIPE_SECRET_KEY
+  const SECRET = process.env.STRIPE_WEBHOOK_SECRET
+  if (!KEY || !SECRET) { res.status(200).json({ received: true }); return }
 
-  if (!STRIPE_SECRET_KEY || !STRIPE_WEBHOOK_SECRET) {
-    res.status(200).json({ received: true })
-    return
+  let event: Stripe.Event
+  try {
+    const stripe = new Stripe(KEY)
+    event = stripe.webhooks.constructEvent(req.body as Buffer, req.headers['stripe-signature'] as string, SECRET)
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message }); return
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Stripe = (await import('stripe' as any)).default
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stripe = new (Stripe as any)(STRIPE_SECRET_KEY)
-    const sig = req.headers['stripe-signature'] as string
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const event = (stripe as any).webhooks.constructEvent(req.body as Buffer, sig, STRIPE_WEBHOOK_SECRET)
-
-    const { db } = await import('./db')
+    const { db }           = await import('./db')
     const { subscriptions } = await import('./db/schema')
-    const { eq } = await import('drizzle-orm')
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = event.data.object as any
+    const { eq }           = await import('drizzle-orm')
+    const data = event.data.object as unknown as Record<string, unknown>
 
     if (event.type === 'checkout.session.completed') {
-      const meta = data.metadata ?? {}
-      const userId = meta.user_id as string
+      const meta   = (data.metadata ?? {}) as Record<string, string>
+      const userId = meta.user_id
       if (userId) {
         const existing = await db.select().from(subscriptions).where(eq(subscriptions.user_id, userId)).limit(1)
+        const now       = new Date().toISOString()
+        const billing   = meta.billing ?? 'monthly'
+        const periodEnd = new Date(Date.now() + (billing === 'annual' ? 365 : 30) * 86_400_000).toISOString()
+        const patch = {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          plan: (meta.plan ?? 'pro') as any,
+          status: 'active' as const,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          billing_cycle: billing as any,
+          stripe_customer_id:     data.customer as string,
+          stripe_subscription_id: data.subscription as string,
+          current_period_start:   now,
+          current_period_end:     periodEnd,
+        }
         if (existing.length > 0) {
-          await db.update(subscriptions).set({
-            plan: meta.plan ?? 'pro',
-            status: 'active',
-            stripe_customer_id: data.customer,
-            stripe_subscription_id: data.subscription,
-          }).where(eq(subscriptions.user_id, userId))
+          await db.update(subscriptions).set(patch).where(eq(subscriptions.user_id, userId))
         } else {
-          await db.insert(subscriptions).values({
-            user_id: userId,
-            plan: meta.plan ?? 'pro',
-            status: 'active',
-            billing_cycle: meta.billing ?? 'monthly',
-            stripe_customer_id: data.customer,
-            stripe_subscription_id: data.subscription,
-          })
+          await db.insert(subscriptions).values({ user_id: userId, ...patch })
         }
       }
     } else if (event.type === 'customer.subscription.updated') {
-      const subId = data.id as string
       const status = data.status as string
       await db.update(subscriptions).set({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         status: status as any,
-        current_period_start: new Date(data.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(data.current_period_end * 1000).toISOString(),
-      }).where(eq(subscriptions.stripe_subscription_id, subId))
+        current_period_start: new Date((data.current_period_start as number) * 1000).toISOString(),
+        current_period_end:   new Date((data.current_period_end   as number) * 1000).toISOString(),
+      }).where(eq(subscriptions.stripe_subscription_id, data.id as string))
     } else if (event.type === 'customer.subscription.deleted') {
-      const subId = data.id as string
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await db.update(subscriptions).set({ status: 'canceled', plan: 'free' as any }).where(eq(subscriptions.stripe_subscription_id, subId))
+      await db.update(subscriptions).set({ status: 'canceled', plan: 'free' as any })
+        .where(eq(subscriptions.stripe_subscription_id, data.id as string))
     } else if (event.type === 'invoice.payment_failed') {
-      const customerId = data.customer as string
-      await db.update(subscriptions).set({ status: 'past_due' }).where(eq(subscriptions.stripe_customer_id, customerId))
+      await db.update(subscriptions).set({ status: 'past_due' })
+        .where(eq(subscriptions.stripe_customer_id, data.customer as string))
     }
 
     res.json({ received: true })
   } catch (err) {
     console.error('[Stripe Webhook]', err)
-    res.status(400).json({ error: (err as Error).message })
+    res.status(500).json({ error: 'Webhook processing failed' })
+  }
+})
+
+// ─── Razorpay webhook — POST /api/webhooks/razorpay ──────────────────────────
+// Register this URL in Razorpay dashboard → Settings → Webhooks
+// Events: subscription.activated | subscription.charged | subscription.cancelled | payment.failed
+app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig     = req.headers['x-razorpay-signature'] as string | undefined
+  const rawBody = (req.body as Buffer).toString('utf-8')
+
+  if (!process.env.RAZORPAY_WEBHOOK_SECRET) { res.status(200).json({ received: true }); return }
+  if (!sig || !verifyWebhookSignature(rawBody, sig)) {
+    res.status(400).json({ error: 'Invalid signature' }); return
+  }
+
+  try {
+    const { db }            = await import('./db')
+    const { subscriptions } = await import('./db/schema')
+    const { eq }            = await import('drizzle-orm')
+
+    const event = JSON.parse(rawBody) as { event: string; payload: Record<string, Record<string, Record<string, unknown>>> }
+    const sub   = (event.payload?.subscription?.entity ?? {}) as Record<string, unknown>
+    const subId = sub.id as string | undefined
+
+    if (event.event === 'subscription.activated' || event.event === 'subscription.charged') {
+      if (subId) {
+        const periodEnd = new Date(Date.now() + 30 * 86_400_000).toISOString()
+        await db.update(subscriptions).set({
+          status:             'active',
+          current_period_end: periodEnd,
+        }).where(eq(subscriptions.razorpay_subscription_id, subId))
+      }
+    } else if (event.event === 'subscription.cancelled' || event.event === 'subscription.completed') {
+      if (subId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await db.update(subscriptions).set({ status: 'canceled', plan: 'free' as any })
+          .where(eq(subscriptions.razorpay_subscription_id, subId))
+      }
+    } else if (event.event === 'payment.failed') {
+      if (subId) {
+        await db.update(subscriptions).set({ status: 'past_due' })
+          .where(eq(subscriptions.razorpay_subscription_id, subId))
+      }
+    }
+
+    res.json({ received: true })
+  } catch (err) {
+    console.error('[Razorpay Webhook]', err)
+    res.status(500).json({ error: 'Webhook processing failed' })
   }
 })
 
