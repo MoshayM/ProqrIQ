@@ -45,7 +45,10 @@ app.use(cors({
 }))
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'))
 
-// ─── Stripe webhook (raw body needed — must come BEFORE json parser) ──────────
+// ─── Stripe webhook (raw body needed — must come BEFORE json parser) ─────────
+// Canonical webhook URL to configure in Stripe dashboard: POST /api/webhooks/stripe
+// Events handled: checkout.session.completed, customer.subscription.updated,
+//                 customer.subscription.deleted, invoice.payment_failed
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
   const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
@@ -120,11 +123,6 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 })
 
 // ─── Body parsing ─────────────────────────────────────────────────────────────
-// Capture raw body for Stripe webhook signature verification (subscription router)
-app.use('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req: Request, _res: Response, next: NextFunction) => {
-  ;(req as unknown as { rawBody: Buffer }).rawBody = req.body as Buffer
-  next()
-})
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 
