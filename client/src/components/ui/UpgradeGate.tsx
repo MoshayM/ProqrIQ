@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Lock, Zap } from 'lucide-react'
 import { useSubscription } from '../../hooks/useSubscription'
+import { useAuth } from '../../hooks/useAuth'
 import { Button } from './button'
 
 interface UpgradeGateProps {
@@ -11,10 +12,18 @@ interface UpgradeGateProps {
 }
 
 const PLAN_HIERARCHY: Record<string, number> = { free: 0, pro: 1, organization: 2 }
+const BYPASS_ROLES = ['admin', 'ceo', 'developer', 'owner']
 
 export function UpgradeGate({ requiredPlan, feature, children }: UpgradeGateProps) {
-  const { plan } = useSubscription()
+  const { user } = useAuth()
+  const { plan, isLoading } = useSubscription()
   const navigate = useNavigate()
+
+  // Admin/developer/ceo/owner always pass — no plan check needed
+  if (user && BYPASS_ROLES.includes(user.role)) return <>{children}</>
+
+  // While subscription is loading, don't flash the lock screen
+  if (isLoading) return <>{children}</>
 
   const hasAccess = (PLAN_HIERARCHY[plan] ?? 0) >= (PLAN_HIERARCHY[requiredPlan] ?? 0)
   if (hasAccess) return <>{children}</>
