@@ -54,7 +54,9 @@ function ollama(model: string): RouteResult {
 
 const DEFAULTS: Record<AITask, RouteResult> = {
   costing:            { provider: 'anthropic', model: 'claude-sonnet-4-5' },
-  bulk_costing:       ollama(OLLAMA_MODEL),
+  // When Ollama is unavailable, fall back to Sonnet (not Haiku) — Haiku scores ~62% which is
+  // below the 70% confidence gate, so bulk items would always return needs_clarification.
+  bulk_costing:       OLLAMA_ENABLED ? { provider: 'ollama', model: OLLAMA_MODEL } : { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   cad_costing:        { provider: 'anthropic', model: 'claude-sonnet-4-5' },
   kb_summary:         ollama(OLLAMA_FAST),
   supplier_suggest:   ollama(OLLAMA_FAST),
