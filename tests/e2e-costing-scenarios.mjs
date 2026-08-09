@@ -472,13 +472,16 @@ Delivery: 4 weeks from order`,
     ok(`Extracted ${extractResult.length} supplier quote lines`)
 
     // Compare supplier quote to our should-cost
-    const comparison = await post('/suppliers/compare', {
+    const compData = await post('/suppliers/compare', {
       quotation_id:      s1.quoteId,
       supplier_quote_id: sq.id,
     })
-    ok(`Comparison complete: gap = €${comparison.total_gap_eur?.toFixed(2)} (${comparison.divergence_pct?.toFixed(1)}%)`)
-    log(`  Material gap: €${comparison.material_gap_eur?.toFixed(2) ?? 'N/A'}`)
-    log(`  Manufacturing gap: €${comparison.manufacturing_gap_eur?.toFixed(2) ?? 'N/A'}`)
+    const compResult = compData.comparison
+    const matGap  = compResult?.by_category?.find(c => c.category === 'material')?.delta_eur
+    const mfgGap  = compResult?.by_category?.find(c => c.category === 'manufacturing')?.delta_eur
+    ok(`Comparison complete: gap = €${compResult?.total_gap_eur?.toFixed(2)} (divergence: ${compResult?.divergence_flag ? 'yes' : 'no'})`)
+    log(`  Material gap: €${matGap?.toFixed(2) ?? 'N/A'}`)
+    log(`  Manufacturing gap: €${mfgGap?.toFixed(2) ?? 'N/A'}`)
 
     // Generate negotiation report
     const negotiation = await post('/suppliers/negotiate', {
@@ -486,10 +489,10 @@ Delivery: 4 weeks from order`,
       supplier_quote_id: sq.id,
     })
     ok(`Negotiation report generated`)
-    log(`  Target ask: €${negotiation.target_price_eur?.toFixed(2) ?? 'N/A'}`)
+    log(`  Target ask: €${negotiation.recommended_target_eur?.toFixed(2) ?? 'N/A'}`)
     log(`  Key talking points: ${negotiation.talking_points?.length ?? 0}`)
 
-    return { supplierId: supplier.id, sqId: sq.id, comparison, negotiation }
+    return { supplierId: supplier.id, sqId: sq.id, comparison: compResult, negotiation }
   } catch (err) {
     fail('S5 failed', err)
     return null
@@ -546,17 +549,18 @@ Lead time: 6 weeks`,
     })
     ok(`Extracted ${extractResult.length} supplier quote lines`)
 
-    const comparison = await post('/suppliers/compare', {
+    const compData = await post('/suppliers/compare', {
       quotation_id:      s2.quoteId,
       supplier_quote_id: sq.id,
     })
-    ok(`Comparison complete: gap = €${comparison.total_gap_eur?.toFixed(2)} (${comparison.divergence_pct?.toFixed(1)}%)`)
+    const compResult = compData.comparison
+    ok(`Comparison complete: gap = €${compResult?.total_gap_eur?.toFixed(2)} (divergence: ${compResult?.divergence_flag ? 'yes' : 'no'})`)
 
     const negotiation = await post('/suppliers/negotiate', {
       quotation_id:      s2.quoteId,
       supplier_quote_id: sq.id,
     })
-    ok(`Negotiation report: target ask €${negotiation.target_price_eur?.toFixed(2) ?? 'N/A'}`)
+    ok(`Negotiation report: target ask €${negotiation.recommended_target_eur?.toFixed(2) ?? 'N/A'}`)
 
     return { supplierId: supplier.id, sqId: sq.id }
   } catch (err) {
@@ -928,7 +932,7 @@ async function main() {
   })
 
   if (s5?.comparison) {
-    console.log(`\n  SUPPLIER COMPARISON #1: gap €${s5.comparison.total_gap_eur?.toFixed(2)} | target €${s5.negotiation?.target_price_eur?.toFixed(2)}`)
+    console.log(`\n  SUPPLIER COMPARISON #1: gap €${s5.comparison?.total_gap_eur?.toFixed(2)} | target €${s5.negotiation?.recommended_target_eur?.toFixed(2)}`)
   }
   if (s6) {
     console.log('  SUPPLIER COMPARISON #2: completed')

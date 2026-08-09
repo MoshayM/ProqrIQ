@@ -201,8 +201,13 @@ router.post(
       })
 
       // Fire-and-forget batch runner
-      runBatch(batchId).catch(err => {
+      runBatch(batchId).catch(async err => {
         console.error(`Batch runner failed for ${batchId}:`, err)
+        try {
+          await db.update(costingBatches)
+            .set({ status: 'failed', completed_at: new Date().toISOString() })
+            .where(eq(costingBatches.id, batchId))
+        } catch { /* best-effort */ }
       })
 
       const [batch] = await db.select().from(costingBatches).where(eq(costingBatches.id, batchId))
@@ -367,8 +372,13 @@ router.post('/:id/retry', validate(retrySchema), async (req: Request, res: Respo
     })
 
     // Fire-and-forget batch runner
-    runBatch(req.params.id).catch(err => {
+    runBatch(req.params.id).catch(async err => {
       console.error(`Batch retry runner failed for ${req.params.id}:`, err)
+      try {
+        await db.update(costingBatches)
+          .set({ status: 'failed', completed_at: new Date().toISOString() })
+          .where(eq(costingBatches.id, req.params.id))
+      } catch { /* best-effort */ }
     })
 
     const [updated] = await db.select().from(costingBatches).where(eq(costingBatches.id, req.params.id))

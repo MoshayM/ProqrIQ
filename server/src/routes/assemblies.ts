@@ -684,8 +684,13 @@ router.post('/:id/cost-children', requireRole(['engineer', 'admin', 'developer']
     })
 
     // Fire-and-forget
-    runBatch(batchId).catch(err => {
+    runBatch(batchId).catch(async err => {
       console.error(`Assembly batch runner failed for ${batchId}:`, err)
+      try {
+        await db.update(costingBatches)
+          .set({ status: 'failed', completed_at: new Date().toISOString() })
+          .where(eq(costingBatches.id, batchId))
+      } catch { /* best-effort */ }
     })
 
     const [batch] = await db.select().from(costingBatches).where(eq(costingBatches.id, batchId))
