@@ -215,15 +215,15 @@ async function scenario3_3D_STEP() {
   heading('S3', 'Cost Engineer — 3D STEP: Precision Shaft Housing (CNC Machining, DE)')
   try {
     const part = await createPart({
-      part_name:             'AL6061-T6 Precision Shaft Housing — OD45 × L100mm',
+      part_name:             'AL6061-T6 Precision Shaft Housing — OD45 × L100mm through-bore',
       part_number:           'SHF-E2E-003',
       commodity_type:        'cnc_machining',
-      material_grade:        'Aluminium 6061-T6, 2.7g/cm³, yield 276MPa',
+      material_grade:        'Aluminium 6061-T6, 2.70g/cm³, yield 276MPa — round bar stock Ø50mm × L110mm',
       net_weight_g:          380,
-      dimensions_json:       { l_mm: 100, w_mm: 80, h_mm: 50, diameter_mm: 45, bore_mm: 20, wall_thickness_mm: 12 },
-      surface_finish:        'Ra 1.6µm bore (H7 tolerance), Ra 3.2µm external, Type II anodising 15µm',
-      tolerance_class:       'H7 bore IT7 (±0.012mm), external m6 IT6 shaft fit, parallelism 0.02mm',
-      manufacturing_process: 'CNC turning OD+bore → CNC milling 4×M6 tapped holes → drilling + reaming bore → Type II anodising',
+      dimensions_json:       { l_mm: 100, d_outer_mm: 45, d_inner_mm: 20, bore_through: true, wall_mm: 12, tapped_holes: 4, tap_size_mm: 6, tap_depth_mm: 15 },
+      surface_finish:        'Through-bore Ø20mm Ra 0.8µm (H7 +0.021/0mm), OD Ra 3.2µm, Type II anodise 15µm black on all external faces',
+      tolerance_class:       'Bore H7 IT7 ±0.012mm, OD m6 IT6 shaft-fit, 4×M6 tapped PCD 35mm ±0.05mm, parallelism 0.02mm',
+      manufacturing_process: 'Round bar AL6061-T6 Ø50mm×L110mm → CNC turning OD45mm + through-bore Ø20mm H7 → CNC milling 4×M6×15mm tapped holes on PCD35 → deburr all edges → Type II anodise 15µm black',
     })
     ok(`Created part from 3D STEP data: ${part.id} (${part.part_name})`)
 
@@ -236,10 +236,11 @@ async function scenario3_3D_STEP() {
       part_number:      part.part_number,
       commodity_type:   part.commodity_type,
       material_grade:   part.material_grade,
-      dimensions_json:  { l_mm: 100, w_mm: 80, h_mm: 50, diameter_mm: 45 },
+      dimensions_json:  { l_mm: 100, d_outer_mm: 45, d_inner_mm: 20, bore_through: true, wall_mm: 12, tapped_holes: 4, tap_size_mm: 6, tap_depth_mm: 15 },
       net_weight_g:     380,
       surface_finish:   part.surface_finish,
       tolerance_class:  part.tolerance_class,
+      manufacturing_process: part.manufacturing_process,
     }, { supplier_country: 'DE', supplier_currency: 'EUR', annual_volume: 2000, lot_size: 200,
          lots_per_year: 10, shifts_per_day: 2, annual_production_hours: 3500 })
 
