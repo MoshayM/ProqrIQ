@@ -13,11 +13,11 @@ const createUserSchema = z.object({
   email: z.string().email(),
   full_name: z.string().min(1),
   password: z.string().min(6),
-  role: z.enum(['admin', 'engineer', 'cost_analyst', 'ceo']),
+  role: z.enum(['admin', 'engineer', 'cost_analyst', 'ceo', 'developer']),
 })
 
 const updateUserSchema = z.object({
-  role: z.enum(['admin', 'engineer', 'cost_analyst', 'ceo']).optional(),
+  role: z.enum(['admin', 'engineer', 'cost_analyst', 'ceo', 'developer']).optional(),
   is_active: z.boolean().optional(),
 }).refine(data => Object.keys(data).length > 0, {
   message: 'At least one field required',
