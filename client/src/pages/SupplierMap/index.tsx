@@ -411,13 +411,13 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
         <TierStars rating={supplier.tier_rating} />
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-[#e5e8ef] flex-shrink-0">
+      {/* Tabs — horizontally scrollable so all tabs are reachable on narrow panels */}
+      <div className="flex overflow-x-auto border-b border-[#e5e8ef] flex-shrink-0 scrollbar-none">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={cn('flex items-center gap-1 px-3 py-2.5 text-xs font-medium transition-colors relative flex-1 justify-center', tab === t.key ? 'text-brand' : 'text-[#9aa3b2] hover:text-[#4a5568]')}>
+            className={cn('flex items-center gap-1 px-3 py-2.5 text-xs font-medium transition-colors relative flex-none whitespace-nowrap justify-center', tab === t.key ? 'text-brand' : 'text-[#9aa3b2] hover:text-[#4a5568]')}>
             {t.icon}
-            <span className="hidden sm:inline">{t.label}</span>
+            <span>{t.label}</span>
             {tab === t.key && <motion.div layoutId="supplier-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand rounded-full" transition={{ type: 'spring', stiffness: 380, damping: 35 }} />}
           </button>
         ))}
@@ -872,6 +872,8 @@ export default function SupplierMap() {
   const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null)
   const [filterMinTier, setFilterMinTier] = useState<number>(0)
   const [filterCapability, setFilterCapability] = useState('')
+  const [filterCountry, setFilterCountry] = useState<string[]>([])
+  const [filterOrigin, setFilterOrigin] = useState<string[]>([])
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [showCompareDrawer, setShowCompareDrawer] = useState(false)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
@@ -946,8 +948,14 @@ export default function SupplierMap() {
         return caps.some((c: string) => c.toLowerCase().includes(cap))
       })
     }
+    if (filterCountry.length > 0) {
+      list = list.filter(s => filterCountry.includes(s.country_code))
+    }
+    if (filterOrigin.length > 0) {
+      list = list.filter(s => filterOrigin.includes(s.origin))
+    }
     return list
-  }, [suppliers, searchText, filterMinTier, filterCapability])
+  }, [suppliers, searchText, filterMinTier, filterCapability, filterCountry, filterOrigin])
 
   // Guard: bypass for admin/ceo/developer/owner regardless of plan or plan preview
   const isPrivilegedRole = user && SUPPLIER_BYPASS_ROLES.includes(user.role)
@@ -1073,20 +1081,51 @@ export default function SupplierMap() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#4a5568] mb-1">Capability</label>
-                <input
-                  type="text"
+                <select
                   value={filterCapability}
                   onChange={e => setFilterCapability(e.target.value)}
-                  placeholder="e.g. CNC, casting, welding…"
                   className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
-                />
+                >
+                  <option value="">All capabilities</option>
+                  {COMMODITY_TYPES.map(t => (
+                    <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
               </div>
-              {(filterMinTier > 0 || filterCapability.trim()) && (
+              <div>
+                <label className="block text-xs font-medium text-[#4a5568] mb-1.5">Region / Country</label>
+                <div className="grid grid-cols-2 gap-1">
+                  {Object.entries(COUNTRY_NAMES).map(([code, name]) => (
+                    <button key={code}
+                      onClick={() => setFilterCountry(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code])}
+                      className={cn('flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all',
+                        filterCountry.includes(code) ? 'bg-brand text-white' : 'bg-surface-3 text-[#4a5568] hover:bg-surface-4')}>
+                      <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
+                      <span className="truncate">{name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#4a5568] mb-1.5">Source / Origin</label>
+                <div className="flex flex-col gap-1">
+                  {(['manual', 'ai_suggested', 'external_api'] as const).map(o => (
+                    <button key={o}
+                      onClick={() => setFilterOrigin(prev => prev.includes(o) ? prev.filter(x => x !== o) : [...prev, o])}
+                      className={cn('flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border',
+                        filterOrigin.includes(o) ? 'bg-brand text-white border-brand' : 'bg-surface-2 text-[#4a5568] border-[#e5e8ef] hover:border-brand/50')}>
+                      {o === 'ai_suggested' ? <Zap className="w-3 h-3 flex-shrink-0" /> : o === 'external_api' ? <Globe className="w-3 h-3 flex-shrink-0" /> : <Building2 className="w-3 h-3 flex-shrink-0" />}
+                      {o.replace(/_/g, ' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {(filterMinTier > 0 || filterCapability.trim() || filterCountry.length > 0 || filterOrigin.length > 0) && (
                 <button
-                  onClick={() => { setFilterMinTier(0); setFilterCapability('') }}
+                  onClick={() => { setFilterMinTier(0); setFilterCapability(''); setFilterCountry([]); setFilterOrigin([]) }}
                   className="text-xs text-brand hover:underline"
                 >
-                  Clear filters
+                  Clear all filters
                 </button>
               )}
             </CardContent>

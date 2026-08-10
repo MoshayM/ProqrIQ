@@ -21,7 +21,7 @@ import { Skeleton } from '../../components/ui/skeleton'
 import { ProgressBar } from '../../components/ui/progress-bar'
 import { cn } from '../../lib/utils'
 
-const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner']
+const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner', 'engineer', 'cost_analyst']
 
 interface AiConfig {
   models: {

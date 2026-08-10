@@ -16,6 +16,7 @@ import {
   Bell,
   Brain,
   MapPin,
+  HelpCircle,
   Monitor,
   Menu,
   X,
@@ -48,8 +49,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/bulk',          label: 'Bulk Costing',   icon: Layers },
   { to: '/assemblies',    label: 'Assemblies',     icon: Package },
   { to: '/supplier-map',  label: 'Supplier Map',   icon: MapPin },
-  { to: '/ai-control',    label: 'AI Control',     icon: Brain,    adminOnly: true },
-  { to: '/device-preview',label: 'Device Preview', icon: Monitor,  roles: ['admin', 'developer'] },
+  { to: '/ai-control',    label: 'AI Control',     icon: Brain },
+  { to: '/device-preview',label: 'Device Preview', icon: Monitor,   roles: ['admin', 'developer'] },
 ]
 
 const sidebarVariants = {
@@ -713,16 +714,14 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       {/* ── Keyboard shortcuts modal ─────────────────────────────────────────── */}
       <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
-      {/* ── Floating Device Preview launcher (5D.2) ──────────────────────────── */}
-      {['admin', 'developer'].includes(user?.role ?? '') && (
-        <Link
-          to="/device-preview"
-          className="fixed bottom-6 right-6 z-[9998] w-11 h-11 flex items-center justify-center rounded-full bg-[#1e2d4e] text-white shadow-xl hover:bg-[#2d3e5c] transition-colors"
-          title="Device Preview"
-        >
-          <Monitor className="w-5 h-5" />
-        </Link>
-      )}
+      {/* ── Floating Help & Guide launcher ───────────────────────────────────── */}
+      <Link
+        to="/account?tab=help"
+        className="fixed bottom-6 right-6 z-[9998] w-11 h-11 flex items-center justify-center rounded-full bg-[#1e2d4e] text-white shadow-xl hover:bg-[#2d3e5c] transition-colors"
+        title="Help & Guide"
+      >
+        <HelpCircle className="w-5 h-5" />
+      </Link>
 
       {/* ── Notifications drawer (7B.6) ──────────────────────────────────────── */}
       <NotificationsDrawer open={notifDrawerOpen} onClose={() => setNotifDrawerOpen(false)} />
