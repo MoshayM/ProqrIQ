@@ -79,7 +79,7 @@ const variants = [
       <div style="display:flex;gap:16px;margin-top:8px;">
         <span style="background:rgba(232,92,26,0.18);border:1px solid rgba(232,92,26,0.4);color:#e85c1a;padding:6px 18px;border-radius:20px;font-size:14px;font-weight:600;letter-spacing:0.5px;">AI-POWERED</span>
         <span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);padding:6px 18px;border-radius:20px;font-size:14px;font-weight:600;letter-spacing:0.5px;">ON-PREMISE</span>
-        <span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);padding:6px 18px;border-radius:20px;font-size:14px;font-weight:600;letter-spacing:0.5px;">PEPPERL+FUCHS</span>
+        <span style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);padding:6px 18px;border-radius:20px;font-size:14px;font-weight:600;letter-spacing:0.5px;">B2B MANUFACTURING</span>
       </div>
     </div>`,
   },
