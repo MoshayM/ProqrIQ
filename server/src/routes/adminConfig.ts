@@ -330,7 +330,7 @@ router.delete('/routes/:task', async (req, res) => {
 
 // ─── LLM API Key management ───────────────────────────────────────────────────
 
-const MASKED_PROVIDERS = ['anthropic', 'openai', 'google'] as const
+const MASKED_PROVIDERS = ['anthropic', 'openai', 'google', 'together'] as const
 
 function maskKey(key: string): string {
   if (key.length <= 12) return '***'
@@ -430,6 +430,7 @@ router.post('/llm-keys/:provider/test', async (req, res) => {
       || (provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY
         : provider === 'openai'    ? process.env.OPENAI_API_KEY
         : provider === 'google'    ? process.env.GEMINI_API_KEY
+        : provider === 'together'  ? process.env.TOGETHER_API_KEY
         : undefined)
 
     if (!keyToTest) {
@@ -454,6 +455,25 @@ router.post('/llm-keys/:provider/test', async (req, res) => {
       const genAI = new GoogleGenerativeAI(keyToTest)
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
       await model.generateContent({ contents: [{ role: 'user', parts: [{ text: `${testPrompt.systemPrompt}\n${testPrompt.userPrompt}` }] }] })
+    } else if (provider === 'together') {
+      const togetherResp = await fetch('https://api.together.xyz/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${keyToTest}` },
+        body: JSON.stringify({
+          model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo',
+          max_tokens: 32,
+          temperature: 0,
+          messages: [
+            { role: 'system', content: testPrompt.systemPrompt },
+            { role: 'user', content: testPrompt.userPrompt },
+          ],
+          stream: false,
+        }),
+      })
+      if (!togetherResp.ok) {
+        const text = await togetherResp.text().catch(() => '')
+        throw new Error(`Together AI returned ${togetherResp.status}: ${text || togetherResp.statusText}`)
+      }
     } else {
       res.status(400).json({ success: false, error: 'Unknown provider' }); return
     }

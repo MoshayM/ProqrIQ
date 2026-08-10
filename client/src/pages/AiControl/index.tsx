@@ -91,6 +91,35 @@ const PROVIDER_META = [
     preferDesc: 'Always use Gemini for all requests',
     dotColor: '#3b82f6',
   },
+  {
+    id: 'together',
+    name: 'Together AI (Cloud LLMs)',
+    subtitle: 'Get your key at api.together.ai → Settings → API Keys',
+    models: [
+      'meta-llama/Llama-3.1-70B-Instruct-Turbo',
+      'meta-llama/Llama-3.1-8B-Instruct-Turbo',
+      'Qwen/Qwen2.5-72B-Instruct-Turbo',
+      'Qwen/Qwen2.5-14B-Instruct-Turbo',
+      'Qwen/Qwen2.5-7B-Instruct-Turbo',
+      'meta-llama/Llama-3.2-3B-Instruct-Turbo',
+    ],
+    defaultModel: 'meta-llama/Llama-3.1-70B-Instruct-Turbo',
+    placeholder: 'your-together-api-key...',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor">
+        <circle cx="12" cy="4"  r="2.5" fill="currentColor" stroke="none"/>
+        <circle cx="4"  cy="18" r="2.5" fill="currentColor" stroke="none"/>
+        <circle cx="20" cy="18" r="2.5" fill="currentColor" stroke="none"/>
+        <line x1="12" y1="6.5"  x2="5"    y2="16"   strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="12" y1="6.5"  x2="19"   y2="16"   strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="6.5" y1="18"  x2="17.5" y2="18"   strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+    iconBg: 'bg-sky-100 text-sky-700',
+    preferLabel: 'Together AI (Llama)',
+    preferDesc: 'Use Together AI cloud LLMs — cost-effective for all tasks',
+    dotColor: '#0ea5e9',
+  },
 ] as const
 
 interface AiUsage {
@@ -118,8 +147,14 @@ const AVAILABLE_MODELS = [
   { id: 'qwen2.5:14b',                label: 'Qwen 2.5 14B',      tier: 'Ollama — balanced', color: 'text-violet-600' },
   { id: 'qwen2.5:72b',                label: 'Qwen 2.5 72B',      tier: 'Ollama — capable', color: 'text-violet-700' },
   { id: 'llama3.1:8b',                label: 'Llama 3.1 8B',      tier: 'Ollama — fast',   color: 'text-violet-600' },
-  { id: 'llama3.2:3b',                label: 'Llama 3.2 3B',      tier: 'Ollama — ultra-fast', color: 'text-violet-500' },
-  { id: 'gemma2:9b',                  label: 'Gemma 2 9B',        tier: 'Ollama — efficient', color: 'text-violet-600' },
+  { id: 'llama3.2:3b',                                    label: 'Llama 3.2 3B',           tier: 'Ollama — ultra-fast',    color: 'text-violet-500' },
+  { id: 'gemma2:9b',                                      label: 'Gemma 2 9B',             tier: 'Ollama — efficient',     color: 'text-violet-600' },
+  { id: 'meta-llama/Llama-3.1-70B-Instruct-Turbo',        label: 'Llama 3.1 70B',          tier: 'Together — quality',     color: 'text-sky-700' },
+  { id: 'meta-llama/Llama-3.1-8B-Instruct-Turbo',         label: 'Llama 3.1 8B',           tier: 'Together — fast & cheap',color: 'text-sky-600' },
+  { id: 'Qwen/Qwen2.5-72B-Instruct-Turbo',                label: 'Qwen 2.5 72B',           tier: 'Together — capable',     color: 'text-sky-700' },
+  { id: 'Qwen/Qwen2.5-14B-Instruct-Turbo',                label: 'Qwen 2.5 14B',           tier: 'Together — balanced',    color: 'text-sky-600' },
+  { id: 'Qwen/Qwen2.5-7B-Instruct-Turbo',                 label: 'Qwen 2.5 7B',            tier: 'Together — fast',        color: 'text-sky-500' },
+  { id: 'meta-llama/Llama-3.2-3B-Instruct-Turbo',         label: 'Llama 3.2 3B',           tier: 'Together — ultra-fast',  color: 'text-sky-500' },
 ]
 
 const TASK_LABELS: Record<string, string> = {
@@ -956,14 +991,40 @@ function AiControlInner() {
       {/* Live Route Overrides (DB-backed) */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
-              <Route className="w-4 h-4 text-purple-600" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
+                <Route className="w-4 h-4 text-purple-600" />
+              </div>
+              <div>
+                <CardTitle>Live Route Overrides</CardTitle>
+                <p className="text-xs text-[#9aa3b2] mt-0.5">Per-task provider/model overrides — takes effect immediately, no redeploy</p>
+              </div>
             </div>
-            <div>
-              <CardTitle>Live Route Overrides</CardTitle>
-              <p className="text-xs text-[#9aa3b2] mt-0.5">Per-task provider/model overrides — takes effect immediately, no redeploy</p>
-            </div>
+            <button
+              onClick={async () => {
+                const SMART: Array<{ task: string; provider: string; model: string }> = [
+                  { task: 'costing',            provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                  { task: 'bulk_costing',       provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                  { task: 'cad_costing',        provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                  { task: 'supplier_recommend', provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                  { task: 'negotiation',        provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                  { task: 'extraction',         provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                  { task: 'kb_summary',         provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                  { task: 'supplier_suggest',   provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                  { task: 'clarification',      provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                  { task: 'generic',            provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                ]
+                try {
+                  await Promise.all(SMART.map(r => setRouteMut.mutateAsync(r)))
+                  toast.success('Smart defaults applied — 70B for quality tasks, 8B for fast tasks')
+                } catch { toast.error('Failed to apply smart defaults') }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-200 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors flex-shrink-0"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Smart Defaults (Together AI)
+            </button>
           </div>
         </CardHeader>
         <CardContent>
@@ -1020,10 +1081,12 @@ function AiControlInner() {
                           'ollama/llama3.1:8b',
                           'ollama/llama3.2:3b',
                           'ollama/gemma2:9b',
-                          'together/qwen2.5:14b',
-                          'together/qwen2.5:7b',
-                          'together/llama3.1:70b',
-                          'together/llama3.1:8b',
+                          'together/meta-llama/Llama-3.1-70B-Instruct-Turbo',
+                          'together/meta-llama/Llama-3.1-8B-Instruct-Turbo',
+                          'together/Qwen/Qwen2.5-72B-Instruct-Turbo',
+                          'together/Qwen/Qwen2.5-14B-Instruct-Turbo',
+                          'together/Qwen/Qwen2.5-7B-Instruct-Turbo',
+                          'together/meta-llama/Llama-3.2-3B-Instruct-Turbo',
                         ].map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
                         ))}

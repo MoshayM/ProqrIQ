@@ -274,7 +274,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     // Auto-recover: if the batch has been processing for >25 min, the Vercel
     // function that ran the runner has been killed. Fail stuck items and close.
     if (batch.status === 'processing') {
-      const ageMs = Date.now() - new Date(batch.created_at).getTime()
+      const ageMs = Date.now() - new Date(batch.created_at ?? 0).getTime()
       if (ageMs > 25 * 60 * 1000) {
         const IN_FLIGHT = ['queued', 'analysing', 'searching_kb', 'estimating', 'processing'] as any[]
         await db.update(batchItems)

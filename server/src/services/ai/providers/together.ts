@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequest, AIResponse } from './base'
+import { getStoredKey } from '../keyStore'
 
 // Ollama-style model name → Together AI hosted model name
 const MODEL_MAP: Record<string, string> = {
@@ -22,11 +23,11 @@ export class TogetherProvider implements AIProvider {
   displayName = 'Together AI (Cloud LLMs)'
 
   isAvailable(): boolean {
-    return !!process.env.TOGETHER_API_KEY
+    return !!(getStoredKey('together') || process.env.TOGETHER_API_KEY)
   }
 
   async complete(req: AIRequest): Promise<AIResponse> {
-    const key  = process.env.TOGETHER_API_KEY
+    const key = getStoredKey('together') || process.env.TOGETHER_API_KEY
     if (!key) throw new Error('TOGETHER_API_KEY not set')
 
     const model = toTogetherModel(req.model)
