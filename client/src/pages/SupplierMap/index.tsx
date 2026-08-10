@@ -706,41 +706,6 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
           )}
         </div>
 
-        {/* Company Profile */}
-        {(supplier.founded_year || supplier.company_size || supplier.annual_revenue_usd || supplier.licenses) && (
-          <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2">
-            <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide">Company Profile</p>
-            {supplier.founded_year && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#9aa3b2]">Founded</span>
-                <span className="text-xs font-medium text-[#0f1729]">{companyAgeFromYear(supplier.founded_year)}</span>
-              </div>
-            )}
-            {supplier.company_size && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#9aa3b2]">Company size</span>
-                <span className="text-xs font-medium text-[#0f1729]">{supplier.company_size} employees</span>
-              </div>
-            )}
-            {supplier.annual_revenue_usd && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#9aa3b2]">Annual revenue</span>
-                <span className="text-xs font-medium text-[#0f1729]">{formatRevenue(supplier.annual_revenue_usd)}</span>
-              </div>
-            )}
-            {supplier.licenses && (
-              <div className="space-y-1">
-                <p className="text-[10px] text-[#9aa3b2]">Licenses / Certifications</p>
-                <div className="flex flex-wrap gap-1">
-                  {supplier.licenses.split(',').map(l => l.trim()).filter(Boolean).map(l => (
-                    <span key={l} className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium border border-green-200">{l}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Company profile */}
         {(supplier.founded_year || supplier.company_size || supplier.annual_revenue_usd || supplier.licenses) && (
           <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2">
