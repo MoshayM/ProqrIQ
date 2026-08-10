@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── 1. TypeScript type-check ──────────────────────────────────────────────
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --project client/tsconfig.json --noEmit
+      - run: npx tsc --project server/tsconfig.json --noEmit
+
+  # ─── 2. Client production build ───────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace=client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+          retention-days: 3
+
+  # ─── 3. SCA — Software Composition Analysis ───────────────────────────────
+  sca:
+    name: SCA (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # Full audit report (informational — never blocks the pipeline)
+      - name: Full audit report
+        run: npm audit --audit-level=none 2>&1 | tee npm-audit-full.txt || true
+
+      # Production-only audit — fails pipeline on CRITICAL vulns only
+      # Dev-only vulns (vite, brace-expansion, esbuild) are excluded via --omit=dev
+      - name: Production audit (fail on critical)
+        run: npm audit --omit=dev --audit-level=critical
+
+      # High-severity production audit — informational, uploads as artifact
+      - name: Production audit (high — informational)
+        run: npm audit --omit=dev --audit-level=high 2>&1 | tee npm-audit-prod.txt || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-reports
+          path: |
+            npm-audit-full.txt
+            npm-audit-prod.txt
+          retention-days: 14
+
+  # ─── 4. OWASP Security Tests ──────────────────────────────────────────────
+  security-tests:
+    name: OWASP Security Tests
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      PORT: 3099
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-jwt-secret-32chars-min' }}
+      RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID || 'rzp_test_ci_placeholder' }}
+      RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET || 'ci_test_razorpay_secret' }}
+      RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET || 'ci_webhook_secret_placeholder' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+
+      # Start API server (webServer in playwright.config handles this too,
+      # but we seed BEFORE tests run so we need the server up first)
+      - name: Start API server
+        run: npx tsx server/src/index.ts &
+        shell: bash
+
+      - name: Wait for server to be healthy
+        run: |
+          for i in {1..30}; do
+            curl -sf http://localhost:3099/health && echo "Server ready" && break
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+        shell: bash
+
+      - name: Seed test database
+        run: npx tsx server/src/db/seed.ts
+        shell: bash
+
+      # Run OWASP tests with reuseExistingServer so Playwright picks up
+      # the already-running server instead of starting a new one
+      - name: Run OWASP security tests
+        run: npx playwright test tests/owasp-security.spec.ts --reporter=list
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owasp-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

@@ -1,0 +1,53 @@
+name: SAST (CodeQL)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  schedule:
+    # Weekly Monday 06:00 UTC — catches newly published CVEs against existing code
+    - cron: '0 6 * * 1'
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write   # required to upload SARIF results to GitHub Security tab
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Query suites:
+          #   security-extended — OWASP top 10 + extended security queries
+          #   security-and-quality — security + code quality (more noise)
+          queries: security-extended
+          # Exclude test files and generated code from analysis scope
+          config: |
+            paths-ignore:
+              - tests/**
+              - playwright-report/**
+              - test-results/**
+              - client/dist/**
+              - server/dist/**
+              - node_modules/**
+
+      # CodeQL auto-builds JS/TS (no compilation step needed)
+      - uses: github/codeql-action/autobuild@v3
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+          # Upload results to GitHub Security tab → Code scanning alerts
+          upload: true

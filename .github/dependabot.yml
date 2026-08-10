@@ -1,0 +1,59 @@
+version: 2
+
+updates:
+  # ─── npm (monorepo root + all workspaces) ─────────────────────────────────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    # Group minor/patch updates to reduce PR noise
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+      dev-minor-patch:
+        dependency-type: development
+        update-types: [minor, patch]
+    # Always open individual PRs for major updates and security advisories
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - automated
+    commit-message:
+      prefix: "chore(deps)"
+    # Ignore packages that require manual major upgrades
+    ignore:
+      # Drizzle ORM — major versions require schema migration review
+      - dependency-name: drizzle-orm
+        update-types: [version-update:semver-major]
+      - dependency-name: drizzle-kit
+        update-types: [version-update:semver-major]
+      # React — major versions need UI regression testing
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+      # Vite — major versions need build config review
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
+
+  # ─── GitHub Actions ────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: UTC
+    groups:
+      actions-patch:
+        update-types: [minor, patch]
+    labels:
+      - dependencies
+      - github-actions
+      - automated
+    commit-message:
+      prefix: "chore(actions)"
