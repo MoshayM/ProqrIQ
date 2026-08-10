@@ -37,7 +37,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build --workspace=client
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: client-dist
           path: client/dist
@@ -68,7 +68,7 @@ jobs:
       - name: Production audit (high — informational)
         run: npm audit --omit=dev --audit-level=high 2>&1 | tee npm-audit-prod.txt || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: npm-audit-reports
@@ -121,7 +121,7 @@ jobs:
       - name: Run OWASP security tests
         run: npx playwright test tests/owasp-security.spec.ts --reporter=list
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: owasp-test-results
