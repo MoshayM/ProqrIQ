@@ -12,8 +12,9 @@ data/uploads/kb/*
 !data/uploads/drawings/.gitkeep
 !data/uploads/kb/.gitkeep
 
-# Local reference documents
+# Local reference documents and branding assets
 ProqrIQ_Development_History.html
+branding/*.png
 
 # Sensitive files
 credentials.txt
