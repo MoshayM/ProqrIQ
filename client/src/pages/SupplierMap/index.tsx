@@ -6,7 +6,9 @@ import {
   MapPin, Search, Loader2, Building2, Globe, TrendingDown, Plus,
   Star, ChevronRight, X, Upload, BarChart3, MessageSquare, RefreshCw,
   CheckCircle, Zap, AlertTriangle, Users, Trash2, Filter,
+  Maximize2, Minimize2, Layers, MousePointer2, ScanLine,
 } from 'lucide-react'
+import type { TileStyle } from './MapView'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts'
 import { api } from '../../lib/api'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
@@ -281,10 +283,12 @@ function AddQuoteModal({ supplierId, onClose }: {
 
 // ─── RIGHT PANEL ─────────────────────────────────────────────────────────────
 
-function SupplierDetailPanel({ supplier, quotationId, onClose }: {
+function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggleExpand }: {
   supplier: Supplier
   quotationId: string | null
   onClose: () => void
+  expanded: boolean
+  onToggleExpand: () => void
 }) {
   const qc = useQueryClient()
   const [tab, setTab] = useState<RightPanelTab>('info')
@@ -365,13 +369,18 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
     { key: 'negotiate', label: 'Negotiate', icon: <MessageSquare className="w-3.5 h-3.5" /> },
   ]
 
-  return (
+  const panelContent = (
     <motion.div
-      initial={{ opacity: 0, x: 16 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 16 }}
+      initial={{ opacity: 0, x: expanded ? 0 : 16, scale: expanded ? 0.98 : 1 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: expanded ? 0 : 16 }}
       transition={{ duration: 0.25 }}
-      className="h-full flex flex-col bg-white rounded-2xl border border-[#e5e8ef] shadow-sm overflow-hidden"
+      className={cn(
+        'flex flex-col bg-white border border-[#e5e8ef] shadow-sm overflow-hidden',
+        expanded
+          ? 'rounded-2xl w-full max-w-5xl max-h-[90vh] mx-auto shadow-2xl'
+          : 'h-full rounded-2xl',
+      )}
     >
       {/* Header */}
       <div className="p-4 border-b border-[#e5e8ef] flex-shrink-0">
@@ -387,6 +396,13 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
             <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium', supplier.origin === 'ai_suggested' ? 'bg-purple-50 text-purple-700' : supplier.origin === 'external_api' ? 'bg-blue-50 text-blue-700' : 'bg-[#f1f3f7] text-[#4a5568]')}>
               {supplier.origin.replace(/_/g, ' ')}
             </span>
+            <button
+              onClick={onToggleExpand}
+              title={expanded ? 'Collapse' : 'Expand to full view'}
+              className="p-1 rounded-md hover:bg-surface-3 text-[#9aa3b2] hover:text-brand transition-colors"
+            >
+              {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
             <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-3 text-[#9aa3b2]">
               <X className="w-3.5 h-3.5" />
             </button>
@@ -676,6 +692,24 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
       )}
     </motion.div>
   )
+
+  if (expanded) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        onClick={(e) => { if (e.target === e.currentTarget) onToggleExpand() }}
+      >
+        <div className="w-full max-w-5xl max-h-[90vh] flex flex-col">
+          {panelContent}
+        </div>
+      </motion.div>
+    )
+  }
+
+  return panelContent
 }
 
 // ─── SUPPLIER CARD ────────────────────────────────────────────────────────────
@@ -841,6 +875,22 @@ export default function SupplierMap() {
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [showCompareDrawer, setShowCompareDrawer] = useState(false)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+
+  // Map view controls
+  type MapSize = 'sm' | 'md' | 'lg' | 'full'
+  const [mapSize, setMapSize] = useState<MapSize>('md')
+  const [tileStyle, setTileStyle] = useState<TileStyle>('light')
+  const [scrollWheelZoom, setScrollWheelZoom] = useState(false)
+
+  // Supplier detail expand
+  const [detailExpanded, setDetailExpanded] = useState(false)
+
+  const MAP_HEIGHTS: Record<MapSize, string> = {
+    sm:   'h-32',
+    md:   'h-56',
+    lg:   'h-80',
+    full: 'h-56', // overridden by fullscreen overlay
+  }
 
   function toggleCompare(id: string) {
     setCompareIds(prev =>
@@ -1047,11 +1097,72 @@ export default function SupplierMap() {
         <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
           {/* Map */}
           <Card className="overflow-hidden flex-shrink-0">
-            <div className="h-56 relative">
+            {/* Map toolbar */}
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#f1f3f7] bg-surface-2">
+              {/* Tile style */}
+              <div className="flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-[#9aa3b2] mr-1" />
+                {(['light', 'dark', 'satellite'] as TileStyle[]).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setTileStyle(s)}
+                    className={cn(
+                      'px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-all',
+                      tileStyle === s
+                        ? 'bg-brand text-white'
+                        : 'text-[#4a5568] hover:bg-surface-3',
+                    )}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Scroll zoom toggle */}
+                <button
+                  onClick={() => setScrollWheelZoom(v => !v)}
+                  title={scrollWheelZoom ? 'Disable scroll zoom' : 'Enable scroll zoom'}
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-all',
+                    scrollWheelZoom ? 'bg-navy text-white' : 'text-[#9aa3b2] hover:bg-surface-3',
+                  )}
+                >
+                  <MousePointer2 className="w-3 h-3" />
+                  Scroll zoom
+                </button>
+                {/* Size controls */}
+                <div className="flex items-center gap-0.5 border border-[#e5e8ef] rounded-lg overflow-hidden">
+                  {([
+                    { key: 'sm',   label: 'S' },
+                    { key: 'md',   label: 'M' },
+                    { key: 'lg',   label: 'L' },
+                    { key: 'full', label: <Maximize2 className="w-3 h-3" /> },
+                  ] as { key: MapSize; label: React.ReactNode }[]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setMapSize(key)}
+                      className={cn(
+                        'px-2 py-1 text-[10px] font-semibold transition-all leading-none',
+                        mapSize === key
+                          ? 'bg-brand text-white'
+                          : 'bg-white text-[#9aa3b2] hover:bg-surface-2 hover:text-[#4a5568]',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Map area */}
+            <div className={cn('relative transition-all duration-300', MAP_HEIGHTS[mapSize])}>
               <MapErrorBoundary>
-                <Suspense fallback={<div className="h-full bg-surface-2 rounded-xl" />}>
+                <Suspense fallback={<div className="h-full bg-surface-2" />}>
                   <MapView
                     pins={mapPins}
+                    tileStyle={tileStyle}
+                    scrollWheelZoom={scrollWheelZoom}
                     onPinClick={(code) => {
                       const match = filteredSuppliers.find(s => s.country_code === code)
                       if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
@@ -1061,6 +1172,60 @@ export default function SupplierMap() {
               </MapErrorBoundary>
             </div>
           </Card>
+
+          {/* Fullscreen map overlay */}
+          <AnimatePresence>
+            {mapSize === 'full' && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9100] bg-black/60 backdrop-blur-sm flex flex-col"
+              >
+                {/* Fullscreen toolbar */}
+                <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#e5e8ef] flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-[#9aa3b2]" />
+                    {(['light', 'dark', 'satellite'] as TileStyle[]).map(s => (
+                      <button key={s} onClick={() => setTileStyle(s)}
+                        className={cn('px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-all',
+                          tileStyle === s ? 'bg-brand text-white' : 'text-[#4a5568] hover:bg-surface-3')}>
+                        {s}
+                      </button>
+                    ))}
+                    <div className="w-px h-4 bg-[#e5e8ef] mx-1" />
+                    <button onClick={() => setScrollWheelZoom(v => !v)}
+                      className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all',
+                        scrollWheelZoom ? 'bg-navy text-white' : 'bg-surface-2 text-[#4a5568] hover:bg-surface-3')}>
+                      <MousePointer2 className="w-3.5 h-3.5" />
+                      Scroll zoom
+                    </button>
+                    <span className="text-xs text-[#9aa3b2] ml-2">{filteredSuppliers.length} suppliers shown</span>
+                  </div>
+                  <button onClick={() => setMapSize('md')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 text-xs font-medium text-[#4a5568] hover:bg-surface-3 transition-colors">
+                    <Minimize2 className="w-3.5 h-3.5" />
+                    Exit fullscreen
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <MapErrorBoundary>
+                    <Suspense fallback={<div className="h-full bg-surface-2" />}>
+                      <MapView
+                        pins={mapPins}
+                        tileStyle={tileStyle}
+                        scrollWheelZoom={true}
+                        onPinClick={(code) => {
+                          const match = filteredSuppliers.find(s => s.country_code === code)
+                          if (match) { setSelectedSupplier(match === selectedSupplier ? null : match); setMapSize('md') }
+                        }}
+                      />
+                    </Suspense>
+                  </MapErrorBoundary>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Search */}
           <div className="relative flex-shrink-0">
@@ -1111,7 +1276,9 @@ export default function SupplierMap() {
                 key={selectedSupplier.id}
                 supplier={selectedSupplier}
                 quotationId={selectedQuotationId}
-                onClose={() => setSelectedSupplier(null)}
+                onClose={() => { setSelectedSupplier(null); setDetailExpanded(false) }}
+                expanded={detailExpanded}
+                onToggleExpand={() => setDetailExpanded(v => !v)}
               />
             ) : (
               <motion.div

@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from 'react'
 import L from 'leaflet'
 
+export type TileStyle = 'light' | 'dark' | 'satellite'
+
 interface Pin {
   code:     string
   coords:   [number, number]
@@ -10,46 +12,69 @@ interface Pin {
 }
 
 interface MapViewProps {
-  pins:       Pin[]
-  onPinClick: (code: string) => void
+  pins:            Pin[]
+  onPinClick:      (code: string) => void
+  tileStyle?:      TileStyle
+  scrollWheelZoom?: boolean
 }
 
-// Pure-Leaflet map — avoids react-leaflet v5's React 18 incompatibility
-// ("r is not a function" in production Vite builds).
-export default function MapView({ pins, onPinClick }: MapViewProps) {
-  const containerRef  = useRef<HTMLDivElement>(null)
-  const mapRef        = useRef<L.Map | null>(null)
-  const markersRef    = useRef<L.CircleMarker[]>([])
-  const callbackRef   = useRef(onPinClick)
+const TILE_URLS: Record<TileStyle, string> = {
+  light:     'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  dark:      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+}
 
-  // Keep callback ref in sync so the click handlers don't go stale
+// Pure-Leaflet map — avoids react-leaflet v5's React 18 incompatibility.
+export default function MapView({ pins, onPinClick, tileStyle = 'light', scrollWheelZoom = false }: MapViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const mapRef       = useRef<L.Map | null>(null)
+  const markersRef   = useRef<L.CircleMarker[]>([])
+  const tileRef      = useRef<L.TileLayer | null>(null)
+  const callbackRef  = useRef(onPinClick)
+
   useEffect(() => { callbackRef.current = onPinClick }, [onPinClick])
 
-  // Initialise map once on mount
+  // Initialise map once
   useEffect(() => {
     const el = containerRef.current
     if (!el || mapRef.current) return
 
     const map = L.map(el, {
-      center:           [30, 15],
-      zoom:             2,
-      scrollWheelZoom:  false,
+      center:             [30, 15],
+      zoom:               2,
+      scrollWheelZoom:    false,
       attributionControl: false,
-      zoomControl:      true,
+      zoomControl:        true,
     })
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    const tile = L.tileLayer(TILE_URLS.light, {
       attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
     }).addTo(map)
 
-    mapRef.current = map
+    tileRef.current  = tile
+    mapRef.current   = map
 
     return () => {
       map.remove()
-      mapRef.current = null
+      mapRef.current  = null
+      tileRef.current = null
       markersRef.current = []
     }
   }, [])
+
+  // Swap tile layer when style changes
+  useEffect(() => {
+    if (!tileRef.current) return
+    tileRef.current.setUrl(TILE_URLS[tileStyle])
+  }, [tileStyle])
+
+  // Toggle scroll-wheel zoom
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (scrollWheelZoom) map.scrollWheelZoom.enable()
+    else map.scrollWheelZoom.disable()
+  }, [scrollWheelZoom])
 
   // Redraw markers whenever pins change
   useEffect(() => {
@@ -60,20 +85,20 @@ export default function MapView({ pins, onPinClick }: MapViewProps) {
     markersRef.current = []
 
     pins.forEach(pin => {
+      const isSelected = pin.selected
       const marker = L.circleMarker(pin.coords, {
-        radius:      pin.selected ? 14 : 10,
-        fillColor:   pin.selected ? '#e85c1a' : '#1e2d4e',
-        fillOpacity: pin.selected ? 0.9 : 0.75,
-        color:       pin.selected ? '#e85c1a' : '#1e2d4e',
-        weight:      pin.selected ? 2 : 1,
+        radius:      isSelected ? 14 : 9,
+        fillColor:   isSelected ? '#e85c1a' : '#1e2d4e',
+        fillOpacity: isSelected ? 0.95 : 0.72,
+        color:       '#fff',
+        weight:      isSelected ? 2.5 : 1.5,
         interactive: true,
       })
 
-      const tooltipHtml = pin.supplier
-        ? `<div style="font-size:11px;line-height:1.4"><strong>${pin.label}</strong></div>`
-        : `<div style="font-size:11px"><strong>${pin.label}</strong></div>`
-
-      marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -8], opacity: 0.95 })
+      marker.bindTooltip(
+        `<div style="font-size:11px;line-height:1.4"><strong>${pin.label}</strong></div>`,
+        { direction: 'top', offset: [0, -8], opacity: 0.97 }
+      )
       marker.on('click', () => callbackRef.current(pin.code))
       marker.addTo(map)
       markersRef.current.push(marker)
