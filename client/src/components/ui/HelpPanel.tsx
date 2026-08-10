@@ -1,4 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react'
+
+function useIsMobile() {
+  return useSyncExternalStore(
+    cb => { window.addEventListener('resize', cb); return () => window.removeEventListener('resize', cb) },
+    () => window.innerWidth < 1024,
+    () => false,
+  )
+}
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Minus, Bot, Send, User, Loader2, RotateCcw,
@@ -123,6 +131,7 @@ interface HelpPanelProps {
 }
 
 export function HelpPanel({ open, minimized, onClose, onToggleMinimize }: HelpPanelProps) {
+  const isMobile = useIsMobile()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
@@ -190,14 +199,26 @@ export function HelpPanel({ open, minimized, onClose, onToggleMinimize }: HelpPa
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 16, scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-          className="fixed right-6 z-[99999] w-[370px] max-w-[calc(100vw-2rem)] flex flex-col rounded-2xl overflow-hidden"
+          className="fixed z-[99999] flex flex-col rounded-2xl overflow-hidden"
           style={{
-            bottom: 'calc(5.5rem + var(--safe-bottom, 0px))',
-            background: 'rgba(255,255,255,0.94)',
-            backdropFilter: 'blur(28px)',
-            WebkitBackdropFilter: 'blur(28px)',
-            boxShadow: '0 28px 56px rgba(0,0,0,0.16), 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06)',
-            maxHeight: minimized ? 60 : 'min(560px, calc(100dvh - 120px))',
+            ...(isMobile ? {
+              top: 'calc(var(--safe-top, env(safe-area-inset-top, 0px)) + 3.5rem + 8px)',
+              bottom: 'calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 8px)',
+              left: '0.75rem',
+              right: '0.75rem',
+              width: 'auto',
+              maxHeight: minimized ? 60 : 'none',
+            } : {
+              bottom: 'calc(5.5rem + var(--safe-bottom, 0px))',
+              right: '1.5rem',
+              width: '370px',
+              maxWidth: 'calc(100vw - 3rem)',
+              maxHeight: minimized ? 60 : 'min(560px, calc(100dvh - 120px))',
+            }),
+            background: 'rgba(255,255,255,0.97)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: '0 24px 48px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06)',
             transition: 'max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >

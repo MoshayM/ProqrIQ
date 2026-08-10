@@ -241,8 +241,8 @@ function ProviderDot({ provider }: { provider: string }) {
   )
 }
 
-const LABEL_CLS = 'block text-xs font-medium text-[#4a5568] mb-1'
-const INPUT_CLS = 'w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors'
+const LABEL_CLS = 'block text-xs font-semibold text-[#4a5568] mb-1.5 uppercase tracking-wide'
+const INPUT_CLS = 'w-full border border-[#e5e8ef] rounded-lg px-3 py-2.5 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors'
 
 function AccessDenied() {
   const navigate = useNavigate()
@@ -588,22 +588,22 @@ function AiControlInner() {
       className="page-content space-y-6"
     >
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#0f1729]">AI Cost Control</h1>
-          <p className="text-sm text-[#9aa3b2] mt-1">Multi-provider routing, rate limits, and cost tracking</p>
+          <h1 className="text-xl lg:text-2xl font-bold text-[#0f1729]">AI Cost Control</h1>
+          <p className="text-sm text-[#9aa3b2] mt-0.5">Multi-provider routing, rate limits, and cost tracking</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isDirty && (
             <span className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200">
               <AlertTriangle className="w-3.5 h-3.5" />
-              Unsaved changes
+              Unsaved
             </span>
           )}
           <Button variant="ghost" size="sm" onClick={() => resetMut.mutate()} loading={resetMut.isPending}
             iconLeft={<RotateCcw className="w-3.5 h-3.5" />}>Reset</Button>
           <Button variant="primary" size="sm" onClick={() => saveMut.mutate()} loading={saveMut.isPending}
-            disabled={!isDirty} iconLeft={<Save className="w-3.5 h-3.5" />}>Save Changes</Button>
+            disabled={!isDirty} iconLeft={<Save className="w-3.5 h-3.5" />}>Save</Button>
         </div>
       </div>
 
@@ -846,7 +846,7 @@ function AiControlInner() {
                 const selected = (llmPreference?.preferred_provider ?? 'auto') === opt.value
                 return (
                   <label key={opt.value} className={cn(
-                    'flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors',
+                    'flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-colors',
                     selected ? 'border-brand bg-brand/5' : 'border-[#e5e8ef] hover:bg-surface-2',
                     (opt as any).disabled ? 'opacity-50 cursor-not-allowed' : '',
                   )}>
@@ -926,7 +926,7 @@ function AiControlInner() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {[
                 { id: 'anthropic', displayName: 'Anthropic (Claude)',  envVar: 'ANTHROPIC_API_KEY' },
                 { id: 'openai',    displayName: 'OpenAI (GPT)',         envVar: 'OPENAI_API_KEY' },
@@ -1001,7 +1001,7 @@ function AiControlInner() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {[
                 { label: 'Interactive limit (calls/hr)', key: 'interactive_per_hour', min: 1, max: 100,  type: 'rate', help: 'Per-user interactive AI budget' },
                 { label: 'Bulk limit (calls/hr)',        key: 'bulk_per_hour',        min: 1, max: 1000, type: 'rate', help: 'Per-user batch AI budget' },
@@ -1044,17 +1044,17 @@ function AiControlInner() {
       {/* Live Route Overrides (DB-backed) */}
       <Card>
         <CardHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0">
                 <Route className="w-4 h-4 text-purple-600" />
               </div>
               <div>
                 <CardTitle>Live Route Overrides</CardTitle>
-                <p className="text-xs text-[#9aa3b2] mt-0.5">Per-task provider/model overrides — takes effect immediately, no redeploy</p>
+                <p className="text-xs text-[#9aa3b2] mt-0.5">Per-task provider/model overrides — no redeploy needed</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
               <button
                 onClick={async () => {
                   const GROQ_SMART: Array<{ task: string; provider: string; model: string }> = [
@@ -1114,9 +1114,9 @@ function AiControlInner() {
               {(routes ?? []).map((row) => {
                 const provCfg = PROVIDER_COLORS[row.provider]
                 return (
-                  <div key={row.task} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                  <div key={row.task} className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 first:pt-0 last:pb-0">
                     {/* Task node */}
-                    <div className="w-36 flex-shrink-0 bg-surface-2 border border-[#e5e8ef] rounded-lg px-2.5 py-1.5">
+                    <div className="sm:w-36 sm:flex-shrink-0 bg-surface-2 border border-[#e5e8ef] rounded-lg px-2.5 py-1.5">
                       <p className="text-xs font-medium text-[#0f1729] leading-tight">{TASK_LABELS[row.task] ?? row.task}</p>
                       {row.is_overridden && (
                         <span className="text-[10px] text-purple-600 bg-purple-50 px-1 py-0.5 rounded mt-0.5 inline-block leading-none">
@@ -1126,7 +1126,7 @@ function AiControlInner() {
                     </div>
 
                     {/* Arrow with provider dot */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="hidden sm:flex items-center gap-1 flex-shrink-0">
                       <div className="w-6 h-px bg-[#c8cdd8]" />
                       <ProviderDot provider={row.provider} />
                       <div className="w-1 h-px bg-[#c8cdd8]" />

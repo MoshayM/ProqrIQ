@@ -384,11 +384,22 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
           {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
         <Logo size="sm" inverted />
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => setNotifDrawerOpen(true)} className="relative p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-            <Bell className="w-4 h-4 text-white/60" />
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            onClick={() => {
+              if (helpOpen && helpMinimized) { setHelpMinimized(false); return }
+              if (helpOpen) { setHelpMinimized(true); return }
+              setHelpOpen(true); setHelpMinimized(false)
+            }}
+            className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
+            aria-label="Help"
+          >
+            <HelpCircle className="w-[1.125rem] h-[1.125rem]" style={{ color: helpOpen && !helpMinimized ? '#e85c1a' : 'rgba(255,255,255,0.65)' }} />
+          </button>
+          <button onClick={() => setNotifDrawerOpen(true)} className="relative p-2 rounded-lg hover:bg-white/10 transition-colors" aria-label="Notifications">
+            <Bell className="w-[1.125rem] h-[1.125rem] text-white/65" />
             {unread > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] bg-brand text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+              <span className="absolute top-0.5 right-0.5 min-w-[15px] h-[15px] bg-brand text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
                 {unread > 99 ? '99+' : unread}
               </span>
             )}
@@ -766,7 +777,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
         }}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.93 }}
-        className="fixed right-6 z-[100000] w-12 h-12 flex items-center justify-center rounded-full text-white shadow-xl transition-colors bottom-safe-6"
+        className="hidden lg:flex fixed right-6 z-[100000] w-12 h-12 items-center justify-center rounded-full text-white shadow-xl transition-colors bottom-safe-6"
         style={{ background: helpOpen && !helpMinimized ? '#e85c1a' : '#1e2d4e' }}
         title="Help & Guide"
         aria-label="Open help"

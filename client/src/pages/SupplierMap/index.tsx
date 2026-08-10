@@ -1204,6 +1204,7 @@ export default function SupplierMap() {
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [showCompareDrawer, setShowCompareDrawer] = useState(false)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState<'discover' | 'map' | 'detail'>('map')
 
   // Map view controls
   type MapSize = 'sm' | 'md' | 'lg' | 'full'
@@ -1324,32 +1325,45 @@ export default function SupplierMap() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="page-content h-[calc(100vh-4rem)] flex flex-col gap-4"
+      className="page-content h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] flex flex-col gap-3 overflow-hidden"
     >
       {/* Header */}
-      <div className="flex-shrink-0 flex items-center justify-between flex-wrap gap-3">
+      <div className="flex-shrink-0 flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-[#0f1729]">Supplier Discovery</h1>
-          <p className="text-sm text-[#9aa3b2] mt-0.5">Find, manage, and negotiate with suppliers</p>
+          <h1 className="text-xl lg:text-2xl font-bold text-[#0f1729] leading-tight">Supplier Discovery</h1>
+          <p className="text-xs lg:text-sm text-[#9aa3b2] mt-0.5">Find, manage, and negotiate with suppliers</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-[#9aa3b2]">{suppliers.filter(s => s.is_active).length} suppliers</span>
-          {/* Mobile filter toggle */}
+        <span className="text-sm text-[#9aa3b2]">{suppliers.filter(s => s.is_active).length} suppliers</span>
+      </div>
+
+      {/* Mobile panel tabs */}
+      <div className="flex-shrink-0 flex lg:hidden gap-1 bg-white rounded-xl border border-[#e5e8ef] p-1">
+        {([
+          { id: 'discover', label: 'Discover', icon: Zap },
+          { id: 'map',      label: 'Map & List', icon: MapPin },
+          { id: 'detail',   label: 'Detail', icon: Building2 },
+        ] as const).map(tab => (
           <button
-            onClick={() => setMobileFilterOpen(v => !v)}
-            className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-[#e5e8ef] rounded-xl bg-white hover:border-brand/30 transition-colors"
+            key={tab.id}
+            onClick={() => setMobilePanel(tab.id)}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-semibold transition-all',
+              mobilePanel === tab.id
+                ? 'bg-navy text-white shadow-sm'
+                : 'text-[#4a5568] hover:bg-surface-2',
+            )}
           >
-            <Filter className="w-3.5 h-3.5" />
-            Filters
+            <tab.icon className="w-3.5 h-3.5" />
+            <span className="hidden xs:inline">{tab.label}</span>
           </button>
-        </div>
+        ))}
       </div>
 
       {/* Three-panel layout */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-4">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-3">
 
         {/* ── Panel 1: Filter + Discover ── */}
-        <div className={cn('flex-col gap-3 overflow-y-auto', mobileFilterOpen ? 'flex' : 'hidden lg:flex')}>
+        <div className={cn('flex-col gap-3 overflow-y-auto scroll-area', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}>
           <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1375,10 +1389,10 @@ export default function SupplierMap() {
                 <label className="block text-xs font-medium text-[#4a5568] mb-1.5 flex items-center gap-1.5">
                   <Globe className="w-3 h-3" /> Target Countries
                 </label>
-                <div className="grid grid-cols-2 gap-1">
+                <div className="grid grid-cols-3 lg:grid-cols-2 gap-1">
                   {Object.entries(COUNTRY_NAMES).map(([code, name]) => (
                     <button key={code} onClick={() => toggleCountry(code)}
-                      className={cn('flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all',
+                      className={cn('flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all',
                         selectedCountries.includes(code) ? 'bg-brand text-white' : 'bg-surface-3 text-[#4a5568] hover:bg-surface-4')}>
                       <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
                       <span className="truncate">{name}</span>
@@ -1433,11 +1447,11 @@ export default function SupplierMap() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#4a5568] mb-1.5">Region / Country</label>
-                <div className="grid grid-cols-2 gap-1">
+                <div className="grid grid-cols-3 lg:grid-cols-2 gap-1">
                   {Object.entries(COUNTRY_NAMES).map(([code, name]) => (
                     <button key={code}
                       onClick={() => setFilterCountry(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code])}
-                      className={cn('flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all',
+                      className={cn('flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all',
                         filterCountry.includes(code) ? 'bg-brand text-white' : 'bg-surface-3 text-[#4a5568] hover:bg-surface-4')}>
                       <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
                       <span className="truncate">{name}</span>
@@ -1507,7 +1521,7 @@ export default function SupplierMap() {
         </div>
 
         {/* ── Panel 2: Map + Supplier List ── */}
-        <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
+        <div className={cn('flex-col gap-3 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'map' ? 'flex' : 'hidden lg:flex')}>
           {/* Map */}
           <Card className="overflow-hidden flex-shrink-0">
             {/* Map toolbar */}
@@ -1578,7 +1592,10 @@ export default function SupplierMap() {
                     scrollWheelZoom={scrollWheelZoom}
                     onPinClick={(code) => {
                       const match = filteredSuppliers.find(s => s.country_code === code)
-                      if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
+                      if (match) {
+                        setSelectedSupplier(match === selectedSupplier ? null : match)
+                        if (window.innerWidth < 1024) setMobilePanel('detail')
+                      }
                     }}
                   />
                 </Suspense>
@@ -1672,7 +1689,10 @@ export default function SupplierMap() {
                     supplier={s}
                     selected={selectedSupplier?.id === s.id}
                     inCompare={compareIds.includes(s.id)}
-                    onClick={() => setSelectedSupplier(s === selectedSupplier ? null : s)}
+                    onClick={() => {
+                      setSelectedSupplier(s === selectedSupplier ? null : s)
+                      if (window.innerWidth < 1024) setMobilePanel('detail')
+                    }}
                     onCompare={e => { e.stopPropagation(); toggleCompare(s.id) }}
                   />
                 ))}
@@ -1682,7 +1702,7 @@ export default function SupplierMap() {
         </div>
 
         {/* ── Panel 3: Detail ── */}
-        <div className="min-h-0">
+        <div className={cn('min-h-0 overflow-y-auto scroll-area', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}>
           <AnimatePresence mode="wait">
             {selectedSupplier ? (
               <SupplierDetailPanel
@@ -1718,7 +1738,7 @@ export default function SupplierMap() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[8000] flex items-center gap-3 bg-[#1e2d4e] text-white px-5 py-3 rounded-2xl shadow-xl"
+            className="fixed bottom-safe-6 left-2 right-2 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-auto z-[8000] flex items-center gap-2 sm:gap-3 bg-[#1e2d4e] text-white px-4 py-3 rounded-2xl shadow-xl"
           >
             <div className="flex items-center gap-2">
               {compareIds.map(id => {
