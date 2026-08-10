@@ -125,7 +125,7 @@ router.post('/chat', validate(chatSchema), async (req: Request, res: Response) =
     const userPrompt = `${historyText}User: ${message}\n\nAssistant:`
 
     const reply = await completeWithRouter({
-      task: 'generic',
+      task: 'clarification',
       request: {
         systemPrompt: SYSTEM_PROMPT,
         userPrompt,

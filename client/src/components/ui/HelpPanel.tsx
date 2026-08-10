@@ -190,13 +190,13 @@ export function HelpPanel({ open, minimized, onClose, onToggleMinimize }: HelpPa
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 16, scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-          className="fixed bottom-[88px] right-6 z-[9997] w-[370px] flex flex-col rounded-2xl overflow-hidden"
+          className="fixed bottom-[88px] right-6 z-[99999] w-[370px] flex flex-col rounded-2xl overflow-hidden"
           style={{
             background: 'rgba(255,255,255,0.94)',
             backdropFilter: 'blur(28px)',
             WebkitBackdropFilter: 'blur(28px)',
             boxShadow: '0 28px 56px rgba(0,0,0,0.16), 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06)',
-            maxHeight: minimized ? 60 : 560,
+            maxHeight: minimized ? 60 : 'min(560px, calc(100vh - 108px))',
             transition: 'max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >

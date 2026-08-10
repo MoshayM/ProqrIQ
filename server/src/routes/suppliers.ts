@@ -632,7 +632,7 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
 }`
 
     const raw2 = await completeWithRouter({
-      task:    'extraction',
+      task:    'supplier_extraction',
       request: {
         systemPrompt: 'You are a cost engineering expert. Output ONLY valid JSON. No markdown fences. No preamble.',
         userPrompt:   prompt,
@@ -1155,7 +1155,7 @@ The body should be 3-5 short paragraphs, plain text (no HTML), professional and 
 Sign off as: ${userName}\nPepperl+Fuchs\n${userEmail}`
 
     const raw = await completeWithRouter({
-      task: 'generic',
+      task: 'email_compose',
       request: { systemPrompt, userPrompt, maxTokens: 800 },
       userId,
     })

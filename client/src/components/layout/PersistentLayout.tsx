@@ -766,7 +766,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
         }}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.93 }}
-        className="fixed bottom-6 right-6 z-[9998] w-12 h-12 flex items-center justify-center rounded-full text-white shadow-xl transition-colors"
+        className="fixed bottom-6 right-6 z-[100000] w-12 h-12 flex items-center justify-center rounded-full text-white shadow-xl transition-colors"
         style={{ background: helpOpen && !helpMinimized ? '#e85c1a' : '#1e2d4e' }}
         title="Help & Guide"
         aria-label="Open help"

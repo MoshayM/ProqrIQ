@@ -28,6 +28,7 @@ import type {
   AIAssumption,
   AIValueEngineering,
 } from '../../../shared/types/ai'
+import type { SourceTier } from '../../../shared/types/quotation'
 
 // ─── Anthropic client (server-side only) ─────────────────────────────────────
 
@@ -53,14 +54,16 @@ const COMMODITY_TYPES = [
   'other',
 ] as const
 
-// ─── Source-tier validation helper ───────────────────────────────────────────
+// ─── Source-tier coercion helper ─────────────────────────────────────────────
+// Coerce instead of throw: if the AI omits or returns an invalid source_tier,
+// default to tier 5 (AI assumption) so the estimate can still be returned.
 
-function validateSourceTier(tier: unknown, context: string): void {
-  if (typeof tier !== 'number' || tier < 1 || tier > 5 || !Number.isInteger(tier)) {
-    throw new Error(
-      `INVALID_SOURCE_TIER: ${context} has source_tier="${tier}" — must be integer 1–5`,
-    )
+function coerceSourceTier(tier: unknown, context: string): SourceTier {
+  if (typeof tier === 'number' && Number.isInteger(tier) && tier >= 1 && tier <= 5) {
+    return tier as SourceTier
   }
+  console.warn(`[AI] Missing/invalid source_tier="${tier}" for ${context} — defaulting to tier 5 (AI assumption)`)
+  return 5
 }
 
 // Text-based 3D file extensions — sent as text content, not as an image
@@ -132,7 +135,7 @@ ${jsonSchema}`
       request: { systemPrompt, userPrompt, maxTokens: 2048 },
     })
   } else {
-    // Image / PDF: send as base64
+    // Image / PDF: send as base64 — requires a vision-capable provider
     const mimeMap: Record<string, string> = {
       pdf:  'application/pdf',
       png:  'image/png',
@@ -151,8 +154,9 @@ Output ONLY valid JSON with exactly this structure. No markdown fences. No pream
 ${jsonSchema}`
 
     rawText = await completeWithRouter({
-      task:    'cad_costing',
+      task:            'cad_costing',
       userId,
+      requiresVision:  true,
       request: {
         systemPrompt,
         userPrompt,
@@ -383,15 +387,15 @@ Required JSON structure:
   // ── Step 5: Parse JSON ───────────────────────────────────────────────────────
   const aiResult = parseAIJSON<CostEstimateResult & { clarification_questions?: string[] }>(rawText)
 
-  // ── Step 6: Validate source_tier on every line ───────────────────────────────
+  // ── Step 6: Coerce source_tier on every line (invalid → tier 5) ─────────────
   for (const line of aiResult.cost_lines ?? []) {
-    validateSourceTier(line.source_tier, `cost_line[${line.label}]`)
+    line.source_tier = coerceSourceTier(line.source_tier, `cost_line[${line.label}]`)
   }
   for (const step of aiResult.cycle_time_steps ?? []) {
-    validateSourceTier(step.source_tier, `cycle_time_step[${step.step_number}:${step.process_name}]`)
+    step.source_tier = coerceSourceTier(step.source_tier, `cycle_time_step[${step.step_number}:${step.process_name}]`)
   }
   for (const mb of aiResult.material_breakdowns ?? []) {
-    validateSourceTier(mb.source_tier, `material_breakdown[${mb.material_name}]`)
+    mb.source_tier = coerceSourceTier(mb.source_tier, `material_breakdown[${mb.material_name}]`)
   }
 
   // ── Step 7: Confidence gate ──────────────────────────────────────────────────
@@ -663,7 +667,7 @@ Output ONLY valid JSON. No markdown fences. No preamble.
 }`
 
   const rawText = await completeWithRouter({
-    task:    'costing',
+    task:    'assembly_costing',
     userId:  input.user_id ?? 'system',
     quoteId: assembly_quotation_id,
     request: { systemPrompt, userPrompt, maxTokens: 2048 },
@@ -675,12 +679,12 @@ Output ONLY valid JSON. No markdown fences. No preamble.
     assembly_cycle_time_steps: AICycleTimeStep[]
   }>(rawText)
 
-  // Validate source_tier
+  // Coerce source_tier (invalid → tier 5)
   for (const line of aiResult.assembly_cost_lines ?? []) {
-    validateSourceTier(line.source_tier, `assembly_cost_line[${line.label}]`)
+    line.source_tier = coerceSourceTier(line.source_tier, `assembly_cost_line[${line.label}]`)
   }
   for (const step of aiResult.assembly_cycle_time_steps ?? []) {
-    validateSourceTier(step.source_tier, `assembly_cycle_step[${step.step_number}]`)
+    step.source_tier = coerceSourceTier(step.source_tier, `assembly_cycle_step[${step.step_number}]`)
   }
 
   // Persist assembly cost lines
@@ -781,7 +785,7 @@ Question: ${question}
 Answer clearly and specifically using the cost data above.`
 
   const answer = await completeWithRouter({
-    task:    'generic',
+    task:    'clarification',
     userId,
     quoteId: quotationId,
     request: { systemPrompt, userPrompt, maxTokens: 1024 },
@@ -866,7 +870,7 @@ Output ONLY valid JSON. No markdown fences.
 }`
 
   const rawText = await completeWithRouter({
-    task:    'generic',
+    task:    'costing',
     userId,
     quoteId: quotationId,
     request: { systemPrompt, userPrompt, maxTokens: 3000 },
@@ -878,9 +882,9 @@ Output ONLY valid JSON. No markdown fences.
     overall_cost_eur: number
   }>(rawText)
 
-  // Validate source tiers
+  // Coerce source tiers (invalid → tier 5)
   for (const line of aiResult.updated_cost_lines ?? []) {
-    validateSourceTier(line.source_tier, `updated_cost_line[${line.label}]`)
+    line.source_tier = coerceSourceTier(line.source_tier, `updated_cost_line[${line.label}]`)
   }
 
   // Determine next version number

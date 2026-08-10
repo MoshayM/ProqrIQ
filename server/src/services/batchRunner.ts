@@ -294,19 +294,30 @@ export async function runBatch(batchId: string): Promise<void> {
           }
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err)
-          const isRateLimit = (err as { status?: number })?.status === 429
-            || errMsg.toLowerCase().includes('rate limit')
+          const httpStatus = (err as { status?: number })?.status
+          const isRateLimit = httpStatus === 429 || errMsg.toLowerCase().includes('rate limit')
+          const isInvalidJSON = errMsg.startsWith('AI_INVALID_JSON')
+          const isAllFailed = errMsg.toLowerCase().includes('all providers exhausted')
+
           const errCode = isRateLimit
             ? 'AI_RATE_LIMITED'
-            : errMsg.startsWith('INVALID_SOURCE_TIER')
-            ? 'INVALID_SOURCE_TIER'
-            : errMsg.startsWith('AI_INVALID_JSON')
+            : isAllFailed
+            ? 'AI_ALL_PROVIDERS_FAILED'
+            : isInvalidJSON
             ? 'AI_INVALID_JSON'
             : 'COST_ESTIMATION_ERROR'
 
+          const userMessage = isRateLimit
+            ? 'AI rate limit reached — this item will retry on the next run.'
+            : isAllFailed
+            ? 'No AI provider could complete this request. Ask your admin to configure additional providers.'
+            : isInvalidJSON
+            ? 'AI returned an unexpected response for this part. Check the drawing and retry.'
+            : errMsg.slice(0, 500)
+
           await setItemStatus(item.id, 'failed', {
-            error_code: errCode,
-            error_message: errMsg.slice(0, 1000),
+            error_code:    errCode,
+            error_message: userMessage,
           })
           await bumpCounter(batchId, 'failed_items')
         }

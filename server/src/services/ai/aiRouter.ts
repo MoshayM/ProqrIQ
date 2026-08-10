@@ -5,19 +5,25 @@ import { getProvider, activeProviders, estimateCost } from './providers'
 import type { AIRequest, AIResponse } from './providers'
 import { getStoredKey } from './keyStore'
 
+// Providers that can handle image/PDF inputs
+const VISION_PROVIDERS = new Set(['anthropic', 'openai', 'google', 'xai'])
+
 // ─── Task types ───────────────────────────────────────────────────────────────
 
 export type AITask =
-  | 'costing'
-  | 'bulk_costing'
-  | 'cad_costing'
-  | 'kb_summary'
-  | 'supplier_suggest'
+  | 'costing'           // single-part cost estimate
+  | 'bulk_costing'      // batch of independent parts
+  | 'assembly_costing'  // assembly-level operations roll-up
+  | 'cad_costing'       // drawing/CAD file analysis (vision path enabled by requiresVision)
+  | 'kb_summary'        // knowledge-base summarisation
+  | 'supplier_suggest'  // supplier discovery (speed > precision)
   | 'supplier_recommend'
-  | 'negotiation'
-  | 'clarification'
-  | 'extraction'
-  | 'generic'
+  | 'supplier_extraction' // structured data extraction from a supplier quote document
+  | 'negotiation'       // negotiation talking points (quality matters)
+  | 'clarification'     // simple Q&A on an existing quote or help chat
+  | 'extraction'        // generic structured extraction (backward-compat alias)
+  | 'email_compose'     // template-driven outbound email drafting
+  | 'generic'           // untyped fallback — routes to fast tier
 
 export interface RouteResult {
   provider: string
@@ -27,16 +33,19 @@ export interface RouteResult {
 // ─── Default routing table ────────────────────────────────────────────────────
 
 const ENV_OVERRIDES: Partial<Record<AITask, string | undefined>> = {
-  costing:            process.env.AI_ROUTE_COSTING,
-  bulk_costing:       process.env.AI_ROUTE_BULK_COSTING,
-  cad_costing:        process.env.AI_ROUTE_CAD_COSTING,
-  kb_summary:         process.env.AI_ROUTE_KB_SUMMARY,
-  supplier_suggest:   process.env.AI_ROUTE_SUPPLIER_SUGGEST,
-  supplier_recommend: process.env.AI_ROUTE_SUPPLIER_RECOMMEND,
-  negotiation:        process.env.AI_ROUTE_NEGOTIATION,
-  clarification:      process.env.AI_ROUTE_CLARIFICATION,
-  extraction:         process.env.AI_ROUTE_EXTRACTION,
-  generic:            process.env.AI_ROUTE_GENERIC,
+  costing:              process.env.AI_ROUTE_COSTING,
+  bulk_costing:         process.env.AI_ROUTE_BULK_COSTING,
+  assembly_costing:     process.env.AI_ROUTE_ASSEMBLY_COSTING,
+  cad_costing:          process.env.AI_ROUTE_CAD_COSTING,
+  kb_summary:           process.env.AI_ROUTE_KB_SUMMARY,
+  supplier_suggest:     process.env.AI_ROUTE_SUPPLIER_SUGGEST,
+  supplier_recommend:   process.env.AI_ROUTE_SUPPLIER_RECOMMEND,
+  supplier_extraction:  process.env.AI_ROUTE_SUPPLIER_EXTRACTION,
+  negotiation:          process.env.AI_ROUTE_NEGOTIATION,
+  clarification:        process.env.AI_ROUTE_CLARIFICATION,
+  extraction:           process.env.AI_ROUTE_EXTRACTION,
+  email_compose:        process.env.AI_ROUTE_EMAIL_COMPOSE,
+  generic:              process.env.AI_ROUTE_GENERIC,
 }
 
 // Compute routing dynamically so admin-UI key changes + cold-start env vars are always respected.
@@ -46,34 +55,46 @@ function isGroqEnabled(): boolean {
   return !!(getStoredKey('groq') || process.env.GROQ_API_KEY)
 }
 
+// ─── Two routing tiers ────────────────────────────────────────────────────────
+// quality(): accuracy-first. Groq 70B free → Anthropic Sonnet paid.
+//   Use for: costing, extraction, negotiation — tasks where an incorrect answer
+//   costs more than the model call.
+// fast(): cost-first. Groq 8B free → Anthropic Haiku paid.
+//   Use for: discovery, summaries, clarification, email — tasks where speed and
+//   cheapness matter more than maximum accuracy.
+// Vision routing is handled separately via requiresVision + VISION_FALLBACK_MODEL.
+
 function quality(): RouteResult {
   if (isGroqEnabled()) return { provider: 'groq', model: 'llama-3.3-70b-versatile' }
-  return { provider: 'anthropic', model: 'claude-sonnet-4-5' }
+  return { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }
 }
 
-function ollama(model: string): RouteResult {
-  if (process.env.OLLAMA_ENABLED === 'true') return { provider: 'ollama', model }
-  if (isGroqEnabled())                        return { provider: 'groq',   model: 'llama-3.1-8b-instant' }
+function fast(): RouteResult {
+  if (isGroqEnabled()) return { provider: 'groq', model: 'llama-3.1-8b-instant' }
   return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
 }
 
 function getDefault(task: AITask): RouteResult {
-  const ollamaEnabled = process.env.OLLAMA_ENABLED === 'true'
-  const ollamaModel   = process.env.OLLAMA_DEFAULT_MODEL ?? 'qwen2.5:14b'
-  const ollamaFast    = process.env.OLLAMA_FAST_MODEL    ?? 'qwen2.5:7b'
   switch (task) {
-    case 'costing':            return quality()
-    // When Ollama is unavailable, fall back to Sonnet (not Haiku) — Haiku scores ~62% which is
-    // below the 70% confidence gate, so bulk items would always return needs_clarification.
-    case 'bulk_costing':       return ollamaEnabled ? { provider: 'ollama', model: ollamaModel } : quality()
-    case 'cad_costing':        return quality()
-    case 'kb_summary':         return ollama(ollamaFast)
-    case 'supplier_suggest':   return ollama(ollamaFast)
-    case 'supplier_recommend': return quality()
-    case 'negotiation':        return quality()
-    case 'clarification':      return ollama(ollamaFast)
-    case 'extraction':         return ollamaEnabled ? { provider: 'ollama', model: ollamaModel } : quality()
-    case 'generic':            return quality()
+    // ─── Costing — accuracy critical, confidence gate enforced ────────────────
+    case 'costing':             return quality()
+    case 'bulk_costing':        return quality()
+    case 'assembly_costing':    return quality()
+    // cad_costing: quality() for text-mode 3D files; vision override kicks in for images
+    case 'cad_costing':         return quality()
+
+    // ─── Supplier intelligence — extraction and negotiation need quality ───────
+    case 'supplier_extraction': return quality()
+    case 'extraction':          return quality()  // backward-compat alias
+    case 'negotiation':         return quality()
+    case 'supplier_recommend':  return quality()
+
+    // ─── Fast/cheap — speed matters more than peak accuracy ───────────────────
+    case 'supplier_suggest':    return fast()
+    case 'kb_summary':          return fast()
+    case 'clarification':       return fast()
+    case 'email_compose':       return fast()
+    case 'generic':             return fast()     // untyped calls get the cheap model
   }
 }
 
@@ -224,8 +245,9 @@ class AllProvidersExhaustedError extends Error {
 // ─── Per-provider representative fallback model ───────────────────────────────
 // Used when a provider is selected as a fallback and we need a good default model.
 
+// Standard fallback model per provider (used when provider is chosen as a cascade target)
 const PROVIDER_FALLBACK_MODEL: Record<string, string> = {
-  anthropic: 'claude-haiku-4-5-20251001',
+  anthropic: 'claude-sonnet-4-20250514',   // Sonnet for quality fallback cascade
   groq:      'llama-3.3-70b-versatile',
   together:  'meta-llama/Llama-3.1-70B-Instruct-Turbo',
   openai:    'gpt-4o-mini',
@@ -233,6 +255,15 @@ const PROVIDER_FALLBACK_MODEL: Record<string, string> = {
   xai:       'grok-2-1212',
   azure:     process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o-mini',
   ollama:    process.env.OLLAMA_DEFAULT_MODEL    ?? 'qwen2.5:14b',
+}
+
+// Vision-capable model per provider — used when requiresVision=true forces a provider switch.
+// These models are confirmed to support image/PDF inputs.
+const VISION_FALLBACK_MODEL: Record<string, string> = {
+  anthropic: 'claude-sonnet-4-20250514',  // Sonnet supports vision; Haiku does not
+  openai:    'gpt-4o',
+  google:    'gemini-1.5-pro',
+  xai:       'grok-2-vision-1212',
 }
 
 function isBudgetError(err: unknown): boolean {
@@ -311,15 +342,33 @@ async function tryFallbacks(
 }
 
 export async function completeWithRouter(opts: {
-  task:       AITask
-  request:    Omit<AIRequest, 'model'>
-  userId:     string
-  quoteId?:   string
-  batchId?:   string
+  task:            AITask
+  request:         Omit<AIRequest, 'model'>
+  userId:          string
+  quoteId?:        string
+  batchId?:        string
+  requiresVision?: boolean
 }): Promise<string> {
   await checkBudget(opts.userId)
 
-  const route = await getModelForTask(opts.task)
+  let route = await getModelForTask(opts.task)
+
+  // If this request includes an image/PDF and the selected provider can't handle vision,
+  // find the first active vision-capable provider instead of silently dropping the image.
+  if (opts.requiresVision && !VISION_PROVIDERS.has(route.provider)) {
+    const visionRoute = activeProviders()
+      .filter(p => VISION_PROVIDERS.has(p.id))
+      .map(p => ({
+        provider: p.id,
+        model: VISION_FALLBACK_MODEL[p.id] ?? PROVIDER_FALLBACK_MODEL[p.id] ?? p.id,
+      }))[0]
+    if (visionRoute) {
+      console.log(`[AI Router] Vision required for task "${opts.task}" — overriding ${route.provider}/${route.model} → ${visionRoute.provider}/${visionRoute.model}`)
+      route = visionRoute
+    } else {
+      console.warn(`[AI Router] Vision required but no vision-capable provider active — proceeding with ${route.provider} (image will be text-only)`)
+    }
+  }
 
   let response: AIResponse
   let usedRoute = route
