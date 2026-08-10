@@ -187,7 +187,7 @@ function IncompleteView({
 // ─── Main Checkout page ───────────────────────────────────────────────────────
 
 export default function Checkout() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const burst = useConfetti()
@@ -199,9 +199,11 @@ export default function Checkout() {
   const [billing, setBilling] = useState<BillingCycle>(
     (searchParams.get('billing') ?? 'monthly') as BillingCycle,
   )
-  const [payState,   setPayState]   = useState<PayState>('idle')
-  const [failRef,    setFailRef]    = useState<string | undefined>()
-  const [noProvider, setNoProvider] = useState(false)
+  const [payState,      setPayState]      = useState<PayState>('idle')
+  const [failRef,       setFailRef]       = useState<string | undefined>()
+  const [noProvider,    setNoProvider]    = useState(false)
+  const [providerChecked, setProviderChecked] = useState(false)
+  const hasAutoOpened = React.useRef(false)
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) navigate('/register', { replace: true })
@@ -211,8 +213,10 @@ export default function Checkout() {
   useEffect(() => {
     if (!isAuthenticated) return
     api.subscription.paymentMethods().then(m => {
-      if (!m.razorpay && !m.stripe) setNoProvider(true)
-    }).catch(() => {/* ignore — will surface on pay click */})
+      const noP = !m.razorpay && !m.stripe
+      setNoProvider(noP)
+      setProviderChecked(true)
+    }).catch(() => setProviderChecked(true))
   }, [isAuthenticated])
 
   const price = billing === 'annual' ? config.annualMonthly : config.monthly
@@ -246,6 +250,25 @@ export default function Checkout() {
         description: `${config.label} — ${billing === 'annual' ? 'Annual' : 'Monthly'}`,
         image:    '/logo.png',
         theme:    { color: config.color },
+        prefill: {
+          name:  user?.full_name ?? '',
+          email: (user as unknown as { email?: string })?.email ?? '',
+        },
+        config: {
+          display: {
+            hide: [{ method: 'paylater' }],
+            preferences: {
+              show_default_blocks: false,
+              sequence: ['block.upi', 'block.card', 'block.netbanking', 'block.wallet'],
+              blocks: {
+                upi:        { name: 'UPI (PhonePe, GPay, Paytm…)', instruments: [{ method: 'upi', flows: ['intent', 'qr', 'collect'], apps: ['google_pay', 'phonepe', 'paytm', 'bhim'] }] },
+                card:       { name: 'Credit / Debit Card',          instruments: [{ method: 'card' }] },
+                netbanking: { name: 'Net Banking',                   instruments: [{ method: 'netbanking' }] },
+                wallet:     { name: 'Wallets',                       instruments: [{ method: 'wallet' }] },
+              },
+            },
+          },
+        },
         modal: {
           ondismiss: () => {
             setPayState(prev => prev === 'verifying' ? prev : 'incomplete')
@@ -279,6 +302,14 @@ export default function Checkout() {
       setPayState('idle')
     }
   }, [plan, billing, config, burst])
+
+  // Auto-open Razorpay modal once provider check passes — no extra click needed
+  useEffect(() => {
+    if (providerChecked && !noProvider && !hasAutoOpened.current && isAuthenticated && !authLoading) {
+      hasAutoOpened.current = true
+      handlePay()
+    }
+  }, [providerChecked, noProvider, isAuthenticated, authLoading, handlePay])
 
   if (authLoading) return null
 
@@ -425,15 +456,70 @@ export default function Checkout() {
                     <IncompleteView onRetry={handlePay} onFree={handleFree} failRef={failRef} />
                   </motion.div>
 
+                ) : payState === 'loading' || payState === 'verifying' ? (
+                  /* ── Opening / verifying: full-panel loading state ── */
+                  <motion.div key="opening" className="flex flex-col flex-1 items-center justify-center gap-6 py-8"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+                    {/* Animated ring */}
+                    <div className="relative w-20 h-20">
+                      <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 80 80">
+                        <circle cx="40" cy="40" r="34" fill="none" stroke="#f1f3f7" strokeWidth="5" />
+                        <motion.circle cx="40" cy="40" r="34" fill="none"
+                          stroke={config.color} strokeWidth="5" strokeLinecap="round"
+                          strokeDasharray="213.6" strokeDashoffset="213.6"
+                          animate={{ strokeDashoffset: [213.6, 0, 213.6] }}
+                          transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }} />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Shield className="w-7 h-7" style={{ color: config.color }} />
+                      </div>
+                    </div>
+
+                    <div className="text-center">
+                      <h3 className="text-[#0f1729] font-extrabold text-xl">
+                        {payState === 'verifying' ? 'Confirming payment…' : 'Opening secure payment…'}
+                      </h3>
+                      <p className="text-[#9aa3b2] text-sm mt-1">
+                        {payState === 'verifying'
+                          ? 'Verifying with Razorpay — please wait'
+                          : 'The payment window will open in a moment'}
+                      </p>
+                    </div>
+
+                    {/* Payment method preview */}
+                    <div className="w-full rounded-xl border border-[#e5e8ef] bg-[#f8f9fc] p-4 space-y-3">
+                      <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wider">Accepted payment methods</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: 'UPI', sub: 'PhonePe · GPay · Paytm', color: '#5f259f' },
+                          { label: 'Cards', sub: 'Visa · Mastercard · RuPay', color: '#1e2d4e' },
+                          { label: 'Net Banking', sub: '50+ banks supported', color: '#15803d' },
+                          { label: 'Wallets', sub: 'Paytm · Amazon Pay', color: '#c45500' },
+                        ].map(({ label, sub, color }) => (
+                          <div key={label} className="flex items-start gap-2 p-2.5 rounded-lg bg-white border border-[#e5e8ef]">
+                            <div className="w-2 h-2 rounded-full mt-1 shrink-0" style={{ background: color }} />
+                            <div>
+                              <p className="text-xs font-semibold text-[#0f1729]">{label}</p>
+                              <p className="text-[10px] text-[#9aa3b2]">{sub}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-[11px] text-[#9aa3b2]">
+                      <Shield className="w-3 h-3" />
+                      256-bit encryption · PCI-DSS compliant
+                    </div>
+                  </motion.div>
+
                 ) : (
                   <motion.div key="payment" className="flex flex-col flex-1 gap-6"
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
 
                     <div>
                       <p className="text-[11px] font-semibold text-[#9aa3b2] uppercase tracking-wider mb-1">Activate</p>
-                      <h3 className="text-[#0f1729] font-extrabold text-2xl">
-                        {config.label} Plan
-                      </h3>
+                      <h3 className="text-[#0f1729] font-extrabold text-2xl">{config.label} Plan</h3>
                     </div>
 
                     {/* Billing toggle */}
@@ -481,25 +567,39 @@ export default function Checkout() {
                     {/* Pay button */}
                     <motion.button
                       onClick={handlePay}
-                      disabled={payState === 'loading' || payState === 'verifying'}
-                      whileHover={payState === 'idle' ? { scale: 1.02 } : {}}
-                      whileTap={payState === 'idle' ? { scale: 0.97 } : {}}
-                      className="group relative flex items-center justify-center gap-2.5 w-full py-4 rounded-xl font-bold text-white text-[15px] overflow-hidden disabled:opacity-70 transition-opacity"
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      className="group relative flex items-center justify-center gap-2.5 w-full py-4 rounded-xl font-bold text-white text-[15px] overflow-hidden"
                       style={{ background: `linear-gradient(135deg, ${config.color} 0%, ${config.color}dd 100%)` }}>
                       <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-600 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
-                      {payState === 'loading' ? (
-                        <><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Setting up payment…</>
-                      ) : payState === 'verifying' ? (
-                        <><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Verifying payment…</>
-                      ) : (
-                        <><Sparkles className="w-4 h-4" /> Activate {config.label} <ArrowRight className="w-4 h-4" /></>
-                      )}
+                      <Sparkles className="w-4 h-4" /> Pay &amp; Activate {config.label} <ArrowRight className="w-4 h-4" />
                     </motion.button>
+
+                    {/* Payment method grid */}
+                    <div className="rounded-xl border border-[#e5e8ef] bg-[#f8f9fc] p-3 space-y-2">
+                      <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wider">Pay with any method</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { label: 'UPI', color: '#5f259f' },
+                          { label: 'PhonePe', color: '#5f259f' },
+                          { label: 'Google Pay', color: '#1a73e8' },
+                          { label: 'Paytm', color: '#00b9f1' },
+                          { label: 'Cards', color: '#1e2d4e' },
+                          { label: 'Net Banking', color: '#15803d' },
+                          { label: 'Wallets', color: '#c45500' },
+                        ].map(({ label, color }) => (
+                          <span key={label}
+                            className="text-[10px] font-semibold px-2 py-1 rounded-md border"
+                            style={{ color, borderColor: color + '44', background: color + '0d' }}>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
                     {/* Security row */}
                     <div className="flex items-center gap-2 justify-center">
-                      <Shield className="w-3.5 h-3.5 text-[#9aa3b2]" />
-                      <span className="text-[11px] text-[#9aa3b2]">
+                      <Shield className="w-3 h-3 text-[#9aa3b2]" />
+                      <span className="text-[10px] text-[#9aa3b2]">
                         Secured by Razorpay · 256-bit encryption · Cancel anytime
                       </span>
                     </div>

@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useConfetti } from '../../hooks/useConfetti'
@@ -51,6 +51,35 @@ const PLAN_CHIPS = [
   { id: 'pro',          label: 'Pro',           sub: '€79/mo',         color: 'bg-brand/5 text-brand border-brand/30' },
   { id: 'organization', label: 'Organization',  sub: '€249/mo',        color: 'bg-navy/5 text-navy border-navy/20' },
 ]
+
+const PAID_PLAN_DETAILS: Record<string, { features: string[]; price: string; color: string; bg: string }> = {
+  pro: {
+    price: '€79/mo',
+    color: '#e85c1a',
+    bg: 'rgba(232,92,26,0.06)',
+    features: [
+      'Unlimited cost quotes per month',
+      'Bulk costing — up to 50 parts/batch',
+      'Assembly BOM roll-up with margin',
+      'Excel & PDF export',
+      'Supplier sourcing & negotiation',
+      'Priority AI processing (Sonnet)',
+    ],
+  },
+  organization: {
+    price: '€249/mo',
+    color: '#1e2d4e',
+    bg: 'rgba(30,45,78,0.06)',
+    features: [
+      'Everything in Pro',
+      'Up to 25 team seats',
+      'Knowledge base management',
+      'Regional rates configuration',
+      'Multi-provider AI routing control',
+      'Admin dashboard & full audit log',
+    ],
+  },
+}
 
 const FEATURE_CHIPS = ['AI Drawing Analysis', 'KB-Sourced Estimates', 'Assembly Roll-up', 'Bulk Costing', 'Confidence Scoring', 'CEO Approval Flow']
 const STATS = [
@@ -222,7 +251,7 @@ export default function Register() {
           <p className="text-[#9aa3b2] text-sm mt-1 mb-6">Start free — no credit card required</p>
 
           {/* Plan chips */}
-          <div className="grid grid-cols-3 gap-2 mb-6">
+          <div className="grid grid-cols-3 gap-2 mb-3">
             {PLAN_CHIPS.map((p) => (
               <button
                 key={p.id}
@@ -238,6 +267,42 @@ export default function Register() {
               </button>
             ))}
           </div>
+
+          {/* Plan feature list — shown for paid plans */}
+          <AnimatePresence mode="wait">
+            {selectedPlan !== 'free' && PAID_PLAN_DETAILS[selectedPlan] && (
+              <motion.div
+                key={selectedPlan}
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <div
+                  className="rounded-xl border p-3 space-y-1.5"
+                  style={{
+                    borderColor: PAID_PLAN_DETAILS[selectedPlan].color + '33',
+                    background: PAID_PLAN_DETAILS[selectedPlan].bg,
+                  }}
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-2"
+                    style={{ color: PAID_PLAN_DETAILS[selectedPlan].color }}>
+                    What you get with {selectedPlan === 'pro' ? 'Pro' : 'Organization'}
+                  </p>
+                  {PAID_PLAN_DETAILS[selectedPlan].features.map((f) => (
+                    <div key={f} className="flex items-center gap-2">
+                      <CheckCircle2
+                        className="w-3 h-3 shrink-0"
+                        style={{ color: PAID_PLAN_DETAILS[selectedPlan].color }}
+                      />
+                      <span className="text-[11px] text-[#4a5568]">{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
             {/* Full name */}

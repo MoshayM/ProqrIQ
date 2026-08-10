@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { CreditCard, XCircle, Calendar, CheckCircle, ArrowRight, IndianRupee, Zap } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { CreditCard, XCircle, Calendar, CheckCircle, IndianRupee, Zap } from 'lucide-react'
+import { } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useSubscription } from '../../hooks/useSubscription'
+import { useAuth } from '../../contexts/AuthContext'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Modal } from '../../components/ui/modal'
@@ -70,7 +71,8 @@ const PLAN_FEATURES: Record<string, string[]> = {
 export default function Billing() {
   usePageTitle('Billing')
   const { plan, status, daysUntilRenewal, usage, limits, isLoading, refetch } = useSubscription()
-  const navigate = useNavigate()
+  const { user } = useAuth()
+
   const [cancelModalOpen, setCancelModalOpen]   = useState(false)
   const [rzpModalOpen,    setRzpModalOpen]       = useState(false)
   const [canceling,       setCanceling]          = useState(false)
@@ -99,23 +101,44 @@ export default function Billing() {
     setRzpLoading(true)
     try {
       await loadRazorpayScript()
-      const data = await api.subscription.razorpayCheckout({ plan: rzpPlan, billing: rzpBilling })
-      if (!data?.subscription_id) { toast.error('Razorpay not configured on server'); return }
+      const orderData = await api.subscription.razorpayCreateOrder({ plan: rzpPlan, billing: rzpBilling })
 
       const RazorpayConstructor = (window as unknown as Record<string, unknown>).Razorpay as new (opts: unknown) => { open(): void }
       const rzp = new RazorpayConstructor({
-        key:             data.key_id,
-        subscription_id: data.subscription_id,
-        name:            'ProqrIQ',
-        description:     `${rzpPlan === 'pro' ? 'Pro' : 'Organization'} — ${rzpBilling}`,
-        image:           '/logo.png',
-        theme:           { color: '#e85c1a' },
+        key:      orderData.key_id,
+        order_id: orderData.order_id,
+        amount:   orderData.amount,
+        currency: orderData.currency,
+        name:     'ProqrIQ',
+        description: `${rzpPlan === 'pro' ? 'Pro' : 'Organization'} — ${rzpBilling}`,
+        image:    '/logo.png',
+        theme:    { color: '#e85c1a' },
+        prefill: {
+          name:  user?.full_name ?? '',
+          email: (user as unknown as { email?: string })?.email ?? '',
+        },
+        config: {
+          display: {
+            hide: [{ method: 'paylater' }],
+            preferences: {
+              show_default_blocks: false,
+              sequence: ['block.upi', 'block.card', 'block.netbanking', 'block.wallet'],
+              blocks: {
+                upi:        { name: 'UPI (PhonePe, GPay, Paytm…)', instruments: [{ method: 'upi', flows: ['intent', 'qr', 'collect'], apps: ['google_pay', 'phonepe', 'paytm', 'bhim'] }] },
+                card:       { name: 'Credit / Debit Card',         instruments: [{ method: 'card' }] },
+                netbanking: { name: 'Net Banking',                  instruments: [{ method: 'netbanking' }] },
+                wallet:     { name: 'Wallets',                      instruments: [{ method: 'wallet' }] },
+              },
+            },
+          },
+        },
+        modal: { ondismiss: () => setRzpLoading(false) },
         handler: async (response: Record<string, string>) => {
           try {
-            await api.subscription.razorpayVerify({
-              razorpay_payment_id:      response.razorpay_payment_id,
-              razorpay_subscription_id: response.razorpay_subscription_id,
-              razorpay_signature:       response.razorpay_signature,
+            await api.subscription.razorpayVerifyOrder({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id:   response.razorpay_order_id,
+              razorpay_signature:  response.razorpay_signature,
               plan:    rzpPlan,
               billing: rzpBilling,
             })
@@ -206,16 +229,6 @@ export default function Billing() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {plan !== 'organization' && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => navigate('/pricing')}
-                iconRight={<ArrowRight className="w-3.5 h-3.5" />}
-              >
-                Upgrade via Stripe
-              </Button>
-            )}
             {plan === 'free' && (
               <Button
                 variant="outline"
@@ -303,6 +316,13 @@ export default function Billing() {
           <div className="flex items-center gap-2 p-3 rounded-xl bg-[#2d9c6a]/5 border border-[#2d9c6a]/20">
             <IndianRupee className="w-4 h-4 text-[#2d9c6a] shrink-0" />
             <p className="text-xs text-[#2d9c6a] font-medium">Payments processed in INR via Razorpay — UPI, cards &amp; netbanking accepted</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {['UPI', 'PhonePe', 'Google Pay', 'Cards', 'Net Banking', 'Wallets'].map(m => (
+              <span key={m} className="text-[10px] font-medium px-2 py-0.5 rounded bg-[#f1f3f7] text-[#4a5568] border border-[#e5e8ef]">
+                {m}
+              </span>
+            ))}
           </div>
 
           <div>
