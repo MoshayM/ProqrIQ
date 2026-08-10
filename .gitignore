@@ -17,6 +17,10 @@ credentials.txt
 *.txt
 *.PNG
 *.png
+*.csv
+*.pptx
+*.pdf
+*.py
 data/ai-config.json
 
 # Test output

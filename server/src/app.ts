@@ -120,8 +120,9 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 })
 
 // ─── Razorpay webhook — POST /api/webhooks/razorpay ──────────────────────────
-// Register this URL in Razorpay dashboard → Settings → Webhooks
-// Events: subscription.activated | subscription.charged | subscription.cancelled | payment.failed
+// Register in Razorpay dashboard → Settings → Webhooks
+// URL: https://proqriq.vercel.app/api/webhooks/razorpay
+// Events to enable: payment.captured | payment.failed | order.paid
 app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig     = req.headers['x-razorpay-signature'] as string | undefined
   const rawBody = (req.body as Buffer).toString('utf-8')
@@ -133,31 +134,47 @@ app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), as
 
   try {
     const { db }            = await import('./db')
-    const { subscriptions } = await import('./db/schema')
+    const { subscriptions, auditLog } = await import('./db/schema')
     const { eq }            = await import('drizzle-orm')
 
-    const event = JSON.parse(rawBody) as { event: string; payload: Record<string, Record<string, Record<string, unknown>>> }
-    const sub   = (event.payload?.subscription?.entity ?? {}) as Record<string, unknown>
-    const subId = sub.id as string | undefined
+    type RzpPayload = Record<string, Record<string, Record<string, unknown>>>
+    const event   = JSON.parse(rawBody) as { event: string; payload: RzpPayload }
+    const payment = (event.payload?.payment?.entity ?? {}) as Record<string, unknown>
+    const order   = (event.payload?.order?.entity   ?? {}) as Record<string, unknown>
 
-    if (event.event === 'subscription.activated' || event.event === 'subscription.charged') {
-      if (subId) {
-        const periodEnd = new Date(Date.now() + 30 * 86_400_000).toISOString()
+    // Orders flow: payment.captured fires after successful card payment
+    if (event.event === 'payment.captured' || event.event === 'order.paid') {
+      const orderId = (payment.order_id ?? order.id) as string | undefined
+      const notes   = (payment.notes ?? order.notes ?? {}) as Record<string, string>
+      const plan    = notes.plan    as string | undefined
+      const userId  = notes.user_id as string | undefined
+
+      if (userId && plan) {
+        const billing   = notes.billing ?? 'monthly'
+        const months    = billing === 'annual' ? 365 : 30
+        const periodEnd = new Date(Date.now() + months * 86_400_000).toISOString()
+
         await db.update(subscriptions).set({
-          status:             'active',
-          current_period_end: periodEnd,
-        }).where(eq(subscriptions.razorpay_subscription_id, subId))
-      }
-    } else if (event.event === 'subscription.cancelled' || event.event === 'subscription.completed') {
-      if (subId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await db.update(subscriptions).set({ status: 'canceled', plan: 'free' as any })
-          .where(eq(subscriptions.razorpay_subscription_id, subId))
+          status:                  'active',
+          plan:                    plan as 'free' | 'pro' | 'organization',
+          billing_cycle:           billing as 'monthly' | 'annual',
+          current_period_end:      periodEnd,
+          razorpay_subscription_id: orderId ?? null,
+        }).where(eq(subscriptions.user_id, userId))
+
+        await db.insert(auditLog).values({
+          id: crypto.randomUUID(), user_id: userId, action: 'subscription_activated',
+          entity_type: 'subscription', entity_id: userId,
+          details: JSON.stringify({ plan, billing, gateway: 'razorpay', event: event.event, order_id: orderId }),
+          created_at: new Date().toISOString(),
+        })
       }
     } else if (event.event === 'payment.failed') {
-      if (subId) {
+      const notes  = (payment.notes ?? {}) as Record<string, string>
+      const userId = notes.user_id as string | undefined
+      if (userId) {
         await db.update(subscriptions).set({ status: 'past_due' })
-          .where(eq(subscriptions.razorpay_subscription_id, subId))
+          .where(eq(subscriptions.user_id, userId))
       }
     }
 
