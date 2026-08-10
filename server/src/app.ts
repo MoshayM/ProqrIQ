@@ -23,6 +23,7 @@ import { router as adminConfigRouter }  from './routes/adminConfig'
 import { router as searchRouter }        from './routes/search'
 import { router as suppliersRouter }    from './routes/suppliers'
 import { router as subscriptionRouter } from './routes/subscription'
+import { router as helpRouter }         from './routes/help'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 const app = express()
@@ -214,6 +215,7 @@ app.use('/api/notifications', notificationsRouter)
 app.use('/api/admin',        adminConfigRouter)
 app.use('/api/search',       searchRouter)
 app.use('/api/suppliers',    suppliersRouter)
+app.use('/api/help',         helpRouter)
 app.use('/api',              subscriptionRouter)
 
 // ─── Vercel cron: reset monthly usage counters (runs 1st of every month) ──────

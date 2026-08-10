@@ -180,4 +180,8 @@ export const api = {
   search: {
     query: (q: string, limit = 20) => client.get(`/search?q=${encodeURIComponent(q)}&limit=${limit}`).then(d),
   },
+  help: {
+    chat: (body: { message: string; history: Array<{ role: 'user' | 'assistant'; content: string }> }) =>
+      client.post('/help/chat', body).then(d) as Promise<{ reply: string }>,
+  },
 }
