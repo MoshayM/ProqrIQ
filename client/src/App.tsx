@@ -30,6 +30,7 @@ import Pricing from './pages/Pricing'
 import Register from './pages/Register'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
+import Landing from './pages/Landing'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -129,7 +130,7 @@ function AppRoutes() {
       <Route path="/regional-rates" element={<Navigate to="/account?tab=rates" replace />} />
       <Route path="/settings"       element={<Navigate to="/account"           replace />} />
 
-      <Route path="/"  element={<Navigate to="/dashboard" replace />} />
+      <Route path="/"  element={<Landing />} />
       <Route path="*"  element={<NotFound />} />
     </Routes>
   )
