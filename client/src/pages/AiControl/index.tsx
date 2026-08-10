@@ -120,6 +120,29 @@ const PROVIDER_META = [
     preferDesc: 'Use Together AI cloud LLMs — cost-effective for all tasks',
     dotColor: '#0ea5e9',
   },
+  {
+    id: 'groq',
+    name: 'Groq (Free Cloud LLMs)',
+    subtitle: 'Free at console.groq.com → API Keys — no credit card needed',
+    models: [
+      'llama-3.3-70b-versatile',
+      'llama-3.1-8b-instant',
+      'mixtral-8x7b-32768',
+      'gemma2-9b-it',
+      'deepseek-r1-distill-llama-70b',
+    ],
+    defaultModel: 'llama-3.3-70b-versatile',
+    placeholder: 'gsk_...',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+      </svg>
+    ),
+    iconBg: 'bg-amber-100 text-amber-700',
+    preferLabel: 'Groq (Free)',
+    preferDesc: 'Free Llama 3.3 70B / 3.1 8B — 1,000+ req/day at no cost',
+    dotColor: '#f59e0b',
+  },
 ] as const
 
 interface AiUsage {
@@ -155,6 +178,11 @@ const AVAILABLE_MODELS = [
   { id: 'Qwen/Qwen2.5-14B-Instruct-Turbo',                label: 'Qwen 2.5 14B',           tier: 'Together — balanced',    color: 'text-sky-600' },
   { id: 'Qwen/Qwen2.5-7B-Instruct-Turbo',                 label: 'Qwen 2.5 7B',            tier: 'Together — fast',        color: 'text-sky-500' },
   { id: 'meta-llama/Llama-3.2-3B-Instruct-Turbo',         label: 'Llama 3.2 3B',           tier: 'Together — ultra-fast',  color: 'text-sky-500' },
+  { id: 'llama-3.3-70b-versatile',                        label: 'Llama 3.3 70B',          tier: 'Groq — quality (FREE)',  color: 'text-amber-600' },
+  { id: 'llama-3.1-8b-instant',                           label: 'Llama 3.1 8B',           tier: 'Groq — fast (FREE)',     color: 'text-amber-500' },
+  { id: 'mixtral-8x7b-32768',                             label: 'Mixtral 8x7B',           tier: 'Groq — 32K ctx (FREE)',  color: 'text-amber-500' },
+  { id: 'gemma2-9b-it',                                   label: 'Gemma 2 9B',             tier: 'Groq — Google (FREE)',   color: 'text-amber-500' },
+  { id: 'deepseek-r1-distill-llama-70b',                  label: 'DeepSeek R1 70B',        tier: 'Groq — reasoning (FREE)',color: 'text-amber-600' },
 ]
 
 const TASK_LABELS: Record<string, string> = {
@@ -171,11 +199,12 @@ const TASK_LABELS: Record<string, string> = {
 }
 
 const PROVIDER_COLORS: Record<string, { dot: string; label: string; bg: string }> = {
-  anthropic: { dot: '#e85c1a', label: 'Anthropic', bg: 'bg-orange-50' },
-  openai:    { dot: '#22c55e', label: 'OpenAI',    bg: 'bg-green-50' },
-  google:    { dot: '#3b82f6', label: 'Google',    bg: 'bg-blue-50' },
-  ollama:    { dot: '#7c3aed', label: 'Ollama',    bg: 'bg-violet-50' },
+  anthropic: { dot: '#e85c1a', label: 'Anthropic',  bg: 'bg-orange-50' },
+  openai:    { dot: '#22c55e', label: 'OpenAI',      bg: 'bg-green-50' },
+  google:    { dot: '#3b82f6', label: 'Google',      bg: 'bg-blue-50' },
+  ollama:    { dot: '#7c3aed', label: 'Ollama',      bg: 'bg-violet-50' },
   together:  { dot: '#0ea5e9', label: 'Together AI', bg: 'bg-sky-50' },
+  groq:      { dot: '#f59e0b', label: 'Groq',        bg: 'bg-amber-50' },
 }
 
 function ProviderDot({ provider }: { provider: string }) {
@@ -877,11 +906,12 @@ function AiControlInner() {
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {[
-                { id: 'anthropic', displayName: 'Anthropic (Claude)', envVar: 'ANTHROPIC_API_KEY' },
-                { id: 'openai',    displayName: 'OpenAI (GPT)',        envVar: 'OPENAI_API_KEY' },
-                { id: 'google',    displayName: 'Google (Gemini)',     envVar: 'GEMINI_API_KEY' },
-                { id: 'ollama',    displayName: 'Ollama (Local LLM)',  envVar: 'OLLAMA_ENABLED=true' },
-                { id: 'together',  displayName: 'Together AI (Cloud)', envVar: 'TOGETHER_API_KEY' },
+                { id: 'anthropic', displayName: 'Anthropic (Claude)',  envVar: 'ANTHROPIC_API_KEY' },
+                { id: 'openai',    displayName: 'OpenAI (GPT)',         envVar: 'OPENAI_API_KEY' },
+                { id: 'google',    displayName: 'Google (Gemini)',      envVar: 'GEMINI_API_KEY' },
+                { id: 'ollama',    displayName: 'Ollama (Local LLM)',   envVar: 'OLLAMA_ENABLED=true' },
+                { id: 'together',  displayName: 'Together AI (Cloud)',  envVar: 'TOGETHER_API_KEY' },
+                { id: 'groq',      displayName: 'Groq (Free — Llama)', envVar: 'GROQ_API_KEY' },
               ].map(p => {
                 const live = providers.find(lp => lp.id === p.id)
                 const available = live?.available ?? false
@@ -1001,30 +1031,56 @@ function AiControlInner() {
                 <p className="text-xs text-[#9aa3b2] mt-0.5">Per-task provider/model overrides — takes effect immediately, no redeploy</p>
               </div>
             </div>
-            <button
-              onClick={async () => {
-                const SMART: Array<{ task: string; provider: string; model: string }> = [
-                  { task: 'costing',            provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
-                  { task: 'bulk_costing',       provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
-                  { task: 'cad_costing',        provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
-                  { task: 'supplier_recommend', provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
-                  { task: 'negotiation',        provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
-                  { task: 'extraction',         provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
-                  { task: 'kb_summary',         provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
-                  { task: 'supplier_suggest',   provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
-                  { task: 'clarification',      provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
-                  { task: 'generic',            provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
-                ]
-                try {
-                  await Promise.all(SMART.map(r => setRouteMut.mutateAsync(r)))
-                  toast.success('Smart defaults applied — 70B for quality tasks, 8B for fast tasks')
-                } catch { toast.error('Failed to apply smart defaults') }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-200 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors flex-shrink-0"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Smart Defaults (Together AI)
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={async () => {
+                  const GROQ_SMART: Array<{ task: string; provider: string; model: string }> = [
+                    { task: 'costing',            provider: 'groq', model: 'llama-3.3-70b-versatile' },
+                    { task: 'bulk_costing',       provider: 'groq', model: 'llama-3.3-70b-versatile' },
+                    { task: 'cad_costing',        provider: 'groq', model: 'llama-3.3-70b-versatile' },
+                    { task: 'supplier_recommend', provider: 'groq', model: 'llama-3.3-70b-versatile' },
+                    { task: 'negotiation',        provider: 'groq', model: 'llama-3.3-70b-versatile' },
+                    { task: 'extraction',         provider: 'groq', model: 'llama-3.3-70b-versatile' },
+                    { task: 'kb_summary',         provider: 'groq', model: 'llama-3.1-8b-instant' },
+                    { task: 'supplier_suggest',   provider: 'groq', model: 'llama-3.1-8b-instant' },
+                    { task: 'clarification',      provider: 'groq', model: 'llama-3.1-8b-instant' },
+                    { task: 'generic',            provider: 'groq', model: 'llama-3.1-8b-instant' },
+                  ]
+                  try {
+                    await Promise.all(GROQ_SMART.map(r => setRouteMut.mutateAsync(r)))
+                    toast.success('Groq defaults applied — 100% free! 70B for quality tasks, 8B for fast tasks')
+                  } catch { toast.error('Failed to apply Groq defaults') }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Groq Defaults (Free)
+              </button>
+              <button
+                onClick={async () => {
+                  const TOGETHER_SMART: Array<{ task: string; provider: string; model: string }> = [
+                    { task: 'costing',            provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                    { task: 'bulk_costing',       provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                    { task: 'cad_costing',        provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                    { task: 'supplier_recommend', provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                    { task: 'negotiation',        provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                    { task: 'extraction',         provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' },
+                    { task: 'kb_summary',         provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                    { task: 'supplier_suggest',   provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                    { task: 'clarification',      provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                    { task: 'generic',            provider: 'together', model: 'meta-llama/Llama-3.1-8B-Instruct-Turbo' },
+                  ]
+                  try {
+                    await Promise.all(TOGETHER_SMART.map(r => setRouteMut.mutateAsync(r)))
+                    toast.success('Together AI defaults applied — 70B for quality tasks, 8B for fast tasks')
+                  } catch { toast.error('Failed to apply Together AI defaults') }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-200 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Together AI
+              </button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -1087,6 +1143,11 @@ function AiControlInner() {
                           'together/Qwen/Qwen2.5-14B-Instruct-Turbo',
                           'together/Qwen/Qwen2.5-7B-Instruct-Turbo',
                           'together/meta-llama/Llama-3.2-3B-Instruct-Turbo',
+                          'groq/llama-3.3-70b-versatile',
+                          'groq/llama-3.1-8b-instant',
+                          'groq/mixtral-8x7b-32768',
+                          'groq/gemma2-9b-it',
+                          'groq/deepseek-r1-distill-llama-70b',
                         ].map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
                         ))}

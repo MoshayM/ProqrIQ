@@ -45,26 +45,32 @@ const ENV_OVERRIDES: Partial<Record<AITask, string | undefined>> = {
 const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED === 'true'
 const OLLAMA_MODEL   = process.env.OLLAMA_DEFAULT_MODEL ?? 'qwen2.5:14b'
 const OLLAMA_FAST    = process.env.OLLAMA_FAST_MODEL    ?? 'qwen2.5:7b'
+const GROQ_ENABLED   = !!(process.env.GROQ_API_KEY)
 
 function ollama(model: string): RouteResult {
-  return OLLAMA_ENABLED
-    ? { provider: 'ollama',    model }
-    : { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
+  if (OLLAMA_ENABLED)  return { provider: 'ollama', model }
+  if (GROQ_ENABLED)    return { provider: 'groq',   model: 'llama-3.1-8b-instant' }
+  return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
+}
+
+function quality(): RouteResult {
+  if (GROQ_ENABLED) return { provider: 'groq', model: 'llama-3.3-70b-versatile' }
+  return { provider: 'anthropic', model: 'claude-sonnet-4-5' }
 }
 
 const DEFAULTS: Record<AITask, RouteResult> = {
-  costing:            { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+  costing:            quality(),
   // When Ollama is unavailable, fall back to Sonnet (not Haiku) — Haiku scores ~62% which is
   // below the 70% confidence gate, so bulk items would always return needs_clarification.
-  bulk_costing:       OLLAMA_ENABLED ? { provider: 'ollama', model: OLLAMA_MODEL } : { provider: 'anthropic', model: 'claude-sonnet-4-5' },
-  cad_costing:        { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+  bulk_costing:       OLLAMA_ENABLED ? { provider: 'ollama', model: OLLAMA_MODEL } : quality(),
+  cad_costing:        quality(),
   kb_summary:         ollama(OLLAMA_FAST),
   supplier_suggest:   ollama(OLLAMA_FAST),
-  supplier_recommend: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
-  negotiation:        { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+  supplier_recommend: quality(),
+  negotiation:        quality(),
   clarification:      ollama(OLLAMA_FAST),
-  extraction:         ollama(OLLAMA_MODEL),
-  generic:            { provider: 'anthropic', model: 'claude-sonnet-4-5' },
+  extraction:         OLLAMA_ENABLED ? { provider: 'ollama', model: OLLAMA_MODEL } : quality(),
+  generic:            quality(),
 }
 
 function parseRoute(raw: string): RouteResult {
@@ -165,6 +171,40 @@ export function trackUsage(opts: {
 // ─── Main completion helper (drop-in for callers) ─────────────────────────────
 
 const HAIKU_FALLBACK = { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
+const GROQ_FALLBACK  = { provider: 'groq',      model: 'llama-3.3-70b-versatile' }
+const GROQ_FAST_FALLBACK = { provider: 'groq',  model: 'llama-3.1-8b-instant' }
+
+async function tryFallbacks(
+  primaryErr: unknown,
+  primaryRoute: RouteResult,
+  request: Omit<AIRequest, 'model'>,
+  task: string,
+): Promise<{ response: AIResponse; usedRoute: RouteResult }> {
+  // Build fallback chain: Groq 70B → Together AI 70B → Haiku → throw
+  const fallbacks: RouteResult[] = []
+  if (process.env.GROQ_API_KEY && primaryRoute.provider !== 'groq') {
+    fallbacks.push(GROQ_FALLBACK)
+  }
+  if (process.env.TOGETHER_API_KEY && primaryRoute.provider !== 'together') {
+    fallbacks.push({ provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' })
+  }
+  if (process.env.ANTHROPIC_API_KEY || primaryRoute.provider !== 'anthropic') {
+    fallbacks.push(HAIKU_FALLBACK)
+  }
+
+  let lastErr: unknown = primaryErr
+  for (const fb of fallbacks) {
+    try {
+      const fbProvider = getProvider(fb.provider)
+      const response = await fbProvider.complete({ ...request, model: fb.model })
+      console.warn(`[AI Router] task "${task}" fell back from ${primaryRoute.provider}/${primaryRoute.model} → ${fb.provider}/${fb.model}`)
+      return { response, usedRoute: fb }
+    } catch (e) {
+      lastErr = e
+    }
+  }
+  throw lastErr
+}
 
 export async function completeWithRouter(opts: {
   task:       AITask
@@ -184,60 +224,10 @@ export async function completeWithRouter(opts: {
     const provider = getProvider(route.provider)
     response = await provider.complete({ ...opts.request, model: route.model })
   } catch (primaryErr) {
-    // Non-Anthropic failure: try Together AI cloud fallback for Ollama routes, then Haiku
-    if (route.provider !== 'anthropic') {
-      console.warn(
-        `[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}". Error: ${(primaryErr as Error).message}`,
-      )
-
-      // If route was Ollama and Together AI is configured, use it as intermediate fallback
-      const togetherKey = process.env.TOGETHER_API_KEY
-      if (route.provider === 'ollama' && togetherKey) {
-        try {
-          const together  = getProvider('together')
-          const toModel   = toTogetherModel(route.model)
-          console.warn(`[AI Router] Falling back to Together AI: ${toModel}`)
-          response  = await together.complete({ ...opts.request, model: toModel })
-          usedRoute = { provider: 'together', model: toModel }
-        } catch (togetherErr) {
-          console.warn(`[AI Router] Together AI also failed — falling back to Haiku. Error: ${(togetherErr as Error).message}`)
-          const fallback = getProvider(HAIKU_FALLBACK.provider)
-          response  = await fallback.complete({ ...opts.request, model: HAIKU_FALLBACK.model })
-          usedRoute = HAIKU_FALLBACK
-        }
-      } else {
-        try {
-          const fallback = getProvider(HAIKU_FALLBACK.provider)
-          response  = await fallback.complete({ ...opts.request, model: HAIKU_FALLBACK.model })
-          usedRoute = HAIKU_FALLBACK
-        } catch (fallbackErr) {
-          throw new Error(
-            `AI Router: primary (${route.provider}) and fallback (anthropic/haiku) both failed. ` +
-            `Primary: ${(primaryErr as Error).message}. Fallback: ${(fallbackErr as Error).message}`,
-          )
-        }
-      }
-    } else {
-      // Anthropic is the primary but failed. If it's a config/availability issue
-      // (not a live API error) try Together AI as a last resort before giving up.
-      const isConfigError = (primaryErr as Error).message.includes('is not configured')
-      const togetherKey   = process.env.TOGETHER_API_KEY
-      if (isConfigError && togetherKey) {
-        console.warn(`[AI Router] Anthropic not configured for task "${opts.task}" — trying Together AI fallback`)
-        try {
-          const together = getProvider('together')
-          // Use a capable instruction-tuned model as Anthropic stand-in
-          const toModel = 'meta-llama/Llama-3.1-70B-Instruct-Turbo'
-          response  = await together.complete({ ...opts.request, model: toModel })
-          usedRoute = { provider: 'together', model: toModel }
-        } catch (togetherErr) {
-          // Throw the original Anthropic config error so the message is actionable
-          throw primaryErr
-        }
-      } else {
-        throw primaryErr
-      }
-    }
+    console.warn(`[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}": ${(primaryErr as Error).message}`)
+    const fb = await tryFallbacks(primaryErr, route, opts.request, opts.task)
+    response  = fb.response
+    usedRoute = fb.usedRoute
   }
 
   trackUsage({
