@@ -271,6 +271,24 @@ router.get('/:id', async (req: Request, res: Response) => {
       })
     }
 
+    // Auto-recover: if the batch has been processing for >25 min, the Vercel
+    // function that ran the runner has been killed. Fail stuck items and close.
+    if (batch.status === 'processing') {
+      const ageMs = Date.now() - new Date(batch.created_at).getTime()
+      if (ageMs > 25 * 60 * 1000) {
+        const IN_FLIGHT = ['queued', 'analysing', 'searching_kb', 'estimating', 'processing'] as any[]
+        await db.update(batchItems)
+          .set({ status: 'failed' as any, error_message: 'Batch runner timed out — Vercel function limit exceeded' })
+          .where(and(eq(batchItems.batch_id, batch.id), inArray(batchItems.status as any, IN_FLIGHT)))
+        await db.update(costingBatches)
+          .set({ status: 'completed_with_errors', completed_at: new Date().toISOString() })
+          .where(eq(costingBatches.id, batch.id))
+        // Re-fetch the updated batch
+        const [updated] = await db.select().from(costingBatches).where(eq(costingBatches.id, batch.id))
+        if (updated) Object.assign(batch, updated)
+      }
+    }
+
     const items = await db.select().from(batchItems)
       .where(eq(batchItems.batch_id, req.params.id))
       .orderBy(batchItems.sort_order)
@@ -410,12 +428,12 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
       })
     }
 
-    // Cancel all queued items; in-flight items finish naturally
+    // Cancel all non-terminal items (queued + any stuck in-flight states)
     await db.update(batchItems)
-      .set({ status: 'cancelled' as any })
+      .set({ status: 'cancelled' as any, error_message: 'Batch cancelled by user' })
       .where(and(
         eq(batchItems.batch_id, req.params.id),
-        inArray(batchItems.status, ['queued']),
+        inArray(batchItems.status as any, ['queued', 'analysing', 'searching_kb', 'estimating', 'processing']),
       ))
 
     await db.update(costingBatches)

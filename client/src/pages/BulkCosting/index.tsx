@@ -20,7 +20,7 @@ import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { useSubscription } from '../../hooks/useSubscription'
 
 type BatchStatus = 'queued'|'processing'|'completed'|'completed_with_errors'|'failed'|'cancelled';
-type BatchItemStatus = 'queued'|'processing'|'completed'|'failed'|'skipped'|'cancelled'|'needs_clarification';
+type BatchItemStatus = 'queued'|'processing'|'analysing'|'searching_kb'|'estimating'|'completed'|'failed'|'skipped'|'cancelled'|'needs_clarification';
 
 interface CostingBatch {
   id: string;
@@ -58,6 +58,9 @@ const BATCH_STATUS_COLORS: Record<BatchStatus, string> = {
 const ITEM_STATUS_COLORS: Record<BatchItemStatus, string> = {
   queued:              'bg-[#f1f3f7] text-[#4a5568]',
   processing:          'bg-blue-50 text-blue-700',
+  analysing:           'bg-blue-50 text-blue-600',
+  searching_kb:        'bg-purple-50 text-purple-700',
+  estimating:          'bg-indigo-50 text-indigo-700',
   completed:           'bg-green-50 text-green-700',
   failed:              'bg-red-50 text-red-700',
   skipped:             'bg-[#f1f3f7] text-[#9aa3b2]',
@@ -181,6 +184,9 @@ function BatchDetail({ id }: { id: string }) {
   const pct = batch.total_items > 0 ? Math.round((batch.processed_items / batch.total_items) * 100) : 0
   const canRetry = batch.status === 'failed' || batch.status === 'completed_with_errors';
   const canCancel = batch.status === 'processing' || batch.status === 'queued';
+  // Warn if the batch has been processing for >20 min — runner likely timed out
+  const isStuck = batch.status === 'processing' &&
+    (Date.now() - new Date(batch.created_at).getTime()) > 20 * 60 * 1000
 
   // 7D.6 — Performance timing for completed batches
   const batchDuration = batch.completed_at
@@ -243,6 +249,15 @@ function BatchDetail({ id }: { id: string }) {
             <ProgressBar value={pct} variant={batchProgressVariant(batch.status)} size="sm" />
             <p className="text-xs text-[#9aa3b2] text-right">{pct}%</p>
           </div>
+          {isStuck && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <p className="font-medium">Calculation appears stuck</p>
+                <p className="text-xs mt-0.5 text-amber-700">The batch runner may have timed out. Refresh or cancel to unblock.</p>
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
             {canCancel && (
               <Button variant="outline" size="sm" onClick={() => cancelMut.mutate()} loading={cancelMut.isPending}

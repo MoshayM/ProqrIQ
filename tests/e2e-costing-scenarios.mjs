@@ -6,7 +6,7 @@
  * Requires: Node 18+ (native fetch + FormData)
  */
 
-const BASE = 'https://proqriq.vercel.app/api'
+const BASE = process.env.API_BASE ?? 'https://proqriq.vercel.app/api'
 const EMAIL    = 'ethonanpasumvalki@gmail.com'
 const PASSWORD = 'Esther96@'
 
@@ -816,7 +816,7 @@ async function scenario10_BulkCosting() {
     // Poll (max 5 min) — handles completed_with_errors too
     let batchStatus
     try {
-      batchStatus = await pollBatch(batch.id, 300000)
+      batchStatus = await pollBatch(batch.id, process.env.API_BASE?.includes('localhost') ? 900000 : 300000)
       ok(`Batch ${batchStatus.status}: ${batchStatus.completed_items ?? 0} costed, ${batchStatus.failed_items ?? 0} failed, ${batchStatus.clarification_items ?? 0} need clarification`)
     } catch (pollErr) {
       warn(`Batch polling timed out: ${pollErr.message}`)

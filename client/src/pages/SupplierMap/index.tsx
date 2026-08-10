@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -19,7 +19,9 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { SupplierEmptyIllustration } from '../../components/ui/illustrations'
 import { cn } from '../../lib/utils'
 import { usePageTitle } from '../../hooks/usePageTitle'
-import MapView from './MapView'
+// Lazy-load the map: defers Leaflet module evaluation until after React is
+// mounted, preventing the "r is not a function" context error in Vite prod.
+const MapView = React.lazy(() => import('./MapView'))
 
 import 'leaflet/dist/leaflet.css'
 
@@ -1023,13 +1025,15 @@ export default function SupplierMap() {
           <Card className="overflow-hidden flex-shrink-0">
             <div className="h-56 relative">
               <MapErrorBoundary>
-                <MapView
-                  pins={mapPins}
-                  onPinClick={(code) => {
-                    const match = filteredSuppliers.find(s => s.country_code === code)
-                    if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
-                  }}
-                />
+                <Suspense fallback={<div className="h-full bg-surface-2 rounded-xl" />}>
+                  <MapView
+                    pins={mapPins}
+                    onPinClick={(code) => {
+                      const match = filteredSuppliers.find(s => s.country_code === code)
+                      if (match) setSelectedSupplier(match === selectedSupplier ? null : match)
+                    }}
+                  />
+                </Suspense>
               </MapErrorBoundary>
             </div>
           </Card>
