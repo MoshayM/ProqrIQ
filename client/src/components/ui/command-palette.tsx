@@ -36,7 +36,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'bulk',       label: 'Bulk Costing',     icon: Layers,          action: () => go('/bulk'),        keywords: ['batch', 'multiple'] },
     { id: 'assemblies', label: 'Assemblies',       icon: Package,         action: () => go('/assemblies'),  keywords: ['bom', 'component'] },
     { id: 'account',     label: 'Account Settings', icon: Settings,        action: () => go('/account'),      keywords: ['profile', 'admin'] },
-    { id: 'ai-control',     label: 'AI Control',    description: 'Model routing & rate limits', icon: Brain,      action: () => go('/ai-control'),    keywords: ['model', 'budget', 'config', 'claude'], roles: ['admin', 'developer'] },
+    { id: 'ai-control',     label: 'AI Control',    description: 'Model routing & rate limits', icon: Brain,      action: () => go('/ai-control'),    keywords: ['model', 'budget', 'config', 'claude', 'provider', 'groq', 'openai', 'anthropic'], roles: ['admin', 'developer', 'ceo', 'owner'] },
     { id: 'notifications',  label: 'Notifications', icon: Bell,        action: () => go('/notifications'), keywords: ['alerts', 'inbox'] },
     { id: 'plans',          label: 'Plans & Usage',  description: 'Subscription plans and usage',    icon: CreditCard, action: () => go('/plans'),          keywords: ['billing', 'subscription', 'upgrade'] },
     { id: 'supplier-map',   label: 'Supplier Map',   description: 'Find and visualise suppliers',     icon: MapPin,     action: () => go('/supplier-map'),   keywords: ['suppliers', 'discovery', 'sourcing', 'map'] },
