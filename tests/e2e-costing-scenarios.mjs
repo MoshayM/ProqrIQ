@@ -38,10 +38,17 @@ async function api(method, path, body, multipart = false) {
     const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyData })
     const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }))
 
-    // Groq free tier: 6000 tokens/min. On 429, wait for the window to reset and retry.
+    // Groq free tier: 6000 tokens/min. On 429, back off and retry.
+    // If retry-after > 300s it's the daily quota (not per-minute) — fail fast,
+    // there's no point waiting 44+ minutes in a test run.
     if (res.status === 429 && attempt < MAX_RETRIES) {
       const retryAfter = res.headers.get('retry-after')
       const waitMs = retryAfter ? Math.ceil(parseFloat(retryAfter)) * 1000 : 65_000
+      if (waitMs > 300_000) {
+        const err = new Error(json.error ?? `Groq daily quota exhausted — retry after ${retryAfter}s. Run tests again tomorrow.`)
+        err.status = 429
+        throw err
+      }
       log(`[rate-limit] AI quota hit — waiting ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${MAX_RETRIES})`)
       await sleep(waitMs)
       continue

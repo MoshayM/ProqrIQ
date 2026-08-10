@@ -294,7 +294,11 @@ export async function runBatch(batchId: string): Promise<void> {
           }
         } catch (err: unknown) {
           const errMsg = err instanceof Error ? err.message : String(err)
-          const errCode = errMsg.startsWith('INVALID_SOURCE_TIER')
+          const isRateLimit = (err as { status?: number })?.status === 429
+            || errMsg.toLowerCase().includes('rate limit')
+          const errCode = isRateLimit
+            ? 'AI_RATE_LIMITED'
+            : errMsg.startsWith('INVALID_SOURCE_TIER')
             ? 'INVALID_SOURCE_TIER'
             : errMsg.startsWith('AI_INVALID_JSON')
             ? 'AI_INVALID_JSON'

@@ -176,6 +176,11 @@ router.post('/estimate-cost', validate(estimateCostSchema), async (req: Request,
   } catch (err) {
     console.error('Estimate cost error:', err)
     const status = (err as { status?: number }).status === 429 ? 429 : 500
+    if (status === 429) {
+      // Forward Groq's retry-after so clients back off correctly (daily quota vs per-minute)
+      const match = String(err).match(/retry after (\d+)s/)
+      if (match) res.set('retry-after', match[1])
+    }
     return res.status(status).json({
       success: false,
       error: String(err),
