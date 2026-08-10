@@ -9,7 +9,7 @@ import { usePageTitle } from '../../hooks/usePageTitle'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { DeviceShell } from '../../components/DeviceShell'
 
-const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner']
+const ADMIN_ROLES = ['admin', 'developer']
 
 interface Viewport {
   id: string
