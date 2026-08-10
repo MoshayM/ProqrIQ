@@ -12,6 +12,7 @@ interface Command {
   icon: React.ComponentType<{ className?: string }>
   action: () => void
   keywords?: string[]
+  roles?: string[]   // if set, only show to users whose role is in this list
 }
 
 interface CommandPaletteProps {
@@ -21,7 +22,7 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const navigate = useNavigate()
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -35,20 +36,24 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'bulk',       label: 'Bulk Costing',     icon: Layers,          action: () => go('/bulk'),        keywords: ['batch', 'multiple'] },
     { id: 'assemblies', label: 'Assemblies',       icon: Package,         action: () => go('/assemblies'),  keywords: ['bom', 'component'] },
     { id: 'account',     label: 'Account Settings', icon: Settings,        action: () => go('/account'),      keywords: ['profile', 'admin'] },
-    { id: 'ai-control',     label: 'AI Control',    description: 'Model routing & rate limits', icon: Brain,      action: () => go('/ai-control'),    keywords: ['model', 'budget', 'config', 'claude'] },
+    { id: 'ai-control',     label: 'AI Control',    description: 'Model routing & rate limits', icon: Brain,      action: () => go('/ai-control'),    keywords: ['model', 'budget', 'config', 'claude'], roles: ['admin', 'developer'] },
     { id: 'notifications',  label: 'Notifications', icon: Bell,        action: () => go('/notifications'), keywords: ['alerts', 'inbox'] },
     { id: 'plans',          label: 'Plans & Usage',  description: 'Subscription plans and usage',    icon: CreditCard, action: () => go('/plans'),          keywords: ['billing', 'subscription', 'upgrade'] },
     { id: 'supplier-map',   label: 'Supplier Map',   description: 'Find and visualise suppliers',     icon: MapPin,     action: () => go('/supplier-map'),   keywords: ['suppliers', 'discovery', 'sourcing', 'map'] },
-    { id: 'device-preview', label: 'Device Preview', description: 'Preview across viewports & roles', icon: Monitor,    action: () => go('/device-preview'), keywords: ['responsive', 'mobile', 'role', 'simulator'] },
+    { id: 'device-preview', label: 'Device Preview', description: 'Preview across viewports & roles', icon: Monitor,    action: () => go('/device-preview'), keywords: ['responsive', 'mobile', 'role', 'simulator'], roles: ['admin', 'developer'] },
     { id: 'logout',         label: 'Sign Out',       icon: LogOut,      action: async () => { await logout(); navigate('/login'); onClose() }, keywords: ['log out', 'exit'] },
   ]
 
+  const allowed = commands.filter(c =>
+    !c.roles || (user?.role && c.roles.includes(user.role))
+  )
+
   const filtered = query.trim()
-    ? commands.filter(c => {
+    ? allowed.filter(c => {
         const q = query.toLowerCase()
         return c.label.toLowerCase().includes(q) || c.keywords?.some(k => k.includes(q))
       })
-    : commands
+    : allowed
 
   useEffect(() => { setSelected(0) }, [query])
 
