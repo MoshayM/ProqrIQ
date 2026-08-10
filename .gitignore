@@ -21,6 +21,7 @@ credentials.txt
 *.txt
 *.PNG
 *.png
+!client/public/og-image.png
 *.csv
 *.pptx
 *.pdf
