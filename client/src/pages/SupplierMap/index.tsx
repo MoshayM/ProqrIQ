@@ -1374,10 +1374,17 @@ export default function SupplierMap() {
             <CardContent className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-[#4a5568] mb-1">Commodity</label>
-                <select value={commodityType} onChange={e => setCommodityType(e.target.value)}
-                  className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30">
+                <input
+                  type="text"
+                  list="commodity-discovery-list"
+                  value={commodityType}
+                  onChange={e => setCommodityType(e.target.value)}
+                  placeholder="e.g. cnc machining, turning…"
+                  className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+                />
+                <datalist id="commodity-discovery-list">
                   {COMMODITY_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
-                </select>
+                </datalist>
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#4a5568] mb-1">Description</label>
@@ -1525,49 +1532,49 @@ export default function SupplierMap() {
           {/* Map */}
           <Card className="overflow-hidden flex-shrink-0">
             {/* Map toolbar */}
-            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#f1f3f7] bg-surface-2">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#f1f3f7] bg-surface-2 min-w-0">
               {/* Tile style */}
-              <div className="flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5 text-[#9aa3b2] mr-1" />
+              <div className="flex items-center gap-1 min-w-0 shrink">
+                <Layers className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
                 {(['light', 'dark', 'satellite'] as TileStyle[]).map(s => (
                   <button
                     key={s}
                     onClick={() => setTileStyle(s)}
                     className={cn(
-                      'px-2 py-0.5 rounded text-[10px] font-medium capitalize transition-all',
-                      tileStyle === s
-                        ? 'bg-brand text-white'
-                        : 'text-[#4a5568] hover:bg-surface-3',
+                      'px-1.5 py-0.5 rounded text-[10px] font-medium capitalize transition-all whitespace-nowrap',
+                      tileStyle === s ? 'bg-brand text-white' : 'text-[#4a5568] hover:bg-surface-3',
                     )}
                   >
-                    {s}
+                    <span className="hidden sm:inline">{s}</span>
+                    <span className="sm:hidden">{s === 'light' ? 'Lt' : s === 'dark' ? 'Dk' : 'Sat'}</span>
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 {/* Scroll zoom toggle */}
                 <button
                   onClick={() => setScrollWheelZoom(v => !v)}
                   title={scrollWheelZoom ? 'Disable scroll zoom' : 'Enable scroll zoom'}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-all',
+                    'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all',
                     scrollWheelZoom ? 'bg-navy text-white' : 'text-[#9aa3b2] hover:bg-surface-3',
                   )}
                 >
                   <MousePointer2 className="w-3 h-3" />
-                  Scroll zoom
+                  <span className="hidden sm:inline">Scroll zoom</span>
                 </button>
-                {/* Size controls */}
-                <div className="flex items-center gap-0.5 border border-[#e5e8ef] rounded-lg overflow-hidden">
+                {/* Size controls — always fully visible */}
+                <div className="flex items-center gap-0 border border-[#e5e8ef] rounded-lg overflow-hidden flex-shrink-0">
                   {([
-                    { key: 'sm',   label: 'S' },
-                    { key: 'md',   label: 'M' },
-                    { key: 'lg',   label: 'L' },
+                    { key: 'sm',   label: 'S'  },
+                    { key: 'md',   label: 'M'  },
+                    { key: 'lg',   label: 'L'  },
                     { key: 'full', label: <Maximize2 className="w-3 h-3" /> },
                   ] as { key: MapSize; label: React.ReactNode }[]).map(({ key, label }) => (
                     <button
                       key={key}
                       onClick={() => setMapSize(key)}
+                      title={key === 'full' ? 'Fullscreen / Maximize' : `Map size: ${key}`}
                       className={cn(
                         'px-2 py-1 text-[10px] font-semibold transition-all leading-none',
                         mapSize === key

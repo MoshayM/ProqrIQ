@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { format, differenceInSeconds } from 'date-fns'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Upload, RefreshCw, X, Play, Eye, Trash2, ChevronLeft, AlertCircle, CheckCircle, Clock, Zap, AlertTriangle, Download } from 'lucide-react'
+import { Upload, RefreshCw, X, Play, Eye, Trash2, ChevronLeft, AlertCircle, CheckCircle, Clock, Zap, AlertTriangle, Download, FileText, Layers } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/button'
@@ -380,9 +380,13 @@ const SUPPLIER_COUNTRIES = [
 ];
 
 const CURRENCIES = ['EUR', 'USD', 'GBP', 'CNY', 'INR', 'PLN', 'CZK', 'MXN', 'TRY'];
-const PROCUREMENT_TYPES = ['make', 'buy', 'make_or_buy'];
+const PROCUREMENT_TYPES = [
+  { value: 'in_house',       label: 'In-house (Make)' },
+  { value: 'purchased',      label: 'Purchased (Buy)' },
+  { value: 'sub_contracted', label: 'Sub-contracted' },
+];
 
-interface SharedParams {
+interface ItemParams {
   supplier_country: string;
   supplier_currency: string;
   annual_volume: number;
@@ -390,167 +394,406 @@ interface SharedParams {
   procurement_type: string;
 }
 
+const DEFAULT_ITEM_PARAMS: ItemParams = {
+  supplier_country: 'DE',
+  supplier_currency: 'EUR',
+  annual_volume: 1000,
+  lot_size: 100,
+  procurement_type: 'in_house',
+};
+
+const SEL = 'w-full border border-[#e5e8ef] rounded-md px-2 py-1.5 text-xs text-[#0f1729] bg-white focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand transition-colors'
+const NUM = 'w-full border border-[#e5e8ef] rounded-md px-2 py-1.5 text-xs font-mono text-[#0f1729] bg-white focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand transition-colors text-right'
+
+const ACCEPTED_EXTS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'tiff'])
+
+type BatchInputMode = 'drawings' | 'spreadsheet'
+
+const SPREADSHEET_TEMPLATE_CSV =
+  'part_name,description,material,supplier_country,supplier_currency,procurement_type,annual_volume,lot_size\n' +
+  'Bracket A,Aluminium L-bracket,AlSi10Mg,DE,EUR,in_house,1000,100\n' +
+  'Cover Plate,Steel stamped cover,DC04,PL,EUR,sub_contracted,5000,500\n'
+
+function downloadCSVTemplate() {
+  const blob = new Blob([SPREADSHEET_TEMPLATE_CSV], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = 'bulk_costing_template.csv'; a.click()
+  URL.revokeObjectURL(url)
+}
+
 function NewBatchTab() {
-  const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null)
+  const queryClient = useQueryClient()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const sheetInputRef = useRef<HTMLInputElement>(null)
+  const [batchMode, setBatchMode] = useState<BatchInputMode>('drawings')
+  const [files, setFiles] = useState<File[]>([])
   const [isDragging, setIsDragging] = useState(false)
-  const [params, setParams] = useState<SharedParams>({
-    supplier_country: 'DE',
-    supplier_currency: 'EUR',
-    annual_volume: 1000,
-    lot_size: 100,
-    procurement_type: 'make',
-  });
+  const [itemParams, setItemParams] = useState<Record<string, ItemParams>>({})
+  const [defaults, setDefaults] = useState<ItemParams>({ ...DEFAULT_ITEM_PARAMS })
+  // Spreadsheet state
+  const [sheetFile, setSheetFile] = useState<File | null>(null)
+  const [sheetIsDragging, setSheetIsDragging] = useState(false)
+  const [sheetRowCount, setSheetRowCount] = useState<number | null>(null)
 
   const createMut = useMutation({
     mutationFn: (formData: FormData) => api.bulk.create(formData as any),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['batches'] });
-      toast.success('Batch created successfully');
-      setFile(null);
+      queryClient.invalidateQueries({ queryKey: ['batches'] })
+      toast.success('Batch created — processing started')
+      setFiles([])
+      setItemParams({})
     },
     onError: () => toast.error('Failed to create batch'),
-  });
+  })
 
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setIsDragging(false);
-    const dropped = e.dataTransfer.files[0];
-    if (dropped && (dropped.name.endsWith('.xlsx') || dropped.name.endsWith('.csv'))) {
-      setFile(dropped);
+  const sheetMut = useMutation({
+    mutationFn: (file: File) => api.bulk.createFromSpreadsheet(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['batches'] })
+      toast.success('Batch created — processing started')
+      setSheetFile(null); setSheetRowCount(null)
+    },
+    onError: () => toast.error('Failed to create batch from spreadsheet'),
+  })
+
+  function onSheetFileSelected(f: File) {
+    setSheetFile(f)
+    if (f.name.endsWith('.csv')) {
+      const reader = new FileReader()
+      reader.onload = e => {
+        const text = e.target?.result as string ?? ''
+        const rows = text.split(/\r?\n/).filter(l => l.trim())
+        setSheetRowCount(Math.max(0, rows.length - 1)) // minus header
+      }
+      reader.readAsText(f)
     } else {
-      toast.error('Only .xlsx or .csv files are accepted');
+      setSheetRowCount(null) // xlsx: count shown after server parse
     }
   }
 
+  function addFiles(incoming: File[]) {
+    const valid = incoming.filter(f => ACCEPTED_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ''))
+    if (valid.length < incoming.length) toast.error('Some files skipped — only PDF / PNG / JPG / WEBP accepted')
+    if (!valid.length) return
+    setFiles(prev => {
+      const existing = new Set(prev.map(f => f.name))
+      const fresh = valid.filter(f => !existing.has(f.name))
+      setItemParams(curr => {
+        const next = { ...curr }
+        fresh.forEach(f => { next[f.name] = { ...defaults } })
+        return next
+      })
+      return [...prev, ...fresh]
+    })
+  }
+
+  function removeFile(name: string) {
+    setFiles(prev => prev.filter(f => f.name !== name))
+    setItemParams(prev => { const { [name]: _, ...rest } = prev; return rest })
+  }
+
+  function setParam<K extends keyof ItemParams>(name: string, key: K, val: ItemParams[K]) {
+    setItemParams(prev => ({ ...prev, [name]: { ...prev[name], [key]: val } }))
+  }
+
+  function applyDefaultsToAll() {
+    const next: Record<string, ItemParams> = {}
+    files.forEach(f => { next[f.name] = { ...defaults } })
+    setItemParams(next)
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setIsDragging(false)
+    addFiles(Array.from(e.dataTransfer.files))
+  }
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const selected = e.target.files?.[0];
-    if (selected) setFile(selected);
+    if (e.target.files) addFiles(Array.from(e.target.files))
+    e.target.value = ''
   }
 
   function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file) { toast.error('Please select a file'); return; }
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('shared_params', JSON.stringify(params));
-    createMut.mutate(fd);
+    e.preventDefault()
+    if (batchMode === 'spreadsheet') {
+      if (!sheetFile) { toast.error('Please select a spreadsheet file'); return }
+      sheetMut.mutate(sheetFile)
+      return
+    }
+    if (!files.length) { toast.error('Please add at least one drawing file'); return }
+    const fd = new FormData()
+    files.forEach(f => fd.append('files', f))
+    const overrides: Record<string, ItemParams> = {}
+    files.forEach(f => { overrides[f.name] = itemParams[f.name] ?? defaults })
+    fd.append('overrides', JSON.stringify(overrides))
+    fd.append('shared_params', JSON.stringify({ ...defaults, lots_per_year: 10, shifts_per_day: 2, annual_production_hours: 4000 }))
+    createMut.mutate(fd)
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Drop Zone */}
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Mode toggle */}
+      <div className="flex gap-1 p-1 bg-[#f1f3f7] rounded-xl">
+        {([
+          { id: 'drawings',    label: 'Drawing Files',      icon: FileText },
+          { id: 'spreadsheet', label: 'Spreadsheet / CSV',  icon: Layers },
+        ] as const).map(m => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setBatchMode(m.id)}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all',
+              batchMode === m.id ? 'bg-white text-[#0f1729] shadow-sm' : 'text-[#9aa3b2] hover:text-[#4a5568]',
+            )}
+          >
+            <m.icon className="w-3.5 h-3.5" />
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Spreadsheet mode */}
+      {batchMode === 'spreadsheet' && (
+        <div className="space-y-4">
+          {/* Info banner */}
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-[#f8f9fc] border border-[#e5e8ef] text-xs text-[#4a5568]">
+            <div className="flex-1">
+              <p className="font-semibold text-[#0f1729] mb-1">Spreadsheet columns (row 1 = headers) or PDF parts list</p>
+              <p className="font-mono text-[11px] text-[#9aa3b2] leading-relaxed">
+                part_name · description · material · supplier_country · supplier_currency · procurement_type · annual_volume · lot_size
+              </p>
+              <p className="mt-1 text-[11px] text-[#9aa3b2]">
+                <strong className="text-[#0f1729]">.xlsx / .csv:</strong> row 1 = headers, only <strong className="text-[#0f1729]">part_name</strong> required.{' '}
+                <strong className="text-[#0f1729]">.pdf:</strong> AI extracts parts automatically.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={downloadCSVTemplate}
+              className="shrink-0 flex items-center gap-1 text-brand hover:underline font-medium text-[11px] mt-0.5"
+            >
+              <Download className="w-3 h-3" />
+              Template
+            </button>
+          </div>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setSheetIsDragging(true) }}
+            onDragLeave={() => setSheetIsDragging(false)}
+            onDrop={e => {
+              e.preventDefault(); setSheetIsDragging(false)
+              const f = e.dataTransfer.files[0]
+              if (f && (f.name.endsWith('.xlsx') || f.name.endsWith('.csv') || f.name.endsWith('.xls') || f.name.endsWith('.pdf'))) onSheetFileSelected(f)
+              else toast.error('Please drop an .xlsx, .csv, or .pdf file')
+            }}
+            onClick={() => sheetInputRef.current?.click()}
+            className={cn(
+              'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
+              sheetIsDragging ? 'border-brand bg-brand/5' : 'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
+            )}
+          >
+            <input ref={sheetInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) onSheetFileSelected(f); e.target.value = '' }} />
+            {sheetFile ? (
+              <div className="flex flex-col items-center gap-2">
+                <CheckCircle className="w-8 h-8 text-green-500" />
+                <p className="font-medium text-[#0f1729] text-sm">{sheetFile.name}</p>
+                {sheetRowCount !== null ? (
+                  <span className="inline-flex items-center gap-1.5 bg-brand/10 text-brand text-xs font-semibold px-3 py-1 rounded-full">
+                    ~{sheetRowCount} part{sheetRowCount !== 1 ? 's' : ''} detected
+                  </span>
+                ) : sheetFile.name.endsWith('.pdf') ? (
+                  <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full">
+                    AI will extract parts from PDF
+                  </span>
+                ) : null}
+                <button type="button" onClick={e => { e.stopPropagation(); setSheetFile(null); setSheetRowCount(null) }}
+                  className="text-xs text-red-500 hover:underline">Remove</button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="w-8 h-8 text-[#c8cdd8]" />
+                <p className="font-medium text-[#4a5568] text-sm">Drop .xlsx, .csv, or .pdf here, or click to browse</p>
+                <p className="text-xs text-[#9aa3b2]">Up to {50} parts · Excel 2007+, CSV, or PDF (AI extraction)</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Drawing files mode */}
+      {batchMode === 'drawings' && (
+      <>
+      {/* Drop zone */}
       <div
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
         className={cn(
-          'border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors',
+          'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
           isDragging ? 'border-brand bg-brand/5' : 'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
         )}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.csv"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-        {file ? (
-          <div className="flex flex-col items-center gap-2">
-            <CheckCircle className="w-10 h-10 text-green-500" />
-            <p className="font-medium text-[#0f1729]">{file.name}</p>
-            <p className="text-sm text-[#9aa3b2]">{(file.size / 1024).toFixed(1)} KB</p>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setFile(null); }}
-              className="text-xs text-red-500 hover:underline mt-1"
-            >
-              Remove
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-[#9aa3b2]">
-            <Upload className="w-10 h-10 text-[#c8cdd8]" />
-            <p className="font-medium text-[#4a5568]">Drop your file here or click to browse</p>
-            <p className="text-sm">Accepts .xlsx or .csv</p>
-          </div>
-        )}
+        <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff" className="hidden" onChange={handleFileChange} />
+        <div className="flex flex-col items-center gap-2">
+          <Upload className="w-8 h-8 text-[#c8cdd8]" />
+          <p className="font-medium text-[#4a5568] text-sm">Drop drawing files or click to browse</p>
+          <p className="text-xs text-[#9aa3b2]">PDF, PNG, JPG, WEBP · up to 50 files</p>
+          {files.length > 0 && (
+            <span className="mt-1 inline-flex items-center gap-1.5 bg-brand/10 text-brand text-xs font-semibold px-3 py-1 rounded-full">
+              <Layers className="w-3 h-3" />
+              {files.length} file{files.length !== 1 ? 's' : ''} selected — configure below or add more
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Params */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-[#4a5568] mb-1">Supplier Country</label>
-          <select
-            value={params.supplier_country}
-            onChange={(e) => setParams((p) => ({ ...p, supplier_country: e.target.value }))}
-            className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
-          >
-            {SUPPLIER_COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>{c.name}</option>
+      {/* Per-item params (shown after files are added) */}
+      {files.length > 0 && (
+        <div className="space-y-2.5">
+          {/* Batch defaults bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl bg-[#f8f9fc] border border-[#e5e8ef]">
+            <span className="text-xs font-semibold text-[#4a5568] shrink-0">Batch defaults:</span>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 flex-1">
+              <select value={defaults.supplier_country} onChange={e => setDefaults(p => ({ ...p, supplier_country: e.target.value }))} className={SEL}>
+                {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+              </select>
+              <select value={defaults.supplier_currency} onChange={e => setDefaults(p => ({ ...p, supplier_currency: e.target.value }))} className={SEL}>
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select value={defaults.procurement_type} onChange={e => setDefaults(p => ({ ...p, procurement_type: e.target.value }))} className={cn(SEL, 'col-span-2 sm:col-span-1')}>
+                {PROCUREMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <input type="number" min={1} value={defaults.annual_volume} onChange={e => setDefaults(p => ({ ...p, annual_volume: Number(e.target.value) }))} placeholder="Annual vol" className={NUM} />
+              <input type="number" min={1} value={defaults.lot_size} onChange={e => setDefaults(p => ({ ...p, lot_size: Number(e.target.value) }))} placeholder="Lot size" className={NUM} />
+            </div>
+            <button type="button" onClick={applyDefaultsToAll} className="shrink-0 text-xs font-semibold text-brand hover:underline whitespace-nowrap self-end sm:self-auto">
+              Apply to all
+            </button>
+          </div>
+
+          {/* Column headers (desktop) */}
+          <div className="hidden sm:grid grid-cols-[1fr_110px_72px_136px_82px_74px_24px] gap-2 px-3 pb-0.5">
+            {['Drawing', 'Country', 'Ccy', 'Procurement', 'Annual vol', 'Lot size', ''].map((h, i) => (
+              <span key={i} className={cn('text-[10px] font-semibold uppercase tracking-wide text-[#9aa3b2]', i >= 4 ? 'text-right' : '')}>{h}</span>
             ))}
-          </select>
+          </div>
+
+          {/* Item rows */}
+          <div className="space-y-1.5">
+            {files.map(f => {
+              const p = itemParams[f.name] ?? defaults
+              return (
+                <div key={f.name} className="rounded-xl border border-[#e5e8ef] bg-white px-3 py-2.5">
+                  {/* Desktop row */}
+                  <div className="hidden sm:grid grid-cols-[1fr_110px_72px_136px_82px_74px_24px] items-center gap-2">
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-[#0f1729] min-w-0" title={f.name}>
+                      <FileText className="w-3.5 h-3.5 text-brand shrink-0" />
+                      <span className="truncate">{f.name}</span>
+                    </span>
+                    <select value={p.supplier_country} onChange={e => setParam(f.name, 'supplier_country', e.target.value)} className={SEL}>
+                      {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                    </select>
+                    <select value={p.supplier_currency} onChange={e => setParam(f.name, 'supplier_currency', e.target.value)} className={SEL}>
+                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select value={p.procurement_type} onChange={e => setParam(f.name, 'procurement_type', e.target.value)} className={SEL}>
+                      {PROCUREMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <input type="number" min={1} value={p.annual_volume} onChange={e => setParam(f.name, 'annual_volume', Number(e.target.value))} className={NUM} />
+                    <input type="number" min={1} value={p.lot_size} onChange={e => setParam(f.name, 'lot_size', Number(e.target.value))} className={NUM} />
+                    <button type="button" onClick={() => removeFile(f.name)} className="text-[#c8cdd8] hover:text-red-500 transition-colors rounded hover:bg-red-50 p-0.5 ml-auto">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Mobile card */}
+                  <div className="sm:hidden space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-[#0f1729] min-w-0" title={f.name}>
+                        <FileText className="w-3.5 h-3.5 text-brand shrink-0" />
+                        <span className="truncate">{f.name}</span>
+                      </span>
+                      <button type="button" onClick={() => removeFile(f.name)} className="shrink-0 text-[#c8cdd8] hover:text-red-500 transition-colors rounded p-1 hover:bg-red-50">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Country</p>
+                        <select value={p.supplier_country} onChange={e => setParam(f.name, 'supplier_country', e.target.value)} className={SEL}>
+                          {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Currency</p>
+                        <select value={p.supplier_currency} onChange={e => setParam(f.name, 'supplier_currency', e.target.value)} className={SEL}>
+                          {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Procurement</p>
+                        <select value={p.procurement_type} onChange={e => setParam(f.name, 'procurement_type', e.target.value)} className={SEL}>
+                          {PROCUREMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Annual vol</p>
+                        <input type="number" min={1} value={p.annual_volume} onChange={e => setParam(f.name, 'annual_volume', Number(e.target.value))} className={NUM} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Lot size</p>
+                        <input type="number" min={1} value={p.lot_size} onChange={e => setParam(f.name, 'lot_size', Number(e.target.value))} className={NUM} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-[#4a5568] mb-1">Currency</label>
-          <select
-            value={params.supplier_currency}
-            onChange={(e) => setParams((p) => ({ ...p, supplier_currency: e.target.value }))}
-            className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
-          >
-            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[#4a5568] mb-1">Procurement Type</label>
-          <select
-            value={params.procurement_type}
-            onChange={(e) => setParams((p) => ({ ...p, procurement_type: e.target.value }))}
-            className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
-          >
-            {PROCUREMENT_TYPES.map((t) => (
-              <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[#4a5568] mb-1">Annual Volume</label>
-          <input
-            type="number"
-            min={1}
-            value={params.annual_volume}
-            onChange={(e) => setParams((p) => ({ ...p, annual_volume: Number(e.target.value) }))}
-            className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[#4a5568] mb-1">Lot Size</label>
-          <input
-            type="number"
-            min={1}
-            value={params.lot_size}
-            onChange={(e) => setParams((p) => ({ ...p, lot_size: Number(e.target.value) }))}
-            className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors"
-          />
-        </div>
-      </div>
+      )}
 
       <Button
         type="submit"
         variant="primary"
         size="lg"
-        disabled={!file}
+        disabled={!files.length}
         loading={createMut.isPending}
         iconLeft={<Play className="w-4 h-4" />}
         className="w-full"
       >
-        Start Batch Costing
+        {files.length > 0
+          ? `Start Batch Costing — ${files.length} drawing${files.length !== 1 ? 's' : ''}`
+          : 'Start Batch Costing'
+        }
       </Button>
+      </>
+      )}
+
+      {/* Spreadsheet submit (outside drawings block) */}
+      {batchMode === 'spreadsheet' && (
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          disabled={!sheetFile}
+          loading={sheetMut.isPending}
+          iconLeft={<Play className="w-4 h-4" />}
+          className="w-full"
+        >
+          {sheetFile
+            ? `Start Batch Costing${sheetRowCount !== null ? ` — ${sheetRowCount} parts` : ''}`
+            : 'Start Batch Costing'
+          }
+        </Button>
+      )}
     </form>
-  );
+  )
 }
 
 // ─── STATUS INDICATOR ────────────────────────────────────────────────────────
@@ -661,7 +904,7 @@ function HistoryTab() {
       <EmptyState
         illustration={<BatchEmptyIllustration />}
         title="No batch jobs yet"
-        description="Upload a spreadsheet to cost multiple parts at once."
+        description="Add drawing files to cost multiple parts at once."
       />
     )
   }
@@ -781,7 +1024,7 @@ function BulkCostingList() {
     >
       <div>
         <h1 className="text-2xl font-bold text-[#0f1729]">Bulk Costing</h1>
-        <p className="text-sm text-[#9aa3b2] mt-1">Upload a spreadsheet to cost multiple parts at once</p>
+        <p className="text-sm text-[#9aa3b2] mt-1">Upload drawing files to cost multiple parts simultaneously</p>
       </div>
 
       <Card>

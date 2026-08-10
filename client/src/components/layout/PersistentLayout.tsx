@@ -303,7 +303,6 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [shortcutTip, setShortcutTip] = useState<string | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [helpMinimized, setHelpMinimized] = useState(false)
   const pendingGRef = useRef(false)
   const tipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -386,15 +385,11 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
         <Logo size="sm" inverted />
         <div className="ml-auto flex items-center gap-1.5">
           <button
-            onClick={() => {
-              if (helpOpen && helpMinimized) { setHelpMinimized(false); return }
-              if (helpOpen) { setHelpMinimized(true); return }
-              setHelpOpen(true); setHelpMinimized(false)
-            }}
+            onClick={() => setHelpOpen(v => !v)}
             className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
             aria-label="Help"
           >
-            <HelpCircle className="w-[1.125rem] h-[1.125rem]" style={{ color: helpOpen && !helpMinimized ? '#e85c1a' : 'rgba(255,255,255,0.65)' }} />
+            <HelpCircle className="w-[1.125rem] h-[1.125rem]" style={{ color: helpOpen ? '#e85c1a' : 'rgba(255,255,255,0.65)' }} />
           </button>
           <button onClick={() => setNotifDrawerOpen(true)} className="relative p-2 rounded-lg hover:bg-white/10 transition-colors" aria-label="Notifications">
             <Bell className="w-[1.125rem] h-[1.125rem] text-white/65" />
@@ -767,44 +762,23 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       {/* ── Keyboard shortcuts modal ─────────────────────────────────────────── */}
       <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
-      {/* ── Floating Help launcher ───────────────────────────────────────────── */}
+      {/* ── Floating Help launcher (desktop) ────────────────────────────────── */}
       <motion.button
-        onClick={() => {
-          if (helpOpen && helpMinimized) { setHelpMinimized(false); return }
-          if (helpOpen) { setHelpMinimized(true); return }
-          setHelpOpen(true)
-          setHelpMinimized(false)
-        }}
+        onClick={() => setHelpOpen(v => !v)}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.93 }}
         className="hidden lg:flex fixed right-6 z-[100000] w-12 h-12 items-center justify-center rounded-full text-white shadow-xl transition-colors bottom-safe-6"
-        style={{ background: helpOpen && !helpMinimized ? '#e85c1a' : '#1e2d4e' }}
+        style={{ background: helpOpen ? '#e85c1a' : '#1e2d4e' }}
         title="Help & Guide"
         aria-label="Open help"
       >
-        <AnimatePresence mode="wait" initial={false}>
-          {helpOpen && !helpMinimized ? (
-            <motion.span key="minus"
-              initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}>
-              <HelpCircle className="w-5 h-5" />
-            </motion.span>
-          ) : (
-            <motion.span key="help"
-              initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}>
-              <HelpCircle className="w-5 h-5" />
-            </motion.span>
-          )}
-        </AnimatePresence>
+        <HelpCircle className="w-5 h-5" />
       </motion.button>
 
-      {/* ── Help panel ───────────────────────────────────────────────────────── */}
+      {/* ── Help panel (right drawer) ─────────────────────────────────────────── */}
       <HelpPanel
         open={helpOpen}
-        minimized={helpMinimized}
-        onClose={() => { setHelpOpen(false); setHelpMinimized(false) }}
-        onToggleMinimize={() => setHelpMinimized(v => !v)}
+        onClose={() => setHelpOpen(false)}
       />
 
       {/* ── Notifications drawer (7B.6) ──────────────────────────────────────── */}

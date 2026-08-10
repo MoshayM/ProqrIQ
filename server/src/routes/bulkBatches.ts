@@ -1,7 +1,14 @@
 import { Router, Request, Response } from 'express'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { requirePlan } from '../middleware/plan'
-import { bulkDrawingUpload, saveUploadedFile } from '../middleware/upload'
+import { bulkDrawingUpload, saveUploadedFile, spreadsheetUpload } from '../middleware/upload'
+import ExcelJS from 'exceljs'
+import path from 'path'
+import Anthropic from '@anthropic-ai/sdk'
+import { parseAIJSON } from '../lib/parseAIJSON'
+
+const MODEL = 'claude-sonnet-4-20250514'
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 import {
   db,
   costingBatches,
@@ -219,6 +226,181 @@ router.post(
         error: 'Internal server error',
         error_code: 'INTERNAL_ERROR',
       })
+    }
+  },
+)
+
+// ─── Spreadsheet parser ───────────────────────────────────────────────────────
+
+type SpreadsheetRow = Record<string, string>
+
+async function parseSpreadsheet(file: Express.Multer.File): Promise<SpreadsheetRow[]> {
+  const ext = path.extname(file.originalname).toLowerCase()
+
+  // PDF: extract text with pdf-parse, then use AI to pull structured rows
+  if (ext === '.pdf' || file.mimetype === 'application/pdf') {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
+    const { text } = await pdfParse(file.buffer)
+    const trimmed = text.trim()
+    if (!trimmed) return []
+
+    const msg = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      messages: [{
+        role: 'user',
+        content: `Extract a list of manufacturing parts from the following document text. Output ONLY valid JSON. No markdown fences. No preamble.
+
+Format: {"rows":[{"part_name":"...","description":"...","material":"...","supplier_country":"DE","supplier_currency":"EUR","procurement_type":"in_house","annual_volume":"1000","lot_size":"100"}]}
+
+Rules:
+- Only include rows that are clearly distinct parts or components.
+- "part_name" is required for each row; all other fields are optional (use empty string if unknown).
+- procurement_type must be exactly one of: "in_house", "purchased", "sub_contracted".
+- supplier_country must be an ISO 3166-1 alpha-2 code (e.g. "DE", "US", "CN"). Default to "DE" if not specified.
+- supplier_currency must be an ISO 4217 currency code (e.g. "EUR", "USD", "CNY"). Default to "EUR" if not specified.
+- annual_volume and lot_size must be numeric strings. Default to "1000" and "100" respectively.
+
+Document text:
+${trimmed.slice(0, 20000)}`,
+      }],
+    })
+    const content = msg.content[0]
+    if (content.type !== 'text') return []
+    const result = parseAIJSON<{ rows: SpreadsheetRow[] }>(content.text)
+    return (result.rows ?? []).filter(r => !!r.part_name?.trim())
+  }
+
+  if (ext === '.csv' || file.mimetype === 'text/csv' || file.mimetype === 'text/plain') {
+    const lines = file.buffer.toString('utf-8').split(/\r?\n/).filter(l => l.trim())
+    if (lines.length < 2) return []
+    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+    return lines.slice(1).map(line => {
+      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+      const row: SpreadsheetRow = {}
+      headers.forEach((h, i) => { if (h) row[h] = values[i] ?? '' })
+      return row
+    }).filter(r => !!r.part_name?.trim())
+  }
+
+  // Excel (xlsx/xls)
+  const wb = new ExcelJS.Workbook()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (wb.xlsx as any).load(file.buffer)
+  const ws = wb.worksheets[0]
+  if (!ws) return []
+  const headers: string[] = []
+  const rows: SpreadsheetRow[] = []
+  ws.eachRow((row, rowNum) => {
+    if (rowNum === 1) {
+      row.eachCell((cell, colNum) => {
+        headers[colNum - 1] = String(cell.value ?? '').trim().toLowerCase()
+      })
+    } else {
+      const obj: SpreadsheetRow = {}
+      row.eachCell({ includeEmpty: false }, (cell, colNum) => {
+        const h = headers[colNum - 1]
+        if (h) obj[h] = String(cell.value ?? '').trim()
+      })
+      if (obj.part_name?.trim()) rows.push(obj)
+    }
+  })
+  return rows
+}
+
+// ─── POST /bulk-batches/from-spreadsheet ──────────────────────────────────────
+router.post(
+  '/from-spreadsheet',
+  spreadsheetUpload,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user!.id
+      const file = req.file
+      if (!file) {
+        return res.status(400).json({ success: false, error: 'No spreadsheet file provided', error_code: 'VALIDATION_FAILED' })
+      }
+
+      const rows = await parseSpreadsheet(file)
+      if (!rows.length) {
+        return res.status(400).json({
+          success: false,
+          error: 'No valid rows found. Ensure the spreadsheet has a "part_name" column header in the first row.',
+          error_code: 'VALIDATION_FAILED',
+        })
+      }
+      if (rows.length > BULK_MAX_ITEMS) {
+        return res.status(400).json({
+          success: false,
+          error: `Too many rows (${rows.length}). Maximum batch size is ${BULK_MAX_ITEMS}.`,
+          error_code: 'BATCH_LIMIT_EXCEEDED',
+        })
+      }
+
+      const now = new Date().toISOString()
+      const batchId = crypto.randomUUID()
+      const batchName = `${file.originalname.replace(/\.[^.]+$/, '')} — ${new Date().toLocaleDateString()}`
+
+      await db.insert(costingBatches).values({
+        id: batchId,
+        name: batchName,
+        batch_type: 'bulk',
+        status: 'queued',
+        total_items: rows.length,
+        completed_items: 0,
+        failed_items: 0,
+        clarification_items: 0,
+        shared_params_json: JSON.stringify({}),
+        created_by: userId,
+        created_at: now,
+      })
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const overrides = {
+          supplier_country:   row.supplier_country  || row.country  || 'DE',
+          supplier_currency:  row.supplier_currency || row.currency || 'EUR',
+          procurement_type:   row.procurement_type  || 'in_house',
+          annual_volume:      parseFloat(row.annual_volume || row.volume || '1000') || 1000,
+          lot_size:           parseFloat(row.lot_size      || row.lot    || '100')  || 100,
+          ...(row.description ? { part_description: row.description } : {}),
+          ...(row.material    ? { material: row.material } : {}),
+        }
+        await db.insert(batchItems).values({
+          id:            crypto.randomUUID(),
+          batch_id:      batchId,
+          part_name:     row.part_name.trim(),
+          status:        'queued',
+          sort_order:    i,
+          overrides_json: JSON.stringify(overrides),
+          created_at:    now,
+        })
+      }
+
+      await db.insert(auditLog).values({
+        id:          crypto.randomUUID(),
+        user_id:     userId,
+        action:      'INSERT',
+        entity_type: 'costing_batch',
+        entity_id:   batchId,
+        details:     JSON.stringify({ name: batchName, total_items: rows.length, source: 'spreadsheet', filename: file.originalname }),
+        created_at:  now,
+      })
+
+      runBatch(batchId).catch(async err => {
+        console.error(`Batch runner failed for ${batchId}:`, err)
+        try {
+          await db.update(costingBatches)
+            .set({ status: 'failed', completed_at: new Date().toISOString() })
+            .where(eq(costingBatches.id, batchId))
+        } catch { /* best-effort */ }
+      })
+
+      const [batch] = await db.select().from(costingBatches).where(eq(costingBatches.id, batchId))
+      return res.status(201).json({ success: true, data: batch })
+    } catch (err) {
+      console.error('Create batch from spreadsheet error:', err)
+      return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
     }
   },
 )

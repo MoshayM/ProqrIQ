@@ -140,6 +140,36 @@ const avatarMulter = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 })
 
+const SPREADSHEET_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+  'application/vnd.ms-excel',                                           // xls
+  'text/csv',
+  'text/plain',
+  'application/csv',
+  'application/pdf',
+  'application/octet-stream', // xlsx/csv/pdf from some browsers
+])
+
+const SPREADSHEET_EXTENSIONS = new Set(['.xlsx', '.xls', '.csv', '.pdf'])
+
+const spreadsheetMulter = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase()
+    if (SPREADSHEET_MIME_TYPES.has(file.mimetype) || SPREADSHEET_EXTENSIONS.has(ext)) {
+      cb(null, true)
+    } else {
+      cb(
+        Object.assign(new Error('Invalid file type. Allowed: .xlsx, .csv, .pdf'), {
+          error_code: 'INVALID_FILE_TYPE', status: 400,
+        }) as unknown as null,
+        false,
+      )
+    }
+  },
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max (PDFs can be larger)
+})
+
 // ─── Exported middleware ──────────────────────────────────────────────────────
 
 /**
@@ -164,6 +194,14 @@ export function bulkDrawingUpload(req: Request, res: Response, next: NextFunctio
  */
 export function kbUpload(req: Request, res: Response, next: NextFunction): void {
   kbMulter.single('file')(req, res, (err) => handleMulterError(err, req, res, next))
+}
+
+/**
+ * Single spreadsheet upload for bulk costing from manifest. Field name: 'file'.
+ * Accepts: .xlsx, .csv, .pdf. Max: 20MB.
+ */
+export function spreadsheetUpload(req: Request, res: Response, next: NextFunction): void {
+  spreadsheetMulter.single('file')(req, res, (err) => handleMulterError(err, req, res, next))
 }
 
 /**

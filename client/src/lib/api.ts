@@ -89,7 +89,8 @@ export const api = {
     retry:      (id: string, u?: unknown)          => client.post(`/bulk-batches/${id}/retry`, u).then(d),
     cancel:     (id: string)                       => client.post(`/bulk-batches/${id}/cancel`).then(d),
     softDelete: (id: string)                       => client.post(`/bulk-batches/${id}/soft-delete`).then(d),
-    exportExcel:(id: string)                       => client.get(`/bulk-batches/${id}/export-excel`, { responseType: 'blob' }).then(r => r.data as Blob),
+    exportExcel:          (id: string)  => client.get(`/bulk-batches/${id}/export-excel`, { responseType: 'blob' }).then(r => r.data as Blob),
+    createFromSpreadsheet:(file: File) => { const fd = new FormData(); fd.append('file', file); return client.post('/bulk-batches/from-spreadsheet', fd).then(d) },
   },
   assemblies: {
     create:          (u: unknown)                           => client.post('/assemblies', u).then(d),
