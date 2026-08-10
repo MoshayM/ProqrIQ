@@ -511,6 +511,10 @@ export const suppliers = sqliteTable('suppliers', {
   contact_title:      text('contact_title'),
   website:            text('website'),
   full_address:       text('full_address'),
+  founded_year:       integer('founded_year'),
+  company_size:       text('company_size'),       // '1-10'|'11-50'|'51-200'|'201-1000'|'1000+'
+  annual_revenue_usd: real('annual_revenue_usd'),
+  licenses:           text('licenses'),            // JSON array of strings
   capabilities:   text('capabilities'),        // JSON array of commodity types
   tier_rating:    integer('tier_rating'),       // 1–5
   origin:         text('origin', {
@@ -527,6 +531,17 @@ export const suppliers = sqliteTable('suppliers', {
   created_by:     text('created_by').references(() => users.id),
   created_at:     text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at:     text('updated_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── supplier_conversations ───────────────────────────────────────────────────
+
+export const supplierConversations = sqliteTable('supplier_conversations', {
+  id:          text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  supplier_id: text('supplier_id').notNull().references(() => suppliers.id),
+  user_id:     text('user_id').references(() => users.id),
+  sent_by:     text('sent_by', { enum: ['us', 'supplier'] }).notNull().default('us'),
+  message:     text('message').notNull(),
+  created_at:  text('created_at').$defaultFn(() => new Date().toISOString()),
 })
 
 // ─── supplier_customers ───────────────────────────────────────────────────────

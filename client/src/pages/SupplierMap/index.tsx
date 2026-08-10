@@ -67,6 +67,22 @@ const COUNTRY_NAMES: Record<string, string> = {
   JP: 'Japan', KR: 'South Korea', TW: 'Taiwan', VN: 'Vietnam', TH: 'Thailand',
 }
 
+const COMPANY_SIZES = ['1-10', '11-50', '51-200', '201-1000', '1000+']
+
+function companyAgeFromYear(year: number | null): string | null {
+  if (!year) return null
+  const age = new Date().getFullYear() - year
+  return `Est. ${year} · ${age} yr${age !== 1 ? 's' : ''} old`
+}
+
+function formatRevenue(usd: number | null): string | null {
+  if (!usd) return null
+  if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(1)}B`
+  if (usd >= 1_000_000)     return `$${(usd / 1_000_000).toFixed(1)}M`
+  if (usd >= 1_000)         return `$${(usd / 1_000).toFixed(0)}K`
+  return `$${usd.toFixed(0)}`
+}
+
 const COMMODITY_TYPES = [
   'cnc_machining', 'sheet_metal', 'turning', 'stamping',
   'injection_moulding', 'die_casting', 'forging', 'extrusion',
@@ -101,6 +117,10 @@ interface Supplier {
   contact_title:      string | null
   website:            string | null
   full_address:       string | null
+  founded_year:       number | null
+  company_size:       string | null
+  annual_revenue_usd: number | null
+  licenses:           string | null
 }
 
 interface SupplierQuote {
@@ -283,6 +303,86 @@ function AddQuoteModal({ supplierId, onClose }: {
           </div>
         </div>
       </motion.div>
+    </div>
+  )
+}
+
+// ─── SUPPLIER CONVERSATIONS ───────────────────────────────────────────────────
+
+function SupplierConversations({ supplierId }: { supplierId: string }) {
+  const qc = useQueryClient()
+  const [msg, setMsg] = useState('')
+  const [sentBy, setSentBy] = useState<'us' | 'supplier'>('us')
+  const [adding, setAdding] = useState(false)
+
+  const { data: convs = [], isLoading } = useQuery<Array<{ id: string; sent_by: string; message: string; created_at: string }>>({
+    queryKey: ['supplier-conversations', supplierId],
+    queryFn: () => api.suppliers.getConversations(supplierId),
+  })
+
+  async function send() {
+    if (!msg.trim()) return
+    setAdding(true)
+    try {
+      await api.suppliers.addConversation(supplierId, { message: msg.trim(), sent_by: sentBy })
+      qc.invalidateQueries({ queryKey: ['supplier-conversations', supplierId] })
+      setMsg('')
+    } catch {
+      toast.error('Failed to save message')
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div className="pt-2 border-t border-[#e5e8ef] space-y-2">
+      <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide">Conversation Log</p>
+      {isLoading ? (
+        <div className="space-y-1">{[0,1].map(i => <Skeleton key={i} variant="rect" height="2.5rem" />)}</div>
+      ) : convs.length === 0 ? (
+        <p className="text-xs text-[#9aa3b2] text-center py-2">No messages yet.</p>
+      ) : (
+        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+          {convs.map(c => (
+            <div key={c.id} className={cn('flex gap-2', c.sent_by === 'us' ? 'flex-row-reverse' : 'flex-row')}>
+              <div className={cn(
+                'max-w-[80%] rounded-xl px-3 py-2 text-xs',
+                c.sent_by === 'us'
+                  ? 'bg-brand text-white rounded-tr-none'
+                  : 'bg-surface-2 text-[#0f1729] rounded-tl-none border border-[#e5e8ef]',
+              )}>
+                <p className="whitespace-pre-wrap break-words">{c.message}</p>
+                <p className={cn('text-[10px] mt-0.5', c.sent_by === 'us' ? 'text-white/60' : 'text-[#9aa3b2]')}>
+                  {c.sent_by === 'us' ? 'Us' : 'Supplier'} · {new Date(c.created_at).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="space-y-2">
+        <div className="flex gap-1">
+          {(['us', 'supplier'] as const).map(s => (
+            <button key={s} onClick={() => setSentBy(s)}
+              className={cn('flex-1 py-1 text-xs rounded-lg font-medium border transition-all',
+                sentBy === s ? 'bg-brand text-white border-brand' : 'bg-surface-2 text-[#4a5568] border-[#e5e8ef]')}>
+              {s === 'us' ? 'Our message' : 'Supplier reply'}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={msg}
+          onChange={e => setMsg(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+          rows={2}
+          placeholder="Log a message or supplier reply…"
+          className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-xs text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none"
+        />
+        <Button variant="outline" size="sm" className="w-full" onClick={send} loading={adding}
+          iconLeft={<MessageSquare className="w-3.5 h-3.5" />}>
+          Save Message
+        </Button>
+      </div>
     </div>
   )
 }
@@ -606,6 +706,79 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
           )}
         </div>
 
+        {/* Company Profile */}
+        {(supplier.founded_year || supplier.company_size || supplier.annual_revenue_usd || supplier.licenses) && (
+          <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2">
+            <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide">Company Profile</p>
+            {supplier.founded_year && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#9aa3b2]">Founded</span>
+                <span className="text-xs font-medium text-[#0f1729]">{companyAgeFromYear(supplier.founded_year)}</span>
+              </div>
+            )}
+            {supplier.company_size && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#9aa3b2]">Company size</span>
+                <span className="text-xs font-medium text-[#0f1729]">{supplier.company_size} employees</span>
+              </div>
+            )}
+            {supplier.annual_revenue_usd && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#9aa3b2]">Annual revenue</span>
+                <span className="text-xs font-medium text-[#0f1729]">{formatRevenue(supplier.annual_revenue_usd)}</span>
+              </div>
+            )}
+            {supplier.licenses && (
+              <div className="space-y-1">
+                <p className="text-[10px] text-[#9aa3b2]">Licenses / Certifications</p>
+                <div className="flex flex-wrap gap-1">
+                  {supplier.licenses.split(',').map(l => l.trim()).filter(Boolean).map(l => (
+                    <span key={l} className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium border border-green-200">{l}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Company profile */}
+        {(supplier.founded_year || supplier.company_size || supplier.annual_revenue_usd || supplier.licenses) && (
+          <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2">
+            <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide">Company Profile</p>
+            {supplier.founded_year && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#9aa3b2]">📅</span>
+                <p className="text-xs text-[#0f1729]">{companyAgeFromYear(supplier.founded_year)}</p>
+              </div>
+            )}
+            {supplier.company_size && (
+              <div className="flex items-center gap-2">
+                <Users className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+                <p className="text-xs text-[#0f1729]">{supplier.company_size} employees</p>
+              </div>
+            )}
+            {supplier.annual_revenue_usd != null && (
+              <div className="flex items-center gap-2">
+                <TrendingDown className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+                <p className="text-xs text-[#0f1729]">Revenue: {formatRevenue(supplier.annual_revenue_usd)}</p>
+              </div>
+            )}
+            {(() => {
+              const lics: string[] = (() => { try { return JSON.parse(supplier.licenses ?? '[]') } catch { return [] } })()
+              return lics.length > 0 ? (
+                <div>
+                  <p className="text-[10px] text-[#9aa3b2] mb-1">Licenses / Certifications</p>
+                  <div className="flex flex-wrap gap-1">
+                    {lics.map(l => (
+                      <span key={l} className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">{l}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : null
+            })()}
+          </div>
+        )}
+
         {/* Notes */}
         {supplier.notes && (
           <p className="text-xs text-[#4a5568] italic">{supplier.notes}</p>
@@ -868,6 +1041,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
                 </Button>
               </div>
             )}
+            <SupplierConversations supplierId={supplier.id} />
           </div>
         )}
       </div>
@@ -1059,6 +1233,9 @@ export default function SupplierMap() {
   const [filterCapability, setFilterCapability] = useState('')
   const [filterCountry, setFilterCountry] = useState<string[]>([])
   const [filterOrigin, setFilterOrigin] = useState<string[]>([])
+  const [filterCompanySize, setFilterCompanySize] = useState<string[]>([])
+  const [filterLicense, setFilterLicense] = useState('')
+  const [filterMinAge, setFilterMinAge] = useState<number>(0)
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [showCompareDrawer, setShowCompareDrawer] = useState(false)
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
@@ -1139,8 +1316,19 @@ export default function SupplierMap() {
     if (filterOrigin.length > 0) {
       list = list.filter(s => filterOrigin.includes(s.origin))
     }
+    if (filterCompanySize.length > 0) {
+      list = list.filter(s => s.company_size && filterCompanySize.includes(s.company_size))
+    }
+    if (filterLicense.trim()) {
+      const lic = filterLicense.trim().toLowerCase()
+      list = list.filter(s => s.licenses && s.licenses.toLowerCase().includes(lic))
+    }
+    if (filterMinAge > 0) {
+      const currentYear = new Date().getFullYear()
+      list = list.filter(s => s.founded_year && (currentYear - s.founded_year) >= filterMinAge)
+    }
     return list
-  }, [suppliers, searchText, filterMinTier, filterCapability, filterCountry, filterOrigin])
+  }, [suppliers, searchText, filterMinTier, filterCapability, filterCountry, filterOrigin, filterCompanySize, filterLicense, filterMinAge])
 
   // Guard: bypass for admin/ceo/developer/owner regardless of plan or plan preview
   const isPrivilegedRole = user && SUPPLIER_BYPASS_ROLES.includes(user.role)
@@ -1306,9 +1494,44 @@ export default function SupplierMap() {
                   ))}
                 </div>
               </div>
-              {(filterMinTier > 0 || filterCapability.trim() || filterCountry.length > 0 || filterOrigin.length > 0) && (
+              <div>
+                <label className="block text-xs font-medium text-[#4a5568] mb-1.5">Company Size</label>
+                <div className="flex flex-wrap gap-1">
+                  {COMPANY_SIZES.map(sz => (
+                    <button key={sz}
+                      onClick={() => setFilterCompanySize(prev => prev.includes(sz) ? prev.filter(x => x !== sz) : [...prev, sz])}
+                      className={cn('px-2 py-0.5 rounded-md text-[10px] font-medium transition-all border',
+                        filterCompanySize.includes(sz) ? 'bg-brand text-white border-brand' : 'bg-surface-2 text-[#4a5568] border-[#e5e8ef] hover:border-brand/50')}>
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#4a5568] mb-1">License / Certification</label>
+                <input
+                  type="text"
+                  value={filterLicense}
+                  onChange={e => setFilterLicense(e.target.value)}
+                  placeholder="e.g. ISO 9001, IATF…"
+                  className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#4a5568] mb-1.5">Min Company Age</label>
+                <div className="flex gap-1">
+                  {[{label:'Any',val:0},{label:'5+',val:5},{label:'10+',val:10},{label:'20+',val:20},{label:'30+',val:30}].map(opt => (
+                    <button key={opt.val} onClick={() => setFilterMinAge(opt.val)}
+                      className={cn('flex-1 py-1 text-[10px] rounded-md transition-all border',
+                        filterMinAge === opt.val ? 'bg-brand text-white border-brand' : 'bg-surface-2 text-[#4a5568] border-[#e5e8ef] hover:border-brand/50')}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {(filterMinTier > 0 || filterCapability.trim() || filterCountry.length > 0 || filterOrigin.length > 0 || filterCompanySize.length > 0 || filterLicense.trim() || filterMinAge > 0) && (
                 <button
-                  onClick={() => { setFilterMinTier(0); setFilterCapability(''); setFilterCountry([]); setFilterOrigin([]) }}
+                  onClick={() => { setFilterMinTier(0); setFilterCapability(''); setFilterCountry([]); setFilterOrigin([]); setFilterCompanySize([]); setFilterLicense(''); setFilterMinAge(0) }}
                   className="text-xs text-brand hover:underline"
                 >
                   Clear all filters

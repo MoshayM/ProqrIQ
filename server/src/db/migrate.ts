@@ -239,8 +239,25 @@ export async function runMigrations(client: Client): Promise<void> {
   await exec(client, `ALTER TABLE suppliers ADD COLUMN website TEXT`)
   await exec(client, `ALTER TABLE suppliers ADD COLUMN full_address TEXT`)
 
+  // suppliers — company profile fields
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN founded_year INTEGER`)
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN company_size TEXT`)
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN annual_revenue_usd REAL`)
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN licenses TEXT`)
+
   // subscriptions — Razorpay support
   await exec(client, `ALTER TABLE subscriptions ADD COLUMN razorpay_subscription_id TEXT`)
+
+  // supplier conversations
+  await exec(client, `
+    CREATE TABLE IF NOT EXISTS supplier_conversations (
+      id          TEXT PRIMARY KEY,
+      supplier_id TEXT NOT NULL REFERENCES suppliers(id),
+      user_id     TEXT REFERENCES users(id),
+      sent_by     TEXT NOT NULL DEFAULT 'us',
+      message     TEXT NOT NULL,
+      created_at  TEXT
+    )`)
 
   // ── Indexes (IF NOT EXISTS is supported for indexes) ──────────────────────
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_ai_usage_log_user ON ai_usage_log(user_id)`)
@@ -253,6 +270,7 @@ export async function runMigrations(client: Client): Promise<void> {
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions(user_id)`)
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_org_members_org ON organization_members(org_id)`)
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_usage_user_period ON usage_counters(user_id, period_start)`)
+  await exec(client, `CREATE INDEX IF NOT EXISTS idx_supplier_conv_supplier ON supplier_conversations(supplier_id)`)
 
   // ── LLM API Keys + System Settings ────────────────────────────────────────
   await exec(client, `

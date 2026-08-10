@@ -7,6 +7,7 @@ import {
   costLines,
   auditLog,
   suppliers,
+  supplierConversations,
   supplierCustomers,
   supplierQuotes,
   supplierQuoteLines,
@@ -44,6 +45,10 @@ const createSupplierSchema = z.object({
   contact_title:      z.string().optional(),
   website:            z.string().optional(),
   full_address:       z.string().optional(),
+  founded_year:       z.number().int().min(1800).max(2100).optional(),
+  company_size:       z.enum(['1-10','11-50','51-200','201-1000','1000+']).optional(),
+  annual_revenue_usd: z.number().optional(),
+  licenses:           z.array(z.string()).optional(),
   capabilities:  z.array(z.string()).optional(),
   tier_rating:   z.number().int().min(1).max(5).optional(),
   notes:         z.string().optional(),
@@ -151,6 +156,10 @@ router.post('/', requireRole(WRITE_ROLES), validate(createSupplierSchema), async
         contact_title:      body.contact_title,
         website:            body.website,
         full_address:       body.full_address,
+        founded_year:       body.founded_year,
+        company_size:       body.company_size,
+        annual_revenue_usd: body.annual_revenue_usd,
+        licenses:           body.licenses ? JSON.stringify(body.licenses) : undefined,
         capabilities:  body.capabilities ? JSON.stringify(body.capabilities) : undefined,
         tier_rating:   body.tier_rating,
         origin:        'manual',
@@ -215,6 +224,10 @@ router.patch('/:id', requireRole(WRITE_ROLES), validate(updateSupplierSchema), a
     if (body.contact_title      !== undefined) updatePayload.contact_title      = body.contact_title
     if (body.website            !== undefined) updatePayload.website            = body.website
     if (body.full_address       !== undefined) updatePayload.full_address       = body.full_address
+    if (body.founded_year       !== undefined) updatePayload.founded_year       = body.founded_year
+    if (body.company_size       !== undefined) updatePayload.company_size       = body.company_size
+    if (body.annual_revenue_usd !== undefined) updatePayload.annual_revenue_usd = body.annual_revenue_usd
+    if (body.licenses           !== undefined) updatePayload.licenses           = JSON.stringify(body.licenses)
     if (body.capabilities  !== undefined) updatePayload.capabilities  = JSON.stringify(body.capabilities)
     if (body.tier_rating   !== undefined) updatePayload.tier_rating   = body.tier_rating
     if (body.notes         !== undefined) updatePayload.notes         = body.notes
@@ -1155,6 +1168,51 @@ Sign off as: ${userName}\nPepperl+Fuchs\n${userEmail}`
     console.error('Compose email error:', err)
     const status = (err as { status?: number }).status === 429 ? 429 : 500
     return res.status(status).json({ success: false, error: String(err) })
+  }
+})
+
+// ─── Conversation schemas ─────────────────────────────────────────────────────
+
+const addConversationSchema = z.object({
+  message: z.string().min(1).max(2000),
+  sent_by: z.enum(['us', 'supplier']).default('us'),
+})
+
+// GET /api/suppliers/:id/conversations
+router.get('/:id/conversations', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const rows = await db
+      .select()
+      .from(supplierConversations)
+      .where(eq(supplierConversations.supplier_id, id))
+      .orderBy(supplierConversations.created_at)
+    return res.json({ success: true, data: rows })
+  } catch (err) {
+    return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
+// POST /api/suppliers/:id/conversations
+router.post('/:id/conversations', requireRole(WRITE_ROLES), validate(addConversationSchema), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const userId = req.user!.id
+    const { message, sent_by } = req.body as z.infer<typeof addConversationSchema>
+
+    const [row] = await db
+      .insert(supplierConversations)
+      .values({ supplier_id: id, user_id: userId, sent_by, message })
+      .returning()
+
+    await db.insert(auditLog).values({
+      user_id: userId, action: 'CREATE', entity_type: 'supplier_conversation',
+      entity_id: row.id, details: JSON.stringify({ supplier_id: id, sent_by }),
+    })
+
+    return res.status(201).json({ success: true, data: row })
+  } catch (err) {
+    return res.status(500).json({ success: false, error: String(err) })
   }
 })
 
