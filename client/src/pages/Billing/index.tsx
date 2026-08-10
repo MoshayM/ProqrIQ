@@ -79,6 +79,7 @@ export default function Billing() {
   const [rzpPlan,         setRzpPlan]            = useState<'pro' | 'organization'>('pro')
   const [rzpBilling,      setRzpBilling]         = useState<'monthly' | 'annual'>('monthly')
   const [rzpLoading,      setRzpLoading]         = useState(false)
+  const billingPaySucceeded = React.useRef(false)
 
   async function handlePortal() {
     try {
@@ -99,6 +100,7 @@ export default function Billing() {
 
   async function handleRazorpayCheckout() {
     setRzpLoading(true)
+    billingPaySucceeded.current = false
     try {
       await loadRazorpayScript()
       const orderData = await api.subscription.razorpayCreateOrder({ plan: rzpPlan, billing: rzpBilling })
@@ -121,19 +123,20 @@ export default function Billing() {
           display: {
             hide: [{ method: 'paylater' }],
             preferences: {
-              show_default_blocks: false,
+              show_default_blocks: true,
               sequence: ['block.upi', 'block.card', 'block.netbanking', 'block.wallet'],
-              blocks: {
-                upi:        { name: 'UPI (PhonePe, GPay, Paytm…)', instruments: [{ method: 'upi', flows: ['intent', 'qr', 'collect'], apps: ['google_pay', 'phonepe', 'paytm', 'bhim'] }] },
-                card:       { name: 'Credit / Debit Card',         instruments: [{ method: 'card' }] },
-                netbanking: { name: 'Net Banking',                  instruments: [{ method: 'netbanking' }] },
-                wallet:     { name: 'Wallets',                      instruments: [{ method: 'wallet' }] },
-              },
             },
           },
         },
-        modal: { ondismiss: () => setRzpLoading(false) },
+        modal: {
+          ondismiss: () => {
+            if (!billingPaySucceeded.current) {
+              setRzpLoading(false)
+            }
+          },
+        },
         handler: async (response: Record<string, string>) => {
+          billingPaySucceeded.current = true
           try {
             await api.subscription.razorpayVerifyOrder({
               razorpay_payment_id: response.razorpay_payment_id,
@@ -145,13 +148,16 @@ export default function Billing() {
             toast.success('Payment successful! Your plan has been upgraded.')
             setRzpModalOpen(false)
             refetch?.()
-          } catch { toast.error('Payment verification failed. Contact support.') }
+          } catch {
+            toast.error('Payment verification failed. Contact support.')
+          } finally {
+            setRzpLoading(false)
+          }
         },
       } as unknown as object)
       rzp.open()
     } catch (err) {
       toast.error((err as Error).message || 'Razorpay checkout failed')
-    } finally {
       setRzpLoading(false)
     }
   }

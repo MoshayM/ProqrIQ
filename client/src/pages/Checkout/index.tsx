@@ -203,7 +203,8 @@ export default function Checkout() {
   const [failRef,       setFailRef]       = useState<string | undefined>()
   const [noProvider,    setNoProvider]    = useState(false)
   const [providerChecked, setProviderChecked] = useState(false)
-  const hasAutoOpened = React.useRef(false)
+  const hasAutoOpened  = React.useRef(false)
+  const paySucceeded   = React.useRef(false)
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) navigate('/register', { replace: true })
@@ -234,10 +235,10 @@ export default function Checkout() {
   const handlePay = useCallback(async () => {
     setPayState('loading')
     setFailRef(undefined)
+    paySucceeded.current = false
     try {
       await loadRazorpay()
 
-      // Use Order-based flow (simpler — only needs KEY_ID + KEY_SECRET, no plan setup)
       const orderData = await api.subscription.razorpayCreateOrder({ plan, billing })
 
       const Rzp = (window as unknown as Record<string, unknown>).Razorpay as new (o: unknown) => { open(): void }
@@ -258,23 +259,24 @@ export default function Checkout() {
           display: {
             hide: [{ method: 'paylater' }],
             preferences: {
-              show_default_blocks: false,
+              // show_default_blocks must be true — false causes "no payment methods" error
+              // when the merchant account doesn't have custom blocks enabled
+              show_default_blocks: true,
               sequence: ['block.upi', 'block.card', 'block.netbanking', 'block.wallet'],
-              blocks: {
-                upi:        { name: 'UPI (PhonePe, GPay, Paytm…)', instruments: [{ method: 'upi', flows: ['intent', 'qr', 'collect'], apps: ['google_pay', 'phonepe', 'paytm', 'bhim'] }] },
-                card:       { name: 'Credit / Debit Card',          instruments: [{ method: 'card' }] },
-                netbanking: { name: 'Net Banking',                   instruments: [{ method: 'netbanking' }] },
-                wallet:     { name: 'Wallets',                       instruments: [{ method: 'wallet' }] },
-              },
             },
           },
         },
         modal: {
           ondismiss: () => {
-            setPayState(prev => prev === 'verifying' ? prev : 'incomplete')
+            // Use a ref (not state) to guard: state may not have committed yet when
+            // Razorpay auto-closes the modal after calling handler, causing a race
+            if (!paySucceeded.current) {
+              setPayState('incomplete')
+            }
           },
         },
         handler: async (response: Record<string, string>) => {
+          paySucceeded.current = true
           setPayState('verifying')
           try {
             await api.subscription.razorpayVerifyOrder({
@@ -293,8 +295,9 @@ export default function Checkout() {
         },
       } as unknown as object)
 
-      setPayState('idle')
       rzp.open()
+      // Don't reset to 'idle' — keep 'loading' so the animated screen stays visible
+      // behind the Razorpay modal. State transitions only via handler / ondismiss.
     } catch (err) {
       const msg = (err as { response?: { data?: { error?: string } }; message?: string })
         ?.response?.data?.error ?? (err as Error).message ?? 'Could not start payment'
