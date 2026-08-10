@@ -309,7 +309,7 @@ export default function Landing() {
                        text-[#1e2d4e] mb-8 shadow-sm"
           >
             <Sparkles className="w-3.5 h-3.5 text-[#e85c1a]" />
-            AI-Powered Cost Engineering — Sensor Manufacturing
+            AI-Powered Cost Engineering Platform
             <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse ml-1" />
           </motion.div>
 

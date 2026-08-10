@@ -33,7 +33,8 @@ const pl = <T = any>(res: { data: { data: { data: T[] } } }): T[] => res.data.da
 
 export const api = {
   auth: {
-    register:      (email: string, password: string, full_name: string) => client.post('/auth/register', { email, password, full_name }).then(d),
+    register:      (email: string, password: string, full_name: string, plan?: string, billing?: string) =>
+      client.post('/auth/register', { email, password, full_name, plan, billing }).then(d),
     login:         (email: string, password: string) => client.post('/auth/login', { email, password }).then(d),
     me:            ()                                => client.get('/auth/me').then(d),
     logout:        ()                                => client.post('/auth/logout').then(d),

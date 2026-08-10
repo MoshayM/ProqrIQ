@@ -9,7 +9,7 @@ import {
 } from '@simplewebauthn/server'
 import { requireAuth } from '../middleware/auth'
 import { avatarUpload, saveUploadedFile } from '../middleware/upload'
-import { db, users, auditLog, passkeyCredentials, passkeyChallenges } from '../db/index'
+import { db, users, auditLog, passkeyCredentials, passkeyChallenges, subscriptions } from '../db/index'
 import { eq, lt, and } from 'drizzle-orm'
 import { JWT_SECRET, RP_ID, RP_ORIGINS, RP_NAME } from '../config'
 
@@ -34,10 +34,10 @@ async function purgeExpiredChallenges() {
 
 // ─── password auth ────────────────────────────────────────────────────────────
 
-// POST /auth/register — public self-service registration (Free plan)
+// POST /auth/register — public self-service registration
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, full_name } = req.body
+    const { email, password, full_name, plan = 'free', billing = 'monthly' } = req.body
     if (!email || !password || !full_name) {
       return res.status(400).json({ success: false, error: 'email, password, and full_name are required', error_code: 'MISSING_FIELDS' })
     }
@@ -65,18 +65,40 @@ router.post('/register', async (req: Request, res: Response) => {
       updated_at: now,
     })
 
+    const needsPayment = plan === 'pro' || plan === 'organization'
+    if (needsPayment) {
+      await db.insert(subscriptions).values({
+        user_id: id,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        plan: plan as any,
+        status: 'pending_payment',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        billing_cycle: (billing === 'annual' ? 'annual' : 'monthly') as any,
+        created_at: now,
+      })
+    }
+
     await db.insert(auditLog).values({
       id: crypto.randomUUID(),
       user_id: id,
       action: 'user_self_registered',
       entity_type: 'user',
       entity_id: id,
-      details: JSON.stringify({ email }),
+      details: JSON.stringify({ email, plan: needsPayment ? plan : 'free' }),
       created_at: now,
     })
 
     const token = issueToken({ id, email, role: 'engineer', full_name })
-    return res.status(201).json({ success: true, data: { token, user: { id, email, role: 'engineer', full_name } } })
+    return res.status(201).json({
+      success: true,
+      data: {
+        token,
+        user: { id, email, role: 'engineer', full_name },
+        needs_payment: needsPayment,
+        pending_plan:    needsPayment ? plan    : undefined,
+        pending_billing: needsPayment ? billing : undefined,
+      },
+    })
   } catch (err) {
     console.error('Register error:', err)
     return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })

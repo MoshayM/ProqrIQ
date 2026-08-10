@@ -242,13 +242,13 @@ export default function Tab3Logistics({ quotation, quotationId }: TabProps) {
             </div>
           </div>
 
-          {/* P+F note */}
+          {/* Logistics note */}
           <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
             <p className="text-xs font-semibold text-gray-700 mb-1">
-              P+F Logistics Note
+              Logistics Note
             </p>
             <p className="text-sm text-gray-600">
-              Standard ASEAN → Singapore → Germany routing adds approximately
+              Standard international routing adds approximately
               3–5% logistics cost to the total part cost. DDP (Delivered Duty
               Paid) terms assumed.
             </p>
@@ -347,7 +347,7 @@ export default function Tab3Logistics({ quotation, quotationId }: TabProps) {
             Logistics assumptions:{' '}
           </span>
           DDP pricing from supplier. Customs duties and VAT excluded. Transport:
-          sea freight (standard). Incoterms: DDP Germany.
+          sea freight (standard). Incoterms: DDP destination.
         </p>
       </div>
     </div>

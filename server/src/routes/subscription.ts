@@ -75,8 +75,12 @@ router.get('/subscription', requireAuth, async (req: Request, res: Response) => 
 
     const sub = subRows[0]
     // Admin and developer roles always get organization-level access
-    const plan = ['admin', 'developer'].includes(req.user!.role) ? 'organization' : (sub?.plan ?? 'free')
-    const status = sub?.status ?? 'active'
+    const isPrivileged = ['admin', 'developer'].includes(req.user!.role)
+    const rawStatus = sub?.status ?? 'active'
+    const needsPayment = rawStatus === 'pending_payment'
+    // pending_payment → treat as free until confirmed
+    const plan = isPrivileged ? 'organization' : (needsPayment ? 'free' : (sub?.plan ?? 'free'))
+    const status = rawStatus
 
     const usage = await getOrCreateUsage(userId)
     const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
@@ -86,6 +90,9 @@ router.get('/subscription', requireAuth, async (req: Request, res: Response) => 
       data: {
         plan,
         status,
+        needs_payment:  needsPayment,
+        pending_plan:   needsPayment ? sub?.plan : undefined,
+        pending_billing: needsPayment ? sub?.billing_cycle : undefined,
         billing_cycle: sub?.billing_cycle ?? null,
         trial_ends_at: sub?.trial_ends_at ?? null,
         current_period_end: sub?.current_period_end ?? null,

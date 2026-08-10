@@ -5,6 +5,8 @@ import { usePlan } from '../contexts/PlanContext'
 export interface SubscriptionData {
   plan: 'free' | 'pro' | 'organization'
   status: string
+  needs_payment: boolean
+  pending_plan: string | undefined
   isTrialing: boolean
   daysUntilRenewal: number | null
   usage: {
@@ -57,6 +59,8 @@ export function useSubscription(): SubscriptionData & { isLoading: boolean; refe
 
   const realPlan: 'free' | 'pro' | 'organization' = (data as any)?.plan ?? 'free'
   const realStatus: string = (data as any)?.status ?? 'active'
+  const needs_payment: boolean = (data as any)?.needs_payment ?? false
+  const pending_plan: string | undefined = (data as any)?.pending_plan
 
   // When plan preview is active, simulate the preview plan
   const isPreview = previewPlan !== null
@@ -107,6 +111,8 @@ export function useSubscription(): SubscriptionData & { isLoading: boolean; refe
   return {
     plan,
     status,
+    needs_payment: isPreview ? false : needs_payment,
+    pending_plan:  isPreview ? undefined : pending_plan,
     isTrialing,
     daysUntilRenewal,
     usage,

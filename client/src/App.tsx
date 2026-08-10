@@ -31,6 +31,7 @@ import Register from './pages/Register'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import Landing from './pages/Landing'
+import Checkout from './pages/Checkout'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login"    element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
+      <Route path="/checkout" element={<RequireAuth><Checkout /></RequireAuth>} />
       <Route path="/pricing"  element={<Pricing />} />
       <Route path="/terms"    element={<Terms />} />
       <Route path="/privacy"  element={<Privacy />} />

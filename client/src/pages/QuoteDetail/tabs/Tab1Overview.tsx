@@ -252,7 +252,7 @@ export default function Tab1Overview({ quotation, quotationId }: TabProps) {
               : '—'
           }
           borderColor="#10b981"
-          tooltip="Pepperl+Fuchs standard margin of 16%. Applied once at the parent level — individual components inside an assembly are stored pre-margin."
+          tooltip="Standard margin of 16%. Applied once at the parent level — individual components inside an assembly are stored pre-margin."
         />
         <KpiCard
           label="One-Time Cost"

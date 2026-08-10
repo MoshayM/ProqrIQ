@@ -84,12 +84,19 @@ export default function Register() {
   async function onSubmit(data: RegisterFormData) {
     setSubmitError(null)
     try {
-      const res = await api.auth.register(data.email, data.password, data.full_name)
-      const { token, user } = res
+      const res = await api.auth.register(data.email, data.password, data.full_name, selectedPlan, 'monthly')
+      const { token, user, needs_payment, pending_plan, pending_billing } = res as {
+        token: string; user: unknown
+        needs_payment?: boolean; pending_plan?: string; pending_billing?: string
+      }
       localStorage.setItem('aq_token', token)
-      loginWithToken(token, user)
-      await burst()
-      navigate('/dashboard', { replace: true })
+      loginWithToken(token, user as Parameters<typeof loginWithToken>[1])
+      if (needs_payment) {
+        navigate(`/checkout?plan=${pending_plan ?? selectedPlan}&billing=${pending_billing ?? 'monthly'}`, { replace: true })
+      } else {
+        await burst()
+        navigate('/dashboard', { replace: true })
+      }
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } }; message?: string }
       const message = e?.response?.data?.error ?? e?.message ?? 'Registration failed. Please try again.'

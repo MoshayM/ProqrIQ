@@ -222,7 +222,7 @@ export default function Pricing() {
         <div className="text-center space-y-4">
           <h1 className="text-4xl sm:text-5xl font-bold text-[#1e2d4e]">Simple, honest pricing</h1>
           <p className="text-lg text-[#4a5568] max-w-xl mx-auto">
-            AI-powered cost engineering for Pepperl+Fuchs parts. Start free, scale as you grow.
+            AI-powered cost engineering for precision parts. Start free, scale as you grow.
           </p>
           {/* Monthly / Annual toggle */}
           <div className="flex items-center justify-center gap-3 pt-2">

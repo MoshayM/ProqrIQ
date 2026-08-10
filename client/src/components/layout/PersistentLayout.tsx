@@ -33,6 +33,7 @@ import { api } from '../../lib/api'
 import type { Notification } from '@shared/types'
 import { KeyboardShortcutsModal } from '../ui/KeyboardShortcutsModal'
 import { UsageBanner } from '../ui/UsageBanner'
+import { useSubscription } from '../../hooks/useSubscription'
 import { formatDistanceToNow } from 'date-fns'
 
 interface NavItem {
@@ -265,6 +266,30 @@ function ScrollToTop() {
     if (main) main.scrollTop = 0
   }, [pathname])
   return null
+}
+
+function PaymentPendingBanner() {
+  const { needs_payment, pending_plan } = useSubscription()
+  const navigate = useNavigate()
+  if (!needs_payment) return null
+  const planLabel = pending_plan === 'organization' ? 'Organization' : 'Pro'
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+      className="flex items-center gap-3 px-4 py-2.5 text-sm bg-amber-50 border-b border-amber-200"
+    >
+      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+      <span className="text-amber-800 flex-1">
+        Your <strong>{planLabel}</strong> subscription is pending payment — you currently have Free access.
+      </span>
+      <button
+        onClick={() => navigate(`/checkout?plan=${pending_plan ?? 'pro'}&billing=monthly`)}
+        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+      >
+        Complete Payment →
+      </button>
+    </motion.div>
+  )
 }
 
 export default function PersistentLayout({ children }: { children: React.ReactNode }) {
@@ -701,6 +726,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
             transition={{ duration: 0.15, ease: 'easeOut' }}
             className="min-h-full"
           >
+            <PaymentPendingBanner />
             <UsageBanner />
             {children}
           </motion.div>

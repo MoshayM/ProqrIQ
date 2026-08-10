@@ -641,7 +641,7 @@ export const subscriptions = sqliteTable('subscriptions', {
   user_id:                text('user_id').references(() => users.id),
   org_id:                 text('org_id').references(() => organizations.id),
   plan:                   text('plan', { enum: ['free', 'pro', 'organization'] }).default('free'),
-  status:                 text('status', { enum: ['active', 'trialing', 'past_due', 'canceled', 'paused'] }).default('active'),
+  status:                 text('status', { enum: ['active', 'trialing', 'past_due', 'canceled', 'paused', 'pending_payment'] }).default('active'),
   billing_cycle:          text('billing_cycle', { enum: ['monthly', 'annual'] }),
   stripe_customer_id:      text('stripe_customer_id'),
   stripe_subscription_id:  text('stripe_subscription_id'),
