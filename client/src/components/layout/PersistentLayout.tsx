@@ -33,6 +33,7 @@ import { api } from '../../lib/api'
 import type { Notification } from '@shared/types'
 import { KeyboardShortcutsModal } from '../ui/KeyboardShortcutsModal'
 import { UsageBanner } from '../ui/UsageBanner'
+import { HelpPanel } from '../ui/HelpPanel'
 import { useSubscription } from '../../hooks/useSubscription'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -301,6 +302,8 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [shortcutTip, setShortcutTip] = useState<string | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [helpMinimized, setHelpMinimized] = useState(false)
   const pendingGRef = useRef(false)
   const tipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -753,14 +756,45 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       {/* ── Keyboard shortcuts modal ─────────────────────────────────────────── */}
       <KeyboardShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />
 
-      {/* ── Floating Help & Guide launcher ───────────────────────────────────── */}
-      <Link
-        to="/account?tab=help"
-        className="fixed bottom-6 right-6 z-[9998] w-11 h-11 flex items-center justify-center rounded-full bg-[#1e2d4e] text-white shadow-xl hover:bg-[#2d3e5c] transition-colors"
+      {/* ── Floating Help launcher ───────────────────────────────────────────── */}
+      <motion.button
+        onClick={() => {
+          if (helpOpen && helpMinimized) { setHelpMinimized(false); return }
+          if (helpOpen) { setHelpMinimized(true); return }
+          setHelpOpen(true)
+          setHelpMinimized(false)
+        }}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.93 }}
+        className="fixed bottom-6 right-6 z-[9998] w-12 h-12 flex items-center justify-center rounded-full text-white shadow-xl transition-colors"
+        style={{ background: helpOpen && !helpMinimized ? '#e85c1a' : '#1e2d4e' }}
         title="Help & Guide"
+        aria-label="Open help"
       >
-        <HelpCircle className="w-5 h-5" />
-      </Link>
+        <AnimatePresence mode="wait" initial={false}>
+          {helpOpen && !helpMinimized ? (
+            <motion.span key="minus"
+              initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }}
+              exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}>
+              <HelpCircle className="w-5 h-5" />
+            </motion.span>
+          ) : (
+            <motion.span key="help"
+              initial={{ rotate: 90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }}
+              exit={{ rotate: -90, opacity: 0 }} transition={{ duration: 0.15 }}>
+              <HelpCircle className="w-5 h-5" />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.button>
+
+      {/* ── Help panel ───────────────────────────────────────────────────────── */}
+      <HelpPanel
+        open={helpOpen}
+        minimized={helpMinimized}
+        onClose={() => { setHelpOpen(false); setHelpMinimized(false) }}
+        onToggleMinimize={() => setHelpMinimized(v => !v)}
+      />
 
       {/* ── Notifications drawer (7B.6) ──────────────────────────────────────── */}
       <NotificationsDrawer open={notifDrawerOpen} onClose={() => setNotifDrawerOpen(false)} />

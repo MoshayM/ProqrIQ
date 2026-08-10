@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Camera, Eye, EyeOff, Check, BookOpen, Globe, Users, Info, Plus, X, Loader2, LogOut,
-  CreditCard, HelpCircle, Trash2, AlertTriangle, ShieldAlert, RotateCcw, Clock,
+  CreditCard, Trash2, AlertTriangle, ShieldAlert, RotateCcw, Clock,
 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { api, extractApiError } from '../../lib/api'
@@ -23,7 +23,6 @@ import Billing from '../Billing'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { PlanBadge } from '../../components/ui/PlanBadge'
 import { useSubscription } from '../../hooks/useSubscription'
-import HelpTab from './HelpTab'
 
 const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner']
 
@@ -845,7 +844,6 @@ export default function Account() {
   const tabs = [
     { id: 'profile', label: 'Profile',        icon: null },
     { id: 'billing', label: 'Plans & Billing', icon: CreditCard },
-    { id: 'help',    label: 'Help & Guide',   icon: HelpCircle },
     ...(isAdmin ? [
       { id: 'kb',    label: 'Knowledge Base', icon: BookOpen },
       { id: 'rates', label: 'Regional Rates', icon: Globe },
@@ -896,7 +894,6 @@ export default function Account() {
       <div className={activeTab === 'profile' ? 'max-w-2xl mx-auto p-8' : ''}>
         {activeTab === 'profile' && <ProfileTab />}
         {activeTab === 'billing' && <Billing />}
-        {activeTab === 'help'    && <HelpTab />}
         {activeTab === 'kb'      && isAdmin && <UpgradeGate requiredPlan="organization" feature="Knowledge Base Manager"><KBManager /></UpgradeGate>}
         {activeTab === 'rates'   && isAdmin && <UpgradeGate requiredPlan="organization" feature="Regional Rates"><RegionalRates /></UpgradeGate>}
       </div>
