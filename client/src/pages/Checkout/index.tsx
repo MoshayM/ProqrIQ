@@ -199,12 +199,21 @@ export default function Checkout() {
   const [billing, setBilling] = useState<BillingCycle>(
     (searchParams.get('billing') ?? 'monthly') as BillingCycle,
   )
-  const [payState, setPayState] = useState<PayState>('idle')
-  const [failRef,  setFailRef]  = useState<string | undefined>()
+  const [payState,   setPayState]   = useState<PayState>('idle')
+  const [failRef,    setFailRef]    = useState<string | undefined>()
+  const [noProvider, setNoProvider] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) navigate('/register', { replace: true })
   }, [isAuthenticated, authLoading, navigate])
+
+  // Check which payment providers are available on mount
+  useEffect(() => {
+    if (!isAuthenticated) return
+    api.subscription.paymentMethods().then(m => {
+      if (!m.razorpay && !m.stripe) setNoProvider(true)
+    }).catch(() => {/* ignore — will surface on pay click */})
+  }, [isAuthenticated])
 
   const price = billing === 'annual' ? config.annualMonthly : config.monthly
   const annualTotal = config.annual
@@ -223,22 +232,20 @@ export default function Checkout() {
     setFailRef(undefined)
     try {
       await loadRazorpay()
-      const data = await api.subscription.razorpayCheckout({ plan, billing })
-      if (!data?.subscription_id) {
-        toast.error('Payment provider not configured. Please contact support.')
-        setPayState('idle')
-        return
-      }
+
+      // Use Order-based flow (simpler — only needs KEY_ID + KEY_SECRET, no plan setup)
+      const orderData = await api.subscription.razorpayCreateOrder({ plan, billing })
 
       const Rzp = (window as unknown as Record<string, unknown>).Razorpay as new (o: unknown) => { open(): void }
       const rzp = new Rzp({
-        key:             data.key_id,
-        subscription_id: data.subscription_id,
-        name:            'ProqrIQ',
-        description:     `${config.label} — ${billing === 'annual' ? 'Annual' : 'Monthly'}`,
-        image:           '/logo.png',
-        theme:           { color: config.color },
-        prefill:         {},
+        key:      orderData.key_id,
+        order_id: orderData.order_id,
+        amount:   orderData.amount,
+        currency: orderData.currency,
+        name:     'ProqrIQ',
+        description: `${config.label} — ${billing === 'annual' ? 'Annual' : 'Monthly'}`,
+        image:    '/logo.png',
+        theme:    { color: config.color },
         modal: {
           ondismiss: () => {
             setPayState(prev => prev === 'verifying' ? prev : 'incomplete')
@@ -247,10 +254,10 @@ export default function Checkout() {
         handler: async (response: Record<string, string>) => {
           setPayState('verifying')
           try {
-            await api.subscription.razorpayVerify({
-              razorpay_payment_id:      response.razorpay_payment_id,
-              razorpay_subscription_id: response.razorpay_subscription_id,
-              razorpay_signature:       response.razorpay_signature,
+            await api.subscription.razorpayVerifyOrder({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id:   response.razorpay_order_id,
+              razorpay_signature:  response.razorpay_signature,
               plan,
               billing,
             })
@@ -266,7 +273,9 @@ export default function Checkout() {
       setPayState('idle')
       rzp.open()
     } catch (err) {
-      toast.error((err as Error).message ?? 'Could not start payment')
+      const msg = (err as { response?: { data?: { error?: string } }; message?: string })
+        ?.response?.data?.error ?? (err as Error).message ?? 'Could not start payment'
+      toast.error(msg)
       setPayState('idle')
     }
   }, [plan, billing, config, burst])
@@ -379,7 +388,29 @@ export default function Checkout() {
             <div className="rounded-2xl bg-white p-8 flex flex-col">
 
               <AnimatePresence mode="wait">
-                {payState === 'success' ? (
+                {noProvider ? (
+                  <motion.div key="no-provider" className="flex flex-col items-center text-center gap-5 py-6"
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center">
+                      <AlertTriangle className="w-7 h-7 text-amber-500" />
+                    </div>
+                    <div>
+                      <h3 className="text-[#0f1729] font-extrabold text-lg">Payment not configured</h3>
+                      <p className="text-[#9aa3b2] text-sm mt-1 max-w-[260px] mx-auto">
+                        The payment provider is not set up yet. You have Free access in the meantime.
+                      </p>
+                    </div>
+                    <p className="text-[11px] text-[#b0b8c9]">
+                      Set <code className="bg-gray-100 px-1 rounded text-[10px]">RAZORPAY_KEY_ID</code> and{' '}
+                      <code className="bg-gray-100 px-1 rounded text-[10px]">RAZORPAY_KEY_SECRET</code> in your server environment.
+                    </p>
+                    <button onClick={handleFree}
+                      className="text-sm text-[#e85c1a] font-semibold hover:underline">
+                      Continue with Free Plan →
+                    </button>
+                  </motion.div>
+
+                ) : payState === 'success' ? (
                   <SuccessView key="success" plan={plan} onDashboard={handleDashboard} />
 
                 ) : payState === 'incomplete' ? (

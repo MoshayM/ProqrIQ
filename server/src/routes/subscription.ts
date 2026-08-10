@@ -15,6 +15,7 @@ import {
   getRazorpayClient,
   isRazorpayConfigured,
   verifyPaymentSignature,
+  verifyOrderSignature,
 } from '../services/razorpay'
 
 export const router = Router()
@@ -105,13 +106,26 @@ router.get('/subscription', requireAuth, async (req: Request, res: Response) => 
   }
 })
 
+// ─── GET /api/subscription/payment-methods ────────────────────────────────────
+// Returns which payment providers are configured (used by checkout page)
+
+router.get('/subscription/payment-methods', requireAuth, (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      razorpay: isRazorpayConfigured(),
+      stripe:   !!(process.env.STRIPE_SECRET_KEY),
+    },
+  })
+})
+
 // ─── POST /api/subscription/checkout (Stripe) ────────────────────────────────
 
 router.post('/subscription/checkout', requireAuth, async (req: Request, res: Response) => {
   try {
     const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
     if (!STRIPE_SECRET_KEY) {
-      res.status(404).json({ success: false, error: 'Stripe not configured' })
+      res.status(503).json({ success: false, error: 'Stripe not configured' })
       return
     }
 
@@ -140,7 +154,7 @@ router.post('/subscription/portal', requireAuth, async (req: Request, res: Respo
   try {
     const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
     if (!STRIPE_SECRET_KEY) {
-      res.status(404).json({ success: false, error: 'Stripe not configured' })
+      res.status(503).json({ success: false, error: 'Stripe not configured' })
       return
     }
 
@@ -167,11 +181,12 @@ router.post('/subscription/portal', requireAuth, async (req: Request, res: Respo
 })
 
 // ─── POST /api/subscription/razorpay/checkout ────────────────────────────────
+// Legacy subscription-plan flow (requires RAZORPAY_PLAN_* env vars)
 
 router.post('/subscription/razorpay/checkout', requireAuth, async (req: Request, res: Response) => {
   try {
     if (!isRazorpayConfigured()) {
-      res.status(404).json({ success: false, error: 'Razorpay not configured' })
+      res.status(503).json({ success: false, error: 'Razorpay not configured' })
       return
     }
 
@@ -264,6 +279,120 @@ router.post('/subscription/razorpay/verify', requireAuth, async (req: Request, r
       entity_type: 'subscription',
       entity_id:   userId,
       details:     JSON.stringify({ plan, billing, gateway: 'razorpay', razorpay_payment_id }),
+    })
+
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// ─── Plan prices in paise (INR) for Order-based flow ─────────────────────────
+// No pre-created plan IDs needed — just RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET
+
+const ORDER_PRICES_PAISE: Record<string, Record<string, number>> = {
+  pro:          { monthly: 399900,  annual: 3999000  }, // ₹3,999/mo · ₹39,990/yr
+  organization: { monthly: 1499900, annual: 14999000 }, // ₹14,999/mo · ₹1,49,990/yr
+}
+
+// ─── POST /api/subscription/razorpay/create-order ────────────────────────────
+// Simpler order flow — no plan setup required, just key_id + key_secret
+
+router.post('/subscription/razorpay/create-order', requireAuth, async (req: Request, res: Response) => {
+  try {
+    if (!isRazorpayConfigured()) {
+      res.status(503).json({ success: false, error: 'Razorpay not configured — set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET' })
+      return
+    }
+
+    const { plan, billing } = req.body as { plan: 'pro' | 'organization'; billing: 'monthly' | 'annual' }
+    const amountPaise = ORDER_PRICES_PAISE[plan]?.[billing]
+    if (!amountPaise) {
+      res.status(400).json({ success: false, error: 'Invalid plan or billing cycle' })
+      return
+    }
+
+    const rzp = getRazorpayClient()
+    const receipt = `${req.user!.id.slice(0, 8)}_${plan}_${billing}_${Date.now()}`
+    const order = await rzp.orders.create({
+      amount:   amountPaise,
+      currency: 'INR',
+      receipt:  receipt.slice(0, 40),
+      notes:    { user_id: req.user!.id, plan, billing } as Record<string, string>,
+    })
+
+    res.json({
+      success: true,
+      data: {
+        order_id: order.id,
+        amount:   order.amount,
+        currency: order.currency,
+        key_id:   process.env.RAZORPAY_KEY_ID,
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+})
+
+// ─── POST /api/subscription/razorpay/verify-order ────────────────────────────
+// Verify Order payment and activate subscription
+
+router.post('/subscription/razorpay/verify-order', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const {
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature,
+      plan,
+      billing,
+    } = req.body as {
+      razorpay_payment_id: string
+      razorpay_order_id:   string
+      razorpay_signature:  string
+      plan:    string
+      billing: string
+    }
+
+    if (!verifyOrderSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
+      res.status(400).json({ success: false, error: 'Invalid payment signature' })
+      return
+    }
+
+    const userId    = req.user!.id
+    const now       = new Date().toISOString()
+    const periodEnd = new Date(Date.now() + (billing === 'annual' ? 365 : 30) * 86_400_000).toISOString()
+
+    const existing = await db.select().from(subscriptions).where(eq(subscriptions.user_id, userId)).limit(1)
+
+    if (existing.length > 0) {
+      await db.update(subscriptions).set({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        plan:                 plan as any,
+        status:               'active',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        billing_cycle:        billing as any,
+        current_period_start: now,
+        current_period_end:   periodEnd,
+      }).where(eq(subscriptions.user_id, userId))
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (db.insert(subscriptions) as any).values({
+        user_id:              userId,
+        plan,
+        status:               'active',
+        billing_cycle:        billing,
+        current_period_start: now,
+        current_period_end:   periodEnd,
+      })
+    }
+
+    await db.insert(auditLog).values({
+      user_id:     userId,
+      action:      'subscription_activated',
+      entity_type: 'subscription',
+      entity_id:   userId,
+      details:     JSON.stringify({ plan, billing, gateway: 'razorpay_order', razorpay_payment_id, razorpay_order_id }),
     })
 
     res.json({ success: true })

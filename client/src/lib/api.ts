@@ -172,12 +172,16 @@ export const api = {
       client.post(`/suppliers/${supplierId}/conversations`, body).then(d) as Promise<{ id: string; sent_by: string; message: string; created_at: string }>,
   },
   subscription: {
-    get:              ()              => client.get('/subscription').then(d),
-    checkout:         (body: unknown) => client.post('/subscription/checkout', body).then(d),
-    portal:           ()              => client.post('/subscription/portal', {}).then(d),
-    cancel:           ()              => client.post('/subscription/cancel', {}).then(d),
-    razorpayCheckout: (body: unknown) => client.post('/subscription/razorpay/checkout', body).then(d),
-    razorpayVerify:   (body: unknown) => client.post('/subscription/razorpay/verify', body).then(d),
+    get:                 ()              => client.get('/subscription').then(d),
+    paymentMethods:      ()              => client.get('/subscription/payment-methods').then(d) as Promise<{ razorpay: boolean; stripe: boolean }>,
+    checkout:            (body: unknown) => client.post('/subscription/checkout', body).then(d),
+    portal:              ()              => client.post('/subscription/portal', {}).then(d),
+    cancel:              ()              => client.post('/subscription/cancel', {}).then(d),
+    razorpayCheckout:    (body: unknown) => client.post('/subscription/razorpay/checkout', body).then(d),
+    razorpayVerify:      (body: unknown) => client.post('/subscription/razorpay/verify', body).then(d),
+    razorpayCreateOrder: (body: unknown) => client.post('/subscription/razorpay/create-order', body).then(d) as
+      Promise<{ order_id: string; amount: number; currency: string; key_id: string }>,
+    razorpayVerifyOrder: (body: unknown) => client.post('/subscription/razorpay/verify-order', body).then(d),
   },
   organization: {
     get:          ()                => client.get('/organization').then(d),

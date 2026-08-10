@@ -12,12 +12,22 @@ export function getRazorpayClient(): Razorpay {
   return new Razorpay({ key_id, key_secret })
 }
 
-// Verify payment signature after client-side checkout completes
+// Verify subscription payment signature (subscription_id flow)
 export function verifyPaymentSignature(paymentId: string, subscriptionId: string, signature: string): boolean {
   const secret = process.env.RAZORPAY_KEY_SECRET
   if (!secret) return false
   const expected = crypto.createHmac('sha256', secret)
     .update(`${paymentId}|${subscriptionId}`)
+    .digest('hex')
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+}
+
+// Verify order payment signature (order_id flow — simpler, no plan setup required)
+export function verifyOrderSignature(orderId: string, paymentId: string, signature: string): boolean {
+  const secret = process.env.RAZORPAY_KEY_SECRET
+  if (!secret) return false
+  const expected = crypto.createHmac('sha256', secret)
+    .update(`${orderId}|${paymentId}`)
     .digest('hex')
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
 }
