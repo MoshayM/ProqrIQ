@@ -43,7 +43,12 @@ app.use(cors({
         'https://proqriq.vercel.app',
         /\.vercel\.app$/,
       ]
-    : true,
+    : [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:3099',
+        /^http:\/\/localhost(:\d+)?$/,
+      ],
   credentials: true,
 }))
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'))
