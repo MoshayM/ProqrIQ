@@ -7,6 +7,7 @@ import {
   Star, ChevronRight, X, Upload, BarChart3, MessageSquare, RefreshCw,
   CheckCircle, Zap, AlertTriangle, Users, Trash2, Filter,
   Maximize2, Minimize2, Layers, MousePointer2, ScanLine,
+  Mail, Phone, Link2,
 } from 'lucide-react'
 import type { TileStyle } from './MapView'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts'
@@ -93,8 +94,13 @@ interface Supplier {
   source_tier: number
   is_active: boolean
   notes: string | null
-  contact_name: string | null
-  contact_email: string | null
+  contact_name:       string | null
+  contact_email:      string | null
+  contact_phone:      string | null
+  contact_department: string | null
+  contact_title:      string | null
+  website:            string | null
+  full_address:       string | null
 }
 
 interface SupplierQuote {
@@ -281,6 +287,117 @@ function AddQuoteModal({ supplierId, onClose }: {
   )
 }
 
+// ─── COMPOSE EMAIL MODAL ─────────────────────────────────────────────────────
+
+function ComposeEmailModal({ supplier, onClose }: { supplier: Supplier; onClose: () => void }) {
+  const [purpose, setPurpose] = useState<string>('quote_request')
+  const [contextNotes, setContextNotes] = useState('')
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [generated, setGenerated] = useState(false)
+
+  const PURPOSES = [
+    { value: 'initial_inquiry', label: 'Initial Inquiry' },
+    { value: 'quote_request',   label: 'Request for Quote (RFQ)' },
+    { value: 'negotiate',       label: 'Price Negotiation' },
+    { value: 'follow_up',       label: 'Follow-up' },
+    { value: 'feedback',        label: 'Supplier Feedback' },
+  ]
+
+  async function generate() {
+    setLoading(true)
+    try {
+      const res = await api.suppliers.composeEmail(supplier.id, {
+        purpose,
+        context_notes: contextNotes || undefined,
+      })
+      setSubject(res.subject)
+      setBody(res.body)
+      setGenerated(true)
+    } catch {
+      toast.error('Failed to generate email content')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openMailto() {
+    const mailto = `mailto:${encodeURIComponent(supplier.contact_email ?? '')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    window.open(mailto, '_blank')
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex flex-col h-full bg-white rounded-2xl border border-[#e5e8ef] shadow-sm overflow-hidden"
+    >
+      <div className="p-4 border-b border-[#e5e8ef] flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <Mail className="w-4 h-4 text-brand" />
+          <h3 className="font-semibold text-[#0f1729] text-sm">Compose Email</h3>
+        </div>
+        <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-3 text-[#9aa3b2]">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <p className="text-xs text-[#9aa3b2]">
+          To: <span className="font-medium text-[#0f1729]">{supplier.contact_email}</span>
+          {supplier.contact_name ? ` (${supplier.contact_name})` : ''}
+        </p>
+        <div>
+          <label className="block text-xs font-medium text-[#4a5568] mb-1">Purpose</label>
+          <select value={purpose} onChange={e => { setPurpose(e.target.value); setGenerated(false) }}
+            className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30">
+            {PURPOSES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#4a5568] mb-1">
+            Additional Context <span className="text-[#9aa3b2]">(optional)</span>
+          </label>
+          <textarea value={contextNotes} onChange={e => { setContextNotes(e.target.value); setGenerated(false) }} rows={2}
+            placeholder="e.g. Requesting quote for 5000 units of AL bracket, lead time 8 weeks…"
+            className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none" />
+        </div>
+        <Button variant="outline" size="sm" className="w-full" onClick={generate} loading={loading}
+          iconLeft={<Zap className="w-3.5 h-3.5" />}>
+          {generated ? 'Regenerate with AI' : 'Generate Email with AI'}
+        </Button>
+        {generated && (
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs font-medium text-[#4a5568] mb-1">Subject</label>
+              <input value={subject} onChange={e => setSubject(e.target.value)}
+                className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#4a5568] mb-1">
+                Body <span className="text-[#9aa3b2]">(editable)</span>
+              </label>
+              <textarea value={body} onChange={e => setBody(e.target.value)} rows={10}
+                className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30 resize-none font-mono text-xs" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {generated && (
+        <div className="p-4 border-t border-[#e5e8ef] flex-shrink-0 flex gap-2">
+          <Button variant="primary" className="flex-1" iconLeft={<Mail className="w-3.5 h-3.5" />} onClick={openMailto}>
+            Open in Email Client
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
 // ─── RIGHT PANEL ─────────────────────────────────────────────────────────────
 
 function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggleExpand }: {
@@ -293,6 +410,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
   const qc = useQueryClient()
   const [tab, setTab] = useState<RightPanelTab>('info')
   const [showAddQuote, setShowAddQuote] = useState(false)
+  const [showCompose, setShowCompose] = useState(false)
   const [compareResult, setCompareResult] = useState<any>(null)
   const [negotiation, setNegotiation] = useState<any>(null)
   const [comparing, setComparing] = useState(false)
@@ -369,6 +487,10 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
     { key: 'negotiate', label: 'Negotiate', icon: <MessageSquare className="w-3.5 h-3.5" /> },
   ]
 
+  if (showCompose) {
+    return <ComposeEmailModal supplier={supplier} onClose={() => setShowCompose(false)} />
+  }
+
   const panelContent = (
     <motion.div
       initial={{ opacity: 0, x: expanded ? 0 : 16, scale: expanded ? 0.98 : 1 }}
@@ -439,12 +561,59 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
                 </div>
               </div>
             )}
-            {supplier.contact_name && (
-              <div>
-                <p className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide mb-1">Contact</p>
-                <p className="text-sm text-[#0f1729]">{supplier.contact_name}</p>
-                {supplier.contact_email && <p className="text-xs text-brand">{supplier.contact_email}</p>}
+            {/* Contact details card */}
+            {(supplier.contact_name || supplier.contact_email || supplier.contact_phone || supplier.website || supplier.full_address) && (
+              <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2.5">
+                <p className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide">Contact Details</p>
+                {supplier.contact_name && (
+                  <div className="flex items-start gap-2">
+                    <Building2 className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#0f1729]">{supplier.contact_name}</p>
+                      {(supplier.contact_title || supplier.contact_department) && (
+                        <p className="text-xs text-[#9aa3b2]">
+                          {[supplier.contact_title, supplier.contact_department].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {supplier.contact_email && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+                    <a href={`mailto:${supplier.contact_email}`} className="text-sm text-brand hover:underline truncate">{supplier.contact_email}</a>
+                  </div>
+                )}
+                {supplier.contact_phone && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+                    <a href={`tel:${supplier.contact_phone}`} className="text-sm text-[#0f1729] hover:underline">{supplier.contact_phone}</a>
+                  </div>
+                )}
+                {supplier.website && (
+                  <div className="flex items-center gap-2">
+                    <Link2 className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+                    <a href={supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="text-sm text-brand hover:underline truncate">{supplier.website}</a>
+                  </div>
+                )}
+                {(supplier.full_address || supplier.city) && (
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-[#4a5568]">
+                      {supplier.full_address || [supplier.city, COUNTRY_NAMES[supplier.country_code] ?? supplier.country_code].filter(Boolean).join(', ')}
+                    </p>
+                  </div>
+                )}
               </div>
+            )}
+            {/* Compose Email button */}
+            {supplier.contact_email && (
+              <Button variant="outline" size="sm" className="w-full" iconLeft={<Mail className="w-3.5 h-3.5" />}
+                onClick={() => setShowCompose(true)}>
+                Compose Email to Supplier
+              </Button>
             )}
             {supplier.notes && (
               <div>
@@ -1081,16 +1250,17 @@ export default function SupplierMap() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#4a5568] mb-1">Capability</label>
-                <select
+                <input
+                  type="text"
+                  list="capability-list"
                   value={filterCapability}
                   onChange={e => setFilterCapability(e.target.value)}
+                  placeholder="Type to search (e.g. CNC, casting…)"
                   className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
-                >
-                  <option value="">All capabilities</option>
-                  {COMMODITY_TYPES.map(t => (
-                    <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-                  ))}
-                </select>
+                />
+                <datalist id="capability-list">
+                  {COMMODITY_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                </datalist>
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#4a5568] mb-1.5">Region / Country</label>

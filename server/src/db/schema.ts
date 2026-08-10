@@ -506,7 +506,11 @@ export const suppliers = sqliteTable('suppliers', {
   city:           text('city'),
   contact_name:   text('contact_name'),
   contact_email:  text('contact_email'),
-  contact_phone:  text('contact_phone'),
+  contact_phone:      text('contact_phone'),
+  contact_department: text('contact_department'),
+  contact_title:      text('contact_title'),
+  website:            text('website'),
+  full_address:       text('full_address'),
   capabilities:   text('capabilities'),        // JSON array of commodity types
   tier_rating:    integer('tier_rating'),       // 1–5
   origin:         text('origin', {

@@ -39,7 +39,11 @@ const createSupplierSchema = z.object({
   city:          z.string().optional(),
   contact_name:  z.string().optional(),
   contact_email: z.string().email().optional(),
-  contact_phone: z.string().optional(),
+  contact_phone:      z.string().optional(),
+  contact_department: z.string().optional(),
+  contact_title:      z.string().optional(),
+  website:            z.string().optional(),
+  full_address:       z.string().optional(),
   capabilities:  z.array(z.string()).optional(),
   tier_rating:   z.number().int().min(1).max(5).optional(),
   notes:         z.string().optional(),
@@ -96,6 +100,12 @@ const negotiateSchema = z.object({
   supplier_quote_id: z.string().min(1),
 })
 
+const composeEmailSchema = z.object({
+  purpose:       z.enum(['initial_inquiry', 'quote_request', 'negotiate', 'follow_up', 'feedback']),
+  context_notes: z.string().max(500).optional(),
+  quotation_id:  z.string().optional(),
+})
+
 // ─── GET /api/suppliers ───────────────────────────────────────────────────────
 
 router.get('/', async (req: Request, res: Response) => {
@@ -134,9 +144,13 @@ router.post('/', requireRole(WRITE_ROLES), validate(createSupplierSchema), async
         name:          body.name,
         country_code:  body.country_code,
         city:          body.city,
-        contact_name:  body.contact_name,
-        contact_email: body.contact_email,
-        contact_phone: body.contact_phone,
+        contact_name:       body.contact_name,
+        contact_email:      body.contact_email,
+        contact_phone:      body.contact_phone,
+        contact_department: body.contact_department,
+        contact_title:      body.contact_title,
+        website:            body.website,
+        full_address:       body.full_address,
         capabilities:  body.capabilities ? JSON.stringify(body.capabilities) : undefined,
         tier_rating:   body.tier_rating,
         origin:        'manual',
@@ -196,7 +210,11 @@ router.patch('/:id', requireRole(WRITE_ROLES), validate(updateSupplierSchema), a
     if (body.city          !== undefined) updatePayload.city          = body.city
     if (body.contact_name  !== undefined) updatePayload.contact_name  = body.contact_name
     if (body.contact_email !== undefined) updatePayload.contact_email = body.contact_email
-    if (body.contact_phone !== undefined) updatePayload.contact_phone = body.contact_phone
+    if (body.contact_phone      !== undefined) updatePayload.contact_phone      = body.contact_phone
+    if (body.contact_department !== undefined) updatePayload.contact_department = body.contact_department
+    if (body.contact_title      !== undefined) updatePayload.contact_title      = body.contact_title
+    if (body.website            !== undefined) updatePayload.website            = body.website
+    if (body.full_address       !== undefined) updatePayload.full_address       = body.full_address
     if (body.capabilities  !== undefined) updatePayload.capabilities  = JSON.stringify(body.capabilities)
     if (body.tier_rating   !== undefined) updatePayload.tier_rating   = body.tier_rating
     if (body.notes         !== undefined) updatePayload.notes         = body.notes
@@ -1076,6 +1094,67 @@ router.delete('/:id/customers/:customerId', requireRole(ADMIN_ROLES), async (req
   } catch (err) {
     console.error('Delete supplier customer error:', err)
     return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
+// ─── POST /api/suppliers/:id/compose-email ────────────────────────────────────
+
+router.post('/:id/compose-email', requireRole(WRITE_ROLES), validate(composeEmailSchema), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const userId = req.user!.id
+    const { purpose, context_notes, quotation_id } = req.body as z.infer<typeof composeEmailSchema>
+
+    const [supplier] = await db.select().from(suppliers).where(eq(suppliers.id, id))
+    if (!supplier) return res.status(404).json({ success: false, error: 'Supplier not found' })
+
+    // KB-first (rule 15)
+    const kbCtx = await searchKB(`supplier email ${purpose}`, supplier.capabilities ?? 'manufacturing', 3)
+    const kbText = kbCtx.map((k: { content: string }) => k.content).join('\n---\n')
+
+    const PURPOSE_LABELS: Record<string, string> = {
+      initial_inquiry: 'Initial business inquiry',
+      quote_request:   'Request for quotation (RFQ)',
+      negotiate:       'Price negotiation',
+      follow_up:       'Follow-up on previous communication',
+      feedback:        'Supplier feedback / performance review',
+    }
+
+    const userEmail = (req.user as any).email ?? 'our team'
+    const userName  = (req.user as any).full_name ?? (req.user as any).email ?? 'ProqrIQ Team'
+
+    const systemPrompt = `You are a professional B2B procurement email writer for Pepperl+Fuchs (P+F), a global industrial automation company. Write concise, professional emails. Output ONLY valid JSON, no markdown fences.`
+
+    const userPrompt = `Write a professional email to a supplier.
+
+Supplier: ${supplier.name}
+Country: ${supplier.country_code}${supplier.city ? `, ${supplier.city}` : ''}
+Capabilities: ${supplier.capabilities ?? 'manufacturing'}
+Contact: ${supplier.contact_name ?? 'Supplier Team'}${supplier.contact_department ? ` (${supplier.contact_department})` : ''}
+Purpose: ${PURPOSE_LABELS[purpose] ?? purpose}
+${context_notes ? `Additional context: ${context_notes}` : ''}
+${quotation_id ? `Related quotation: ${quotation_id}` : ''}
+Sender: ${userName} at Pepperl+Fuchs (P+F)
+${kbText ? `\nRelevant engineering context:\n${kbText}` : ''}
+
+Return JSON: { "subject": "...", "body": "..." }
+The body should be 3-5 short paragraphs, plain text (no HTML), professional and direct.
+Sign off as: ${userName}\nPepperl+Fuchs\n${userEmail}`
+
+    const raw = await completeWithRouter({
+      task: 'generic',
+      request: { systemPrompt, userPrompt, maxTokens: 800 },
+      userId,
+    })
+
+    const parsed = parseAIJSON(raw) as { subject: string; body: string }
+    if (!parsed.subject || !parsed.body) throw new Error('AI did not return subject/body')
+
+    return res.json({ success: true, data: { subject: parsed.subject, body: parsed.body, supplier_email: supplier.contact_email } })
+  } catch (err) {
+    console.error('Compose email error:', err)
+    const status = (err as { status?: number }).status === 429 ? 429 : 500
+    return res.status(status).json({ success: false, error: String(err) })
   }
 })
 

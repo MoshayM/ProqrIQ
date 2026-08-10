@@ -233,6 +233,12 @@ export async function runMigrations(client: Client): Promise<void> {
   await exec(client, `ALTER TABLE suppliers ADD COLUMN lng REAL`)
   await exec(client, `ALTER TABLE suppliers ADD COLUMN geocoded_at TEXT`)
 
+  // suppliers — extended contact fields
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN contact_department TEXT`)
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN contact_title TEXT`)
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN website TEXT`)
+  await exec(client, `ALTER TABLE suppliers ADD COLUMN full_address TEXT`)
+
   // subscriptions — Razorpay support
   await exec(client, `ALTER TABLE subscriptions ADD COLUMN razorpay_subscription_id TEXT`)
 

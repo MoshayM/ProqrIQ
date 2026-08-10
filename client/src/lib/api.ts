@@ -163,6 +163,8 @@ export const api = {
     getCustomers:    (supplierId: string)                  => client.get(`/suppliers/${supplierId}/customers`).then(d),
     addCustomer:     (supplierId: string, body: unknown)   => client.post(`/suppliers/${supplierId}/customers`, body).then(d),
     deleteCustomer:  (supplierId: string, customerId: string) => client.delete(`/suppliers/${supplierId}/customers/${customerId}`).then(d),
+    composeEmail:    (supplierId: string, body: { purpose: string; context_notes?: string; quotation_id?: string }) =>
+      client.post(`/suppliers/${supplierId}/compose-email`, body).then(d) as Promise<{ subject: string; body: string; supplier_email: string | null }>,
   },
   subscription: {
     get:              ()              => client.get('/subscription').then(d),
