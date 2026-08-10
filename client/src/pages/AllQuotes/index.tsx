@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import {
   Plus, Search, Eye, Send, CheckCircle, XCircle, Archive, RotateCcw, Loader2, FileText,
-  ChevronLeft, ChevronRight, SlidersHorizontal,
+  ChevronLeft, ChevronRight, SlidersHorizontal, PlayCircle,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
@@ -33,6 +33,7 @@ interface Quotation {
   one_time_cost_eur: number | null
   created_at: string
   updated_at: string
+  created_by: string | null
   part: {
     id: string; name: string; part_number: string | null
     commodity_type: string; material: string | null
@@ -408,36 +409,51 @@ export default function AllQuotes() {
                         </td>
                         {/* Actions */}
                         <td className="px-4 py-3.5">
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Link to={`/quotes/${quote.id}`}>
-                              <ActionIcon title="View" className="text-[#4a5568] hover:text-navy hover:bg-surface-3">
-                                <Eye className="h-4 w-4" />
-                              </ActionIcon>
-                            </Link>
-                            {quote.status === 'draft' && (role === 'engineer' || role === 'cost_analyst') && (
-                              <ActionIcon title="Submit for review" disabled={isMutating} onClick={() => handleSubmit(quote.id)} className="text-blue-500 hover:text-blue-700 hover:bg-blue-50">
-                                {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                              </ActionIcon>
-                            )}
-                            {quote.status === 'pending_approval' && (role === 'ceo' || role === 'admin' || role === 'developer') && (<>
-                              <ActionIcon title="Approve" disabled={isMutating} onClick={() => handleApprove(quote.id)} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
-                                {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                              </ActionIcon>
-                              <ActionIcon title="Reject" disabled={isMutating} onClick={() => handleReject(quote.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                                {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                              </ActionIcon>
-                            </>)}
-                            {!isArchived && (role === 'admin' || role === 'developer') && (
-                              <ActionIcon title="Archive" disabled={isMutating} onClick={() => handleArchive(quote.id)} className="text-[#9aa3b2] hover:text-[#4a5568] hover:bg-surface-3">
-                                {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-                              </ActionIcon>
-                            )}
-                            {isArchived && (role === 'admin' || role === 'developer') && (
-                              <ActionIcon title="Restore" disabled={isMutating} onClick={() => handleRestore(quote.id)} className="text-amber-500 hover:text-amber-700 hover:bg-amber-50">
-                                {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                              </ActionIcon>
-                            )}
-                          </div>
+                          {(() => {
+                            const isOwner = quote.created_by === user?.id
+                            const isGlobalRole = ['admin', 'developer', 'ceo', 'owner'].includes(role ?? '')
+                            const canArchive = !isArchived && quote.status !== 'approved' && (isGlobalRole || isOwner)
+                            const canRestore = isArchived && (role === 'admin' || role === 'developer')
+                            return (
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Link to={`/quotes/${quote.id}`}>
+                                  <ActionIcon title="View" className="text-[#4a5568] hover:text-navy hover:bg-surface-3">
+                                    <Eye className="h-4 w-4" />
+                                  </ActionIcon>
+                                </Link>
+                                {(quote.status === 'draft' || quote.status === 'in_review') && isOwner && (
+                                  <Link to={`/quotes/${quote.id}`}>
+                                    <ActionIcon title="Resume" className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50">
+                                      <PlayCircle className="h-4 w-4" />
+                                    </ActionIcon>
+                                  </Link>
+                                )}
+                                {quote.status === 'draft' && (role === 'engineer' || role === 'cost_analyst') && (
+                                  <ActionIcon title="Submit for review" disabled={isMutating} onClick={() => handleSubmit(quote.id)} className="text-blue-500 hover:text-blue-700 hover:bg-blue-50">
+                                    {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                  </ActionIcon>
+                                )}
+                                {quote.status === 'pending_approval' && (role === 'ceo' || role === 'admin' || role === 'developer') && (<>
+                                  <ActionIcon title="Approve" disabled={isMutating} onClick={() => handleApprove(quote.id)} className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50">
+                                    {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                                  </ActionIcon>
+                                  <ActionIcon title="Reject" disabled={isMutating} onClick={() => handleReject(quote.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                                    {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                                  </ActionIcon>
+                                </>)}
+                                {canArchive && (
+                                  <ActionIcon title="Delete" disabled={isMutating} onClick={() => handleArchive(quote.id)} className="text-[#9aa3b2] hover:text-red-500 hover:bg-red-50">
+                                    {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+                                  </ActionIcon>
+                                )}
+                                {canRestore && (
+                                  <ActionIcon title="Restore" disabled={isMutating} onClick={() => handleRestore(quote.id)} className="text-amber-500 hover:text-amber-700 hover:bg-amber-50">
+                                    {isMutating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                                  </ActionIcon>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
                       </tr>
                     )

@@ -230,7 +230,13 @@ router.get('/', async (req: Request, res: Response) => {
     const pageSize = Math.max(1, Math.min(100, parseInt(String(req.query.pageSize ?? '25'), 10)))
     const showDeleted = req.query.showDeleted === 'true' && (req as any).user!.role === 'admin'
 
-    const conditions = showDeleted ? [] : [isNull(costingBatches.deleted_at)]
+    const conditions: any[] = showDeleted ? [] : [isNull(costingBatches.deleted_at)]
+
+    // admin + developer see all batches; everyone else sees only their own
+    const GLOBAL_ROLES = ['admin', 'developer', 'ceo', 'owner']
+    if (!GLOBAL_ROLES.includes((req as any).user!.role)) {
+      conditions.push(eq(costingBatches.created_by, (req as any).user!.id))
+    }
 
     const allBatches = await db.select().from(costingBatches)
       .where(conditions.length > 0 ? and(...conditions) : undefined)

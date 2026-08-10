@@ -121,6 +121,11 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
     if (!includeComponents) {
       conditions.push(ne(quotations.quote_type, 'component'))
     }
+    // admin + developer see all quotes; everyone else sees only their own
+    const GLOBAL_ROLES = ['admin', 'developer', 'ceo', 'owner']
+    if (!GLOBAL_ROLES.includes(user.role)) {
+      conditions.push(eq(quotations.created_by, user.id))
+    }
 
     const allRows = await db
       .select({ q: quotations, p: parts })
