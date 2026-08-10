@@ -248,6 +248,9 @@ export async function runMigrations(client: Client): Promise<void> {
   // subscriptions — Razorpay support
   await exec(client, `ALTER TABLE subscriptions ADD COLUMN razorpay_subscription_id TEXT`)
 
+  // users — account self-deletion scheduling
+  await exec(client, `ALTER TABLE users ADD COLUMN deletion_scheduled_at TEXT`)
+
   // supplier conversations
   await exec(client, `
     CREATE TABLE IF NOT EXISTS supplier_conversations (

@@ -5,13 +5,14 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Camera, Eye, EyeOff, Check, BookOpen, Globe, Users, Info, Plus, X, Loader2, LogOut, CreditCard, HelpCircle,
+  Camera, Eye, EyeOff, Check, BookOpen, Globe, Users, Info, Plus, X, Loader2, LogOut,
+  CreditCard, HelpCircle, Trash2, AlertTriangle, ShieldAlert, RotateCcw, Clock,
 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
-import { api } from '../../lib/api'
-import { format } from 'date-fns'
+import { api, extractApiError } from '../../lib/api'
+import { format, formatDistanceToNow } from 'date-fns'
 import { Button } from '../../components/ui/button'
 import { Skeleton } from '../../components/ui/skeleton'
 import { cn } from '../../lib/utils'
@@ -165,6 +166,278 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   )
 }
 
+// ─── DeleteAccountDialog ──────────────────────────────────────────────────────
+
+type DeleteStep = 'warn' | 'confirm' | 'choose' | 'done'
+type DeleteMode = 'scheduled' | 'immediate'
+
+function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+  const { user, logout } = useAuth()
+  const navigate          = useNavigate()
+  const [step, setStep]   = useState<DeleteStep>('warn')
+  const [mode, setMode]   = useState<DeleteMode>('scheduled')
+  const [password, setPassword] = useState('')
+  const [showPw,   setShowPw]   = useState(false)
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null)
+
+  async function handleDelete() {
+    if (!password) { setError('Password is required'); return }
+    setError(''); setLoading(true)
+    try {
+      if (mode === 'scheduled') {
+        const { deletion_scheduled_at } = await api.auth.deleteAccount(password)
+        setScheduledAt(deletion_scheduled_at)
+      } else {
+        await api.auth.deleteAccountNow(password)
+      }
+      setStep('done')
+    } catch (err) {
+      setError(extractApiError(err, 'Failed to delete account. Check your password.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDoneClose() {
+    if (mode === 'immediate') {
+      await logout()
+      navigate('/login', { replace: true })
+    } else {
+      onClose()
+    }
+  }
+
+  const WHAT_GETS_DELETED = [
+    'All your quotations and cost breakdowns',
+    'Uploaded part drawings and files',
+    'Supplier quotes and negotiation reports',
+    'Your profile picture and personal data',
+  ]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+      >
+        {/* Header */}
+        <div className={cn(
+          'flex items-center justify-between px-6 py-4 border-b border-[#e5e8ef]',
+          step === 'done' ? 'bg-white' : 'bg-red-50',
+        )}>
+          <div className="flex items-center gap-2.5">
+            {step === 'done'
+              ? <Check className="w-5 h-5 text-emerald-500" />
+              : <ShieldAlert className="w-5 h-5 text-red-500" />}
+            <h2 className="text-base font-semibold text-[#0f1729]">
+              {step === 'warn'    && 'Delete Account'}
+              {step === 'confirm' && 'Confirm Identity'}
+              {step === 'choose'  && 'Choose Deletion Type'}
+              {step === 'done'    && (mode === 'immediate' ? 'Account Deleted' : 'Deletion Scheduled')}
+            </h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-red-100 text-[#9aa3b2] transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Step 1 — Warning */}
+          {step === 'warn' && (
+            <div className="space-y-4">
+              <div className="flex gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
+                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 leading-relaxed">
+                  You are about to delete your account. This action has serious consequences and may be irreversible.
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wider mb-2">What will be removed</p>
+                <ul className="space-y-2">
+                  {WHAT_GETS_DELETED.map(item => (
+                    <li key={item} className="flex items-start gap-2 text-sm text-[#4a5568]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-2 flex-shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2.5">
+                <Clock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  <strong>7-day grace period available.</strong> You can schedule deletion and restore your account within 7 days by logging back in.
+                </p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button variant="outline" size="md" className="flex-1" onClick={onClose}>
+                  Keep My Account
+                </Button>
+                <button
+                  onClick={() => setStep('confirm')}
+                  className="flex-1 px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors"
+                >
+                  I understand, continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2 — Confirm identity */}
+          {step === 'confirm' && (
+            <div className="space-y-4">
+              <p className="text-sm text-[#4a5568] leading-relaxed">
+                To confirm it's you, enter the password for <span className="font-semibold text-[#0f1729]">{user?.email}</span>.
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-[#9aa3b2] mb-1.5">Your password</label>
+                <div className="relative">
+                  <input
+                    type={showPw ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') setStep('choose') }}
+                    placeholder="Enter your password"
+                    className={cn(
+                      'w-full border rounded-lg px-3 pr-9 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent transition-all',
+                      error ? 'border-red-400' : 'border-[#e5e8ef]',
+                    )}
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9aa3b2] hover:text-[#4a5568]">
+                    {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+              </div>
+              <div className="flex gap-3 pt-1">
+                <Button variant="outline" size="md" className="flex-1" onClick={() => setStep('warn')}>
+                  Back
+                </Button>
+                <button
+                  onClick={() => { if (password) { setError(''); setStep('choose') } else setError('Password is required') }}
+                  className="flex-1 px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors"
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3 — Choose deletion type */}
+          {step === 'choose' && (
+            <div className="space-y-4">
+              <p className="text-sm text-[#4a5568]">Choose how you want to delete your account:</p>
+
+              {/* Scheduled */}
+              <label className={cn(
+                'flex gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors',
+                mode === 'scheduled' ? 'border-amber-400 bg-amber-50' : 'border-[#e5e8ef] hover:border-[#c8cdd8]',
+              )}>
+                <input type="radio" name="mode" className="mt-1 accent-amber-500" checked={mode === 'scheduled'} onChange={() => setMode('scheduled')} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <p className="text-sm font-semibold text-[#0f1729]">Schedule deletion (7 days)</p>
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">Recommended</span>
+                  </div>
+                  <p className="text-xs text-[#9aa3b2] mt-1 leading-relaxed">
+                    Your account is deactivated now but recoverable for 7 days. Log back in any time to restore everything.
+                  </p>
+                </div>
+              </label>
+
+              {/* Immediate */}
+              <label className={cn(
+                'flex gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors',
+                mode === 'immediate' ? 'border-red-400 bg-red-50' : 'border-[#e5e8ef] hover:border-[#c8cdd8]',
+              )}>
+                <input type="radio" name="mode" className="mt-1 accent-red-500" checked={mode === 'immediate'} onChange={() => setMode('immediate')} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <p className="text-sm font-semibold text-[#0f1729]">Delete immediately</p>
+                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">Permanent</span>
+                  </div>
+                  <p className="text-xs text-[#9aa3b2] mt-1 leading-relaxed">
+                    All personal data is wiped right now. This cannot be undone.
+                  </p>
+                </div>
+              </label>
+
+              {error && <p className="text-xs text-red-500">{error}</p>}
+
+              <div className="flex gap-3 pt-1">
+                <Button variant="outline" size="md" className="flex-1" onClick={() => setStep('confirm')}>
+                  Back
+                </Button>
+                <button
+                  onClick={handleDelete}
+                  disabled={loading}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-60',
+                    mode === 'immediate' ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600',
+                  )}
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  {loading ? 'Processing…' : mode === 'immediate' ? 'Delete now' : 'Schedule deletion'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4 — Done */}
+          {step === 'done' && (
+            <div className="text-center space-y-4 py-2">
+              <div className={cn(
+                'w-16 h-16 rounded-full flex items-center justify-center mx-auto',
+                mode === 'immediate' ? 'bg-red-100' : 'bg-amber-100',
+              )}>
+                {mode === 'immediate'
+                  ? <Trash2 className="w-8 h-8 text-red-500" />
+                  : <Clock className="w-8 h-8 text-amber-500" />}
+              </div>
+              {mode === 'immediate' ? (
+                <>
+                  <p className="text-base font-semibold text-[#0f1729]">Account deleted</p>
+                  <p className="text-sm text-[#9aa3b2] leading-relaxed">Your personal data has been permanently removed. You will be signed out now.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-base font-semibold text-[#0f1729]">Deletion scheduled</p>
+                  {scheduledAt && (
+                    <p className="text-sm text-[#9aa3b2] leading-relaxed">
+                      Your account will be permanently deleted on{' '}
+                      <span className="font-semibold text-[#0f1729]">{format(new Date(scheduledAt), 'dd MMM yyyy, HH:mm')}</span>.
+                      Log back in any time before then to cancel.
+                    </p>
+                  )}
+                </>
+              )}
+              <button
+                onClick={handleDoneClose}
+                className={cn(
+                  'w-full px-4 py-2.5 rounded-lg text-white text-sm font-medium transition-colors',
+                  mode === 'immediate' ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600',
+                )}
+              >
+                {mode === 'immediate' ? 'Sign out' : 'Close'}
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ─── Profile tab ─────────────────────────────────────────────────────────────
 
 function ProfileTab() {
@@ -173,9 +446,26 @@ function ProfileTab() {
   const { plan } = useSubscription()
   const queryClient = useQueryClient()
 
+  const deletionScheduledAt: string | null = (user as any)?.deletion_scheduled_at ?? null
+  const isDeletionPending = !!deletionScheduledAt && new Date(deletionScheduledAt) > new Date()
+
   async function handleSignOut() {
     await logout()
     navigate('/login')
+  }
+
+  async function handleRestoreDeletion() {
+    setRestoringDeletion(true)
+    try {
+      await api.auth.restoreAccount()
+      toast.success('Account restoration confirmed — your account is active again.')
+      // Refresh user profile
+      queryClient.invalidateQueries({ queryKey: ['me'] })
+    } catch (err: unknown) {
+      toast.error(extractApiError(err, 'Failed to restore account'))
+    } finally {
+      setRestoringDeletion(false)
+    }
   }
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -188,6 +478,8 @@ function ProfileTab() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [togglingId,     setTogglingId]     = useState<string | null>(null)
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [restoringDeletion, setRestoringDeletion] = useState(false)
 
   const nameForm = useForm<NameForm>({ resolver: zodResolver(nameSchema), defaultValues: { full_name: user?.full_name ?? '' } })
   const pwForm   = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) })
@@ -476,6 +768,65 @@ function ProfileTab() {
           </Button>
         </div>
       </SectionCard>
+
+      {/* ── Danger Zone ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 pt-2">
+        <div className="flex-1 h-px bg-red-200" />
+        <span className="text-xs font-semibold text-red-400 uppercase tracking-widest">Danger Zone</span>
+        <div className="flex-1 h-px bg-red-200" />
+      </div>
+
+      {/* Deletion-pending banner */}
+      {isDeletionPending && deletionScheduledAt && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-start gap-3"
+        >
+          <Clock className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">Account deletion scheduled</p>
+            <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
+              Your account will be permanently deleted{' '}
+              <strong>{formatDistanceToNow(new Date(deletionScheduledAt), { addSuffix: true })}</strong>{' '}
+              ({format(new Date(deletionScheduledAt), 'dd MMM yyyy, HH:mm')}). Log in any time before then to cancel.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            loading={restoringDeletion}
+            iconLeft={!restoringDeletion ? <RotateCcw className="w-3.5 h-3.5" /> : undefined}
+            onClick={handleRestoreDeletion}
+            className="flex-shrink-0 bg-amber-500 hover:bg-amber-600 text-white border-0"
+          >
+            Restore
+          </Button>
+        </motion.div>
+      )}
+
+      <div className="bg-white rounded-xl border border-red-200 p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Trash2 className="w-4 h-4 text-red-500" />
+              <p className="text-sm font-semibold text-[#0f1729]">Delete account</p>
+            </div>
+            <p className="text-xs text-[#9aa3b2] leading-relaxed max-w-sm">
+              Permanently remove your account and all associated data. You can choose a 7-day grace period for recovery, or delete immediately.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowDeleteDialog(true)}
+            className="flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete account
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showDeleteDialog && <DeleteAccountDialog onClose={() => setShowDeleteDialog(false)} />}
+      </AnimatePresence>
     </div>
   )
 }

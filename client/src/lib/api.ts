@@ -46,7 +46,10 @@ export const api = {
     logout:        ()                                => client.post('/auth/logout').then(d),
     updateProfile: (data: unknown)                   => client.patch('/auth/profile', data).then(d),
     changePassword:(data: unknown)                   => client.patch('/auth/password', data).then(d),
-    uploadAvatar:  (formData: FormData)              => client.post('/auth/avatar', formData).then(d),
+    uploadAvatar:       (formData: FormData)              => client.post('/auth/avatar', formData).then(d),
+    deleteAccount:      (password: string)                => client.post('/auth/delete-account', { password }).then(d),
+    deleteAccountNow:   (password: string)                => client.post('/auth/delete-account/immediate', { password }).then(d),
+    restoreAccount:     ()                                => client.post('/auth/restore-account').then(d),
   },
   users: {
     list:   ()                          => client.get('/users').then(d),

@@ -114,13 +114,32 @@ router.post('/login', async (req: Request, res: Response) => {
     }
     const [user] = await db.select().from(users).where(eq(users.email, email))
     if (!user) return res.status(401).json({ success: false, error: 'Invalid email or password', error_code: 'AUTH_INVALID' })
-    if (!user.is_active) return res.status(403).json({ success: false, error: 'Account is deactivated', error_code: 'AUTH_DEACTIVATED' })
+
+    // Account scheduled for deletion — allow login (so they can restore), but flag it
+    const pendingDeletion = (user as any).deletion_scheduled_at as string | null | undefined
+    const isPastDeletion  = pendingDeletion && new Date(pendingDeletion) < new Date()
+
+    // Accounts past their deletion date or deactivated by admin
+    if (!user.is_active && !pendingDeletion) {
+      return res.status(403).json({ success: false, error: 'Account is deactivated', error_code: 'AUTH_DEACTIVATED' })
+    }
+    if (isPastDeletion) {
+      return res.status(410).json({ success: false, error: 'This account has been permanently deleted.', error_code: 'AUTH_DELETED' })
+    }
+
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) return res.status(401).json({ success: false, error: 'Invalid email or password', error_code: 'AUTH_INVALID' })
     await db.update(users).set({ last_login: new Date().toISOString() }).where(eq(users.id, user.id))
     const token = issueToken(user)
     const { password_hash: _ph, ...profile } = user
-    return res.json({ success: true, data: { token, user: profile } })
+    return res.json({
+      success: true,
+      data: {
+        token,
+        user: profile,
+        deletion_scheduled_at: pendingDeletion ?? null,
+      },
+    })
   } catch (err) {
     console.error('Login error:', err)
     return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
@@ -373,6 +392,108 @@ router.post('/passkey/auth/verify', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Passkey auth verify error:', err)
     return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
+  }
+})
+
+// ─── Account self-deletion ────────────────────────────────────────────────────
+
+// POST /auth/delete-account — schedule deletion in 7 days
+router.post('/delete-account', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId   = (req as any).user!.id as string
+    const { password } = req.body
+    if (!password) {
+      return res.status(422).json({ success: false, error: 'Password confirmation is required', error_code: 'MISSING_PASSWORD' })
+    }
+    const [user] = await db.select().from(users).where(eq(users.id, userId))
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' })
+    const valid = await bcrypt.compare(password, user.password_hash)
+    if (!valid) return res.status(401).json({ success: false, error: 'Incorrect password', error_code: 'AUTH_INVALID' })
+
+    const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    await db.update(users)
+      .set({ deletion_scheduled_at: scheduledAt, updated_at: new Date().toISOString() } as any)
+      .where(eq(users.id, userId))
+
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(), user_id: userId, action: 'account_deletion_scheduled',
+      entity_type: 'user', entity_id: userId,
+      details: JSON.stringify({ scheduled_at: scheduledAt }),
+      created_at: new Date().toISOString(),
+    })
+
+    return res.json({ success: true, data: { deletion_scheduled_at: scheduledAt } })
+  } catch (err) {
+    console.error('Delete account error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+})
+
+// POST /auth/delete-account/immediate — permanent immediate deletion
+router.post('/delete-account/immediate', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId   = (req as any).user!.id as string
+    const { password } = req.body
+    if (!password) {
+      return res.status(422).json({ success: false, error: 'Password confirmation is required', error_code: 'MISSING_PASSWORD' })
+    }
+    const [user] = await db.select().from(users).where(eq(users.id, userId))
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' })
+    const valid = await bcrypt.compare(password, user.password_hash)
+    if (!valid) return res.status(401).json({ success: false, error: 'Incorrect password', error_code: 'AUTH_INVALID' })
+
+    // Anonymise personal data but keep the row so FK references don't break
+    const now = new Date().toISOString()
+    await db.update(users).set({
+      email:         `deleted_${userId}@removed.invalid`,
+      full_name:     'Deleted User',
+      password_hash: '',
+      avatar_url:    null,
+      is_active:     false,
+      deletion_scheduled_at: now,
+      updated_at:    now,
+    } as any).where(eq(users.id, userId))
+
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(), user_id: userId, action: 'account_deleted_immediate',
+      entity_type: 'user', entity_id: userId,
+      details: JSON.stringify({ deleted_at: now }),
+      created_at: now,
+    })
+
+    return res.json({ success: true })
+  } catch (err) {
+    console.error('Immediate delete error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+})
+
+// POST /auth/restore-account — cancel a scheduled deletion (within the 7-day window)
+router.post('/restore-account', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user!.id as string
+    const [user] = await db.select().from(users).where(eq(users.id, userId))
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' })
+    const pendingDeletion = (user as any).deletion_scheduled_at as string | null
+    if (!pendingDeletion) {
+      return res.status(400).json({ success: false, error: 'No deletion is scheduled for this account' })
+    }
+    if (new Date(pendingDeletion) < new Date()) {
+      return res.status(410).json({ success: false, error: 'The deletion window has passed and cannot be restored' })
+    }
+    await db.update(users)
+      .set({ deletion_scheduled_at: null, is_active: true, updated_at: new Date().toISOString() } as any)
+      .where(eq(users.id, userId))
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(), user_id: userId, action: 'account_deletion_restored',
+      entity_type: 'user', entity_id: userId,
+      details: JSON.stringify({ restored_at: new Date().toISOString() }),
+      created_at: new Date().toISOString(),
+    })
+    return res.json({ success: true })
+  } catch (err) {
+    console.error('Restore account error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error' })
   }
 })
 

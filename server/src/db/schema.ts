@@ -25,6 +25,7 @@ export const users = sqliteTable('users', {
   created_at:             text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at:             text('updated_at').$defaultFn(() => new Date().toISOString()),
   last_login:             text('last_login'),
+  deletion_scheduled_at:  text('deletion_scheduled_at'),
 })
 
 // ─── parts ────────────────────────────────────────────────────────────────────
