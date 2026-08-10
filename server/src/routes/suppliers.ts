@@ -47,6 +47,14 @@ const createSupplierSchema = z.object({
 
 const updateSupplierSchema = createSupplierSchema.partial()
 
+const lineSchema = z.object({
+  category:    z.enum(['material', 'manufacturing', 'special_direct', 'overheads']),
+  label:       z.string().min(1),
+  value_eur:   z.number(),
+  source_tier: z.number().int().min(1).max(5).default(5),
+  notes:       z.string().optional(),
+})
+
 const createQuoteSchema = z.object({
   quotation_id:         z.string().min(1),
   supplier_id:          z.string().min(1),
@@ -59,6 +67,8 @@ const createQuoteSchema = z.object({
   extraction_method:    z.enum(['manual', 'ai_extracted']).optional(),
   raw_text:             z.string().optional(),
   notes:                z.string().optional(),
+  // Pre-extracted lines — inserted atomically with the quote header
+  lines:                z.array(lineSchema).optional(),
 })
 
 const updateQuoteSchema = createQuoteSchema.omit({ quotation_id: true, supplier_id: true }).partial()
@@ -70,10 +80,11 @@ const suggestSchema = z.object({
   country:        z.string().optional(), // legacy single-country field
 })
 
+// Extract-only schema: no pre-existing supplier_quote_id required.
+// Returns AI-extracted lines without saving so the user can review before saving.
 const extractQuoteSchema = z.object({
-  supplier_quote_id: z.string().min(1),
-  raw_text:          z.string().min(1),
-  commodity_type:    z.string().min(1),
+  raw_text:       z.string().min(1),
+  commodity_type: z.string().optional(),
 })
 
 const compareSchema = z.object({
@@ -291,7 +302,6 @@ router.post('/quote', requireRole(WRITE_ROLES), validate(createQuoteSchema), asy
       .select()
       .from(quotations)
       .where(and(eq(quotations.id, body.quotation_id), isNull(quotations.deleted_at)))
-
     if (!quote) {
       return res.status(404).json({ success: false, error: 'Quotation not found' })
     }
@@ -325,12 +335,26 @@ router.post('/quote', requireRole(WRITE_ROLES), validate(createQuoteSchema), asy
       })
       .returning()
 
+    // Insert any pre-extracted lines atomically with the quote
+    if (body.lines && body.lines.length > 0) {
+      for (const line of body.lines) {
+        await db.insert(supplierQuoteLines).values({
+          supplier_quote_id: row.id,
+          category:          line.category as any,
+          label:             line.label,
+          value_eur:         line.value_eur,
+          source_tier:       line.source_tier ?? 5,
+          notes:             line.notes,
+        })
+      }
+    }
+
     await db.insert(auditLog).values({
       user_id:     userId,
       action:      'supplier_quote_created',
       entity_type: 'supplier_quote',
       entity_id:   row.id,
-      details:     JSON.stringify({ quotation_id: body.quotation_id, supplier_id: body.supplier_id }),
+      details:     JSON.stringify({ quotation_id: body.quotation_id, supplier_id: body.supplier_id, lines_count: body.lines?.length ?? 0 }),
     })
 
     return res.status(201).json({ success: true, data: row })
@@ -529,24 +553,18 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
 })
 
 // ─── POST /api/suppliers/extract-quote — AI extract quote lines (KB-first) ────
+// Returns extracted lines WITHOUT saving so the user can review before saving.
+// Lines are sent alongside the quote when POST /suppliers/quote is called.
 
 router.post('/extract-quote', requireRole(WRITE_ROLES), validate(extractQuoteSchema), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id
-    const { supplier_quote_id, raw_text, commodity_type } = req.body as z.infer<typeof extractQuoteSchema>
+    const { raw_text, commodity_type } = req.body as z.infer<typeof extractQuoteSchema>
 
-    // Verify supplier quote exists and is active
-    const [sqRow] = await db
-      .select()
-      .from(supplierQuotes)
-      .where(and(eq(supplierQuotes.id, supplier_quote_id), eq(supplierQuotes.is_active, true)))
-
-    if (!sqRow) {
-      return res.status(404).json({ success: false, error: 'Supplier quote not found' })
-    }
+    const ctxType = commodity_type ?? 'manufacturing'
 
     // KB-FIRST
-    const kbResults = await searchKB(`cost breakdown ${commodity_type}`, commodity_type, 5)
+    const kbResults = await searchKB(`cost breakdown ${ctxType}`, ctxType, 5)
     const kbContext = kbResults.map((r) => r.content).join('\n\n')
 
     const prompt = `You are a cost engineering expert specialised in parsing supplier quotes.
@@ -604,60 +622,17 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
       return res.status(500).json({ success: false, error: 'AI_INVALID_RESPONSE: missing lines array' })
     }
 
-    // Validate and reject lines missing source_tier
-    const invalidLines = parsed.lines.filter(
-      (l) => typeof l.source_tier !== 'number' || l.source_tier < 1 || l.source_tier > 5,
-    )
-    if (invalidLines.length > 0) {
-      return res.status(422).json({
-        success: false,
-        error: `AI_MISSING_SOURCE_TIER: ${invalidLines.length} line(s) missing valid source_tier`,
-        invalid_lines: invalidLines,
-      })
-    }
+    // Coerce missing source_tier to 5 (AI-extracted) rather than rejecting
+    const lines = parsed.lines.map(l => ({
+      ...l,
+      source_tier: (typeof l.source_tier === 'number' && l.source_tier >= 1 && l.source_tier <= 5)
+        ? l.source_tier : 5,
+      // Normalise category to nearest valid bucket
+      category: (['material', 'manufacturing', 'special_direct', 'overheads'].includes(l.category))
+        ? l.category : 'manufacturing',
+    }))
 
-    const validCategories = ['material', 'manufacturing', 'special_direct', 'overheads']
-    const invalidCats = parsed.lines.filter((l) => !validCategories.includes(l.category))
-    if (invalidCats.length > 0) {
-      return res.status(422).json({
-        success: false,
-        error: `AI_INVALID_CATEGORY: ${invalidCats.length} line(s) have an invalid category`,
-        invalid_lines: invalidCats,
-      })
-    }
-
-    // Insert all lines
-    const inserted = []
-    for (const line of parsed.lines) {
-      const [row] = await db
-        .insert(supplierQuoteLines)
-        .values({
-          supplier_quote_id: supplier_quote_id,
-          category:          line.category as any,
-          label:             line.label,
-          value_eur:         line.value_eur,
-          source_tier:       line.source_tier,
-          notes:             line.notes,
-        })
-        .returning()
-      inserted.push(row)
-    }
-
-    // Update extraction_method on the parent supplier_quote
-    await db
-      .update(supplierQuotes)
-      .set({ extraction_method: 'ai_extracted', updated_at: new Date().toISOString() })
-      .where(eq(supplierQuotes.id, supplier_quote_id))
-
-    await db.insert(auditLog).values({
-      user_id:     userId,
-      action:      'supplier_quote_extracted',
-      entity_type: 'supplier_quote',
-      entity_id:   supplier_quote_id,
-      details:     JSON.stringify({ lines_count: inserted.length, commodity_type }),
-    })
-
-    return res.json({ success: true, data: inserted })
+    return res.json({ success: true, data: { lines } })
   } catch (err) {
     console.error('Extract supplier quote error:', err)
     return res.status(500).json({ success: false, error: String(err) })
@@ -956,6 +931,23 @@ router.get('/negotiation/:quoteId', async (req: Request, res: Response) => {
     return res.json({ success: true, data: rows })
   } catch (err) {
     console.error('Get negotiation error:', err)
+    return res.status(500).json({ success: false, error: String(err) })
+  }
+})
+
+// ─── GET /api/suppliers/:id/quotes — all supplier quotes for this supplier ───
+
+router.get('/:id/quotes', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const rows = await db
+      .select()
+      .from(supplierQuotes)
+      .where(and(eq(supplierQuotes.supplier_id, id), eq(supplierQuotes.is_active, true)))
+
+    return res.json({ success: true, data: rows })
+  } catch (err) {
+    console.error('List supplier quotes error:', err)
     return res.status(500).json({ success: false, error: String(err) })
   }
 })

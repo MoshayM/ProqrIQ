@@ -134,9 +134,8 @@ function TierStars({ rating, max = 5 }: { rating: number | null; max?: number })
 
 // ─── ADD QUOTE MODAL ─────────────────────────────────────────────────────────
 
-function AddQuoteModal({ supplierId, quotationId, onClose }: {
+function AddQuoteModal({ supplierId, onClose }: {
   supplierId: string
-  quotationId: string | null
   onClose: () => void
 }) {
   const qc = useQueryClient()
@@ -145,6 +144,13 @@ function AddQuoteModal({ supplierId, quotationId, onClose }: {
   const [mode, setMode] = useState<'manual' | 'ai'>('ai')
   const [extractedLines, setExtractedLines] = useState<any[]>([])
   const [extractLoading, setExtractLoading] = useState(false)
+  const [selectedQuotationId, setSelectedQuotationId] = useState<string>('')
+
+  // Fetch quotations for the picker
+  const { data: quotationsList = [] } = useQuery<{ id: string; part_name: string; quote_number?: string }[]>({
+    queryKey: ['quotations-list-for-supplier'],
+    queryFn: () => api.quotes.list() as Promise<{ id: string; part_name: string; quote_number?: string }[]>,
+  })
 
   const createMut = useMutation({
     mutationFn: (body: unknown) => api.suppliers.createQuote(body),
@@ -160,7 +166,7 @@ function AddQuoteModal({ supplierId, quotationId, onClose }: {
     if (!rawText.trim()) return
     setExtractLoading(true)
     try {
-      const res: any = await api.suppliers.extractQuote({ supplier_id: supplierId, raw_text: rawText, quotation_id: quotationId })
+      const res: any = await api.suppliers.extractQuote({ raw_text: rawText, commodity_type: 'manufacturing' })
       setExtractedLines(res.lines ?? [])
       toast.success(`Extracted ${res.lines?.length ?? 0} line items`)
     } catch {
@@ -171,13 +177,14 @@ function AddQuoteModal({ supplierId, quotationId, onClose }: {
   }
 
   function handleSave() {
+    if (!selectedQuotationId) { toast.error('Please select a quotation first'); return }
     createMut.mutate({
-      supplier_id: supplierId,
-      quotation_id: quotationId,
-      extraction_method: mode,
-      raw_text: rawText,
+      supplier_id:       supplierId,
+      quotation_id:      selectedQuotationId,
+      extraction_method: mode === 'ai' && extractedLines.length > 0 ? 'ai_extracted' : 'manual',
+      raw_text:          rawText,
       notes,
-      lines: extractedLines,
+      lines:             extractedLines,
     })
   }
 
@@ -195,6 +202,23 @@ function AddQuoteModal({ supplierId, quotationId, onClose }: {
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-3 text-[#9aa3b2]"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-6 space-y-4">
+          {/* Quotation picker — required field */}
+          <div>
+            <label className="block text-xs font-medium text-[#4a5568] mb-1">Link to Quotation <span className="text-red-500">*</span></label>
+            <select
+              value={selectedQuotationId}
+              onChange={e => setSelectedQuotationId(e.target.value)}
+              className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-sm text-[#0f1729] bg-white focus:outline-none focus:ring-2 focus:ring-brand/30"
+            >
+              <option value="">Select a quotation…</option>
+              {quotationsList.map((q: any) => (
+                <option key={q.id} value={q.id}>
+                  {q.quote_number ? `#${q.quote_number} — ` : ''}{q.part_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex gap-2">
             {(['ai', 'manual'] as const).map(m => (
               <button key={m} onClick={() => setMode(m)}
@@ -244,7 +268,7 @@ function AddQuoteModal({ supplierId, quotationId, onClose }: {
 
           <div className="flex gap-2 pt-2">
             <Button variant="primary" onClick={handleSave} loading={createMut.isPending}
-              disabled={!rawText.trim()} className="flex-1">
+              disabled={!rawText.trim() || !selectedQuotationId} className="flex-1">
               Save Quote
             </Button>
             <Button variant="outline" onClick={onClose}>Cancel</Button>
@@ -276,7 +300,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
 
   const { data: quotes = [], isLoading: quotesLoading } = useQuery<SupplierQuote[]>({
     queryKey: ['supplier-quotes', supplier.id],
-    queryFn: () => api.suppliers.forQuote(supplier.id) as Promise<SupplierQuote[]>,
+    queryFn: () => api.suppliers.getQuotesBySupplier(supplier.id) as Promise<SupplierQuote[]>,
   })
 
   async function handleCompare(quoteId: string) {
@@ -648,7 +672,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose }: {
       </div>
 
       {showAddQuote && (
-        <AddQuoteModal supplierId={supplier.id} quotationId={quotationId} onClose={() => setShowAddQuote(false)} />
+        <AddQuoteModal supplierId={supplier.id} onClose={() => setShowAddQuote(false)} />
       )}
     </motion.div>
   )

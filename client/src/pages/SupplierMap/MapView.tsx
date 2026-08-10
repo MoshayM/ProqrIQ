@@ -1,15 +1,5 @@
-import React from 'react'
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet'
+import React, { useRef, useEffect } from 'react'
 import L from 'leaflet'
-import { cn } from '../../lib/utils'
-
-// Fix default marker icon path broken by Vite bundling
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-})
 
 interface Pin {
   code:     string
@@ -24,45 +14,71 @@ interface MapViewProps {
   onPinClick: (code: string) => void
 }
 
+// Pure-Leaflet map — avoids react-leaflet v5's React 18 incompatibility
+// ("r is not a function" in production Vite builds).
 export default function MapView({ pins, onPinClick }: MapViewProps) {
-  return (
-    <MapContainer
-      center={[30, 15]}
-      zoom={2}
-      style={{ height: '100%', width: '100%' }}
-      scrollWheelZoom={false}
-      attributionControl={false}
-    >
-      <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-      />
-      {pins.map((pin) => (
-        <CircleMarker
-          key={pin.code}
-          center={pin.coords}
-          radius={pin.selected ? 14 : 10}
-          pathOptions={{
-            fillColor:   pin.selected ? '#e85c1a' : '#1e2d4e',
-            fillOpacity: pin.selected ? 0.9 : 0.75,
-            color:       pin.selected ? '#e85c1a' : '#1e2d4e',
-            weight:      pin.selected ? 2 : 1,
-          }}
-          eventHandlers={{ click: () => onPinClick(pin.code) }}
-        >
-          <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-            <div className="text-xs">
-              <p className="font-semibold">{pin.label}</p>
-              {pin.supplier && (
-                <>
-                  <p>{pin.supplier.name}</p>
-                  <p className="text-[#9aa3b2]">{pin.supplier.specialisation} · {pin.supplier.estimated_lead_time_days}d</p>
-                </>
-              )}
-            </div>
-          </Tooltip>
-        </CircleMarker>
-      ))}
-    </MapContainer>
-  )
+  const containerRef  = useRef<HTMLDivElement>(null)
+  const mapRef        = useRef<L.Map | null>(null)
+  const markersRef    = useRef<L.CircleMarker[]>([])
+  const callbackRef   = useRef(onPinClick)
+
+  // Keep callback ref in sync so the click handlers don't go stale
+  useEffect(() => { callbackRef.current = onPinClick }, [onPinClick])
+
+  // Initialise map once on mount
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || mapRef.current) return
+
+    const map = L.map(el, {
+      center:           [30, 15],
+      zoom:             2,
+      scrollWheelZoom:  false,
+      attributionControl: false,
+      zoomControl:      true,
+    })
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+    }).addTo(map)
+
+    mapRef.current = map
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+      markersRef.current = []
+    }
+  }, [])
+
+  // Redraw markers whenever pins change
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    markersRef.current.forEach(m => m.remove())
+    markersRef.current = []
+
+    pins.forEach(pin => {
+      const marker = L.circleMarker(pin.coords, {
+        radius:      pin.selected ? 14 : 10,
+        fillColor:   pin.selected ? '#e85c1a' : '#1e2d4e',
+        fillOpacity: pin.selected ? 0.9 : 0.75,
+        color:       pin.selected ? '#e85c1a' : '#1e2d4e',
+        weight:      pin.selected ? 2 : 1,
+        interactive: true,
+      })
+
+      const tooltipHtml = pin.supplier
+        ? `<div style="font-size:11px;line-height:1.4"><strong>${pin.label}</strong></div>`
+        : `<div style="font-size:11px"><strong>${pin.label}</strong></div>`
+
+      marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -8], opacity: 0.95 })
+      marker.on('click', () => callbackRef.current(pin.code))
+      marker.addTo(map)
+      markersRef.current.push(marker)
+    })
+  }, [pins])
+
+  return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
 }
