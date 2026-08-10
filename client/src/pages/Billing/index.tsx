@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CreditCard, XCircle, Calendar, CheckCircle, IndianRupee, Zap,
-  Check, Lock, ArrowRight, Sparkles, Building2, Star,
+  Check, Lock, ArrowRight, Sparkles, Building2, Star, ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSubscription } from '../../hooks/useSubscription'
@@ -13,6 +13,8 @@ import { Modal } from '../../components/ui/modal'
 import { Skeleton } from '../../components/ui/skeleton'
 import { usePageTitle } from '../../hooks/usePageTitle'
 import { api } from '../../lib/api'
+
+const BYPASS_ROLES = new Set(['admin', 'developer', 'owner'])
 
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -305,6 +307,55 @@ export default function Billing() {
   const { user } = useAuth()
 
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
+
+  if (BYPASS_ROLES.has(user?.role ?? '')) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="page-content space-y-6 max-w-3xl"
+      >
+        <div>
+          <h1 className="text-2xl font-bold text-[#0f1729]">Plans &amp; Billing</h1>
+          <p className="text-sm text-[#9aa3b2] mt-1">Your subscription and access details</p>
+        </div>
+        <div
+          className="rounded-2xl p-8 text-white relative overflow-hidden flex flex-col items-center text-center gap-5"
+          style={{ background: 'linear-gradient(135deg, #0f1629 0%, #1e2d4e 60%, #253660 100%)' }}
+        >
+          <div className="absolute inset-0 opacity-[0.04]"
+            style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+          <div className="relative z-10 flex flex-col items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center">
+              <ShieldCheck className="w-8 h-8 text-[#e85c1a]" />
+            </div>
+            <div>
+              <p className="text-2xl font-extrabold">Full Access Granted</p>
+              <p className="text-white/60 text-sm mt-1">
+                Your role (<span className="capitalize font-semibold text-white/80">{user?.role}</span>) has unrestricted access to all features — no payment required.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-x-10 gap-y-2 text-left mt-2">
+              {[
+                'Unlimited quotes', 'Bulk costing (50 parts)',
+                'Assembly BOM roll-up', 'Supplier discovery & AI',
+                'Negotiation reports', 'Excel &amp; PDF export',
+                'AI Cost Control', 'Knowledge Base (PDF)',
+                'Custom margin %', 'Audit log export',
+                'SSO / SAML', 'Priority AI processing',
+              ].map(f => (
+                <div key={f} className="flex items-center gap-2">
+                  <CheckCircle className="w-3.5 h-3.5 text-[#e85c1a] shrink-0" />
+                  <span className="text-xs text-white/70" dangerouslySetInnerHTML={{ __html: f }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
   const [rzpModalOpen,    setRzpModalOpen]    = useState(false)
   const [canceling,       setCanceling]       = useState(false)
   const [rzpPlan,         setRzpPlan]         = useState<'pro' | 'organization'>('pro')

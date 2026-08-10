@@ -841,9 +841,11 @@ export default function Account() {
   const activeTab = searchParams.get('tab') || 'profile'
   const isAdmin   = hasRole(ADMIN_ROLES)
 
+  const isBypassRole = hasRole(['admin', 'developer', 'owner'])
+
   const tabs = [
     { id: 'profile', label: 'Profile',        icon: null },
-    { id: 'billing', label: 'Plans & Billing', icon: CreditCard },
+    ...(!isBypassRole ? [{ id: 'billing', label: 'Plans & Billing', icon: CreditCard }] : []),
     ...(isAdmin ? [
       { id: 'kb',    label: 'Knowledge Base', icon: BookOpen },
       { id: 'rates', label: 'Regional Rates', icon: Globe },

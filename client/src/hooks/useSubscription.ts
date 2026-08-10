@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { usePlan } from '../contexts/PlanContext'
+import { useAuth } from '../contexts/AuthContext'
 
 export interface SubscriptionData {
   plan: 'free' | 'pro' | 'organization'
@@ -48,8 +49,32 @@ const PREVIEW_LIMITS: Record<string, { quotes_per_month: number | null; bulk_bat
   organization: { quotes_per_month: null, bulk_batch_items: 50,  supplier_searches_per_month: null },
 }
 
+// Roles that bypass all plan checks — full organisation-level access, no payment required
+const BYPASS_ROLES = new Set(['admin', 'developer', 'owner'])
+
 export function useSubscription(): SubscriptionData & { isLoading: boolean; refetch: () => void } {
+  const { user } = useAuth()
   const { previewPlan } = usePlan()
+
+  // Admin / developer / owner get full access regardless of subscription
+  const isBypass = BYPASS_ROLES.has(user?.role ?? '')
+  if (isBypass) {
+    return {
+      plan:                  'organization',
+      status:                'active',
+      needs_payment:         false,
+      pending_plan:          undefined,
+      isTrialing:            false,
+      daysUntilRenewal:      null,
+      usage:                 { quotes_used: 0, bulk_used: 0, supplier_searches_used: 0, ai_tokens_used: 0 },
+      limits:                { quotes_per_month: null, bulk_batch_items: 50, supplier_searches_per_month: null },
+      predictedDaysRemaining: null,
+      canUse:                () => true,
+      isLoading:             false,
+      refetch:               () => {},
+    }
+  }
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['subscription'],
     queryFn: () => api.subscription.get(),
