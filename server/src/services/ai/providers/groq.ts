@@ -31,55 +31,48 @@ export class GroqProvider implements AIProvider {
     ]
     // Groq LPU does not support vision on free models — ignore imageBase64
 
-    const MAX_RETRIES = 3
-    let lastErr: unknown
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization:  `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model:      req.model,
+        max_tokens: req.maxTokens ?? 4096,
+        temperature: 0,
+        messages,
+        stream: false,
+      }),
+    })
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization:  `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model:      req.model,
-          max_tokens: req.maxTokens ?? 4096,
-          temperature: 0,
-          messages,
-          stream: false,
-        }),
-      })
-
-      if (res.status === 429) {
-        // Rate limited (free tier: 6,000 tokens/min) — wait for the rate limit window to reset
-        const retryAfter = res.headers.get('retry-after')
-        const waitMs = retryAfter ? Math.ceil(parseFloat(retryAfter)) * 1000 : 65_000
-        console.warn(`[Groq] Rate limited on attempt ${attempt + 1}/${MAX_RETRIES}, waiting ${Math.round(waitMs / 1000)}s`)
-        await new Promise<void>(r => setTimeout(r, waitMs))
-        lastErr = new Error(`Groq rate limited (attempt ${attempt + 1})`)
-        continue
-      }
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        throw new Error(`Groq request failed (${res.status}): ${text || res.statusText}`)
-      }
-
-      const data = await res.json() as {
-        choices?: { message?: { content?: string } }[]
-        usage?:   { prompt_tokens?: number; completion_tokens?: number }
-        model?:   string
-      }
-
-      return {
-        content:      data.choices?.[0]?.message?.content ?? '',
-        inputTokens:  data.usage?.prompt_tokens    ?? 0,
-        outputTokens: data.usage?.completion_tokens ?? 0,
-        model:        data.model ?? req.model,
-        provider:     this.id,
-      }
+    if (res.status === 429) {
+      // Rate limited (free tier: 6,000 tokens/min). Fail fast — do NOT wait here
+      // because waiting 60 s inside a Vercel function causes a 504 timeout.
+      // The caller (aiRouter) propagates 429 to the HTTP client; the E2E test
+      // and the UI both retry after backing off.
+      const retryAfter = res.headers.get('retry-after') ?? '60'
+      const err = Object.assign(new Error(`Groq rate limited — retry after ${retryAfter}s`), { status: 429 })
+      throw err
     }
 
-    throw lastErr ?? new Error('Groq: max retries exceeded')
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Groq request failed (${res.status}): ${text || res.statusText}`)
+    }
+
+    const data = await res.json() as {
+      choices?: { message?: { content?: string } }[]
+      usage?:   { prompt_tokens?: number; completion_tokens?: number }
+      model?:   string
+    }
+
+    return {
+      content:      data.choices?.[0]?.message?.content ?? '',
+      inputTokens:  data.usage?.prompt_tokens    ?? 0,
+      outputTokens: data.usage?.completion_tokens ?? 0,
+      model:        data.model ?? req.model,
+      provider:     this.id,
+    }
   }
 }
