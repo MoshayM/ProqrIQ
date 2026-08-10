@@ -12,6 +12,9 @@ data/uploads/kb/*
 !data/uploads/drawings/.gitkeep
 !data/uploads/kb/.gitkeep
 
+# Local reference documents
+ProqrIQ_Development_History.html
+
 # Sensitive files
 credentials.txt
 *.txt
