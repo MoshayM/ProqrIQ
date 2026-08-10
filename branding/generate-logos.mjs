@@ -7,6 +7,7 @@
 import { chromium } from 'playwright'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { copyFileSync } from 'fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -89,6 +90,11 @@ const variants = [
     bg: 'transparent',
     html: logoMarkSVG(32),
   },
+  // PWA icons — copied to client/public/
+  { name: 'icon-32',  width: 32,  height: 32,  bg: 'transparent', html: logoMarkSVG(32)  },
+  { name: 'icon-180', width: 180, height: 180, bg: 'transparent', html: logoMarkSVG(180) },
+  { name: 'icon-192', width: 192, height: 192, bg: 'transparent', html: logoMarkSVG(192) },
+  { name: 'icon-512', width: 512, height: 512, bg: '#1e2d4e',     html: `<div style="width:512px;height:512px;background:#1e2d4e;display:flex;align-items:center;justify-content:center;border-radius:80px;">${logoMarkSVG(320)}</div>` },
 ]
 
 // ─── Generate PNGs ────────────────────────────────────────────────────────────
@@ -116,4 +122,15 @@ for (const v of variants) {
 }
 
 await browser.close()
-console.log('\nAll branding assets saved to /branding/')
+
+// Copy PWA icons to client/public/ so they're served as static assets
+const publicDir = path.join(__dirname, '..', 'client', 'public')
+const pwaCopy = ['icon-32', 'icon-180', 'icon-192', 'icon-512', 'og-image']
+for (const name of pwaCopy) {
+  const src  = path.join(__dirname, `${name}.png`)
+  const dest = path.join(publicDir, `${name}.png`)
+  copyFileSync(src, dest)
+  console.log(`  → copied ${name}.png to client/public/`)
+}
+
+console.log('\nAll branding assets saved to /branding/ and PWA icons copied to /client/public/')

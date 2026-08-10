@@ -190,13 +190,14 @@ export function HelpPanel({ open, minimized, onClose, onToggleMinimize }: HelpPa
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 16, scale: 0.95 }}
           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-          className="fixed bottom-[88px] right-6 z-[99999] w-[370px] flex flex-col rounded-2xl overflow-hidden"
+          className="fixed right-6 z-[99999] w-[370px] max-w-[calc(100vw-2rem)] flex flex-col rounded-2xl overflow-hidden"
           style={{
+            bottom: 'calc(5.5rem + var(--safe-bottom, 0px))',
             background: 'rgba(255,255,255,0.94)',
             backdropFilter: 'blur(28px)',
             WebkitBackdropFilter: 'blur(28px)',
             boxShadow: '0 28px 56px rgba(0,0,0,0.16), 0 4px 16px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06)',
-            maxHeight: minimized ? 60 : 'min(560px, calc(100vh - 108px))',
+            maxHeight: minimized ? 60 : 'min(560px, calc(100dvh - 120px))',
             transition: 'max-height 0.32s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
@@ -263,7 +264,7 @@ export function HelpPanel({ open, minimized, onClose, onToggleMinimize }: HelpPa
               {/* ── Chat tab ── */}
               {tab === 'chat' && (
                 <>
-                  <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+                  <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0 scroll-area">
                     {showWelcome ? (
                       <div className="flex flex-col items-center text-center py-6 gap-4">
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
@@ -323,8 +324,12 @@ export function HelpPanel({ open, minimized, onClose, onToggleMinimize }: HelpPa
                         placeholder="Ask a question…"
                         rows={1}
                         disabled={loading}
-                        className="flex-1 resize-none rounded-xl border border-[#e5e8ef] bg-white/80 px-3 py-2 text-[12px] text-[#0f1729] placeholder-[#c8cdd8] focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy/30 transition-all disabled:opacity-50"
-                        style={{ maxHeight: 80, overflowY: 'auto' }}
+                        className="flex-1 resize-none rounded-xl border border-[#e5e8ef] bg-white/80 px-3 py-2 text-sm text-[#0f1729] placeholder-[#c8cdd8] focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy/30 transition-all disabled:opacity-50"
+                        style={{ maxHeight: 80, overflowY: 'auto', fontSize: '16px' }}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                       />
                       <button
                         onClick={() => send(input)}

@@ -373,9 +373,9 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
   })
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-2">
+    <div className="flex h-[100dvh] overflow-hidden bg-surface-2">
       {/* ── Mobile top bar (hidden on lg+) ──────────────────────────────────── */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-navy z-40 flex items-center px-4 gap-3">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-topbar bg-navy z-40 flex items-end px-4 pb-2.5 gap-3">
         <button
           onClick={() => setMobileOpen(v => !v)}
           className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white"
@@ -648,10 +648,10 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', stiffness: 380, damping: 35 }}
-            className="lg:hidden fixed top-0 left-0 bottom-0 w-64 text-white z-50 flex flex-col overflow-hidden"
+            className="lg:hidden fixed top-0 left-0 bottom-0 w-72 text-white z-50 flex flex-col overflow-hidden"
             style={{ background: 'linear-gradient(170deg, #0b1525 0%, #1a2844 55%, #1e2d4e 100%)' }}
           >
-            <div className="flex items-center h-14 px-4 border-b border-white/10 flex-shrink-0 gap-3">
+            <div className="flex items-end h-topbar px-4 pb-2.5 border-b border-white/10 flex-shrink-0 gap-3">
               <Logo size="sm" inverted />
               <button onClick={() => setMobileOpen(false)} className="ml-auto p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/60">
                 <X className="w-4 h-4" />
@@ -666,7 +666,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
                 New Quote
               </button>
             </div>
-            <nav className="flex-1 overflow-y-auto py-2 space-y-0.5 px-2">
+            <nav className="flex-1 overflow-y-auto py-2 space-y-0.5 px-2 scroll-area">
               {visibleItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -683,7 +683,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
                 </NavLink>
               ))}
             </nav>
-            <div className="border-t border-white/10 p-3 flex-shrink-0 space-y-2">
+            <div className="border-t border-white/10 p-3 pb-safe flex-shrink-0 space-y-2">
               {/* Activity streak */}
               {(() => {
                 const streak = getActivityStreak()
@@ -718,7 +718,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       </AnimatePresence>
 
       {/* ── Main content ────────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto pt-14 lg:pt-0 relative">
+      <main className="flex-1 overflow-y-auto pt-topbar lg:pt-0 relative scroll-area pb-safe">
         <ScrollToTop />
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -766,7 +766,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
         }}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.93 }}
-        className="fixed bottom-6 right-6 z-[100000] w-12 h-12 flex items-center justify-center rounded-full text-white shadow-xl transition-colors"
+        className="fixed right-6 z-[100000] w-12 h-12 flex items-center justify-center rounded-full text-white shadow-xl transition-colors bottom-safe-6"
         style={{ background: helpOpen && !helpMinimized ? '#e85c1a' : '#1e2d4e' }}
         title="Help & Guide"
         aria-label="Open help"
