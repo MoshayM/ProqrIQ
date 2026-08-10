@@ -12,6 +12,13 @@ export function getRazorpayClient(): Razorpay {
   return new Razorpay({ key_id, key_secret })
 }
 
+function safeEqual(a: string, b: string): boolean {
+  const ba = Buffer.from(a)
+  const bb = Buffer.from(b)
+  if (ba.length !== bb.length) return false
+  return crypto.timingSafeEqual(ba, bb)
+}
+
 // Verify subscription payment signature (subscription_id flow)
 export function verifyPaymentSignature(paymentId: string, subscriptionId: string, signature: string): boolean {
   const secret = process.env.RAZORPAY_KEY_SECRET
@@ -19,7 +26,7 @@ export function verifyPaymentSignature(paymentId: string, subscriptionId: string
   const expected = crypto.createHmac('sha256', secret)
     .update(`${paymentId}|${subscriptionId}`)
     .digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+  return safeEqual(expected, signature)
 }
 
 // Verify order payment signature (order_id flow — simpler, no plan setup required)
@@ -29,7 +36,7 @@ export function verifyOrderSignature(orderId: string, paymentId: string, signatu
   const expected = crypto.createHmac('sha256', secret)
     .update(`${orderId}|${paymentId}`)
     .digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+  return safeEqual(expected, signature)
 }
 
 // Verify webhook signature
@@ -37,5 +44,5 @@ export function verifyWebhookSignature(rawBody: string, signature: string): bool
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET
   if (!secret) return false
   const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+  return safeEqual(expected, signature)
 }
