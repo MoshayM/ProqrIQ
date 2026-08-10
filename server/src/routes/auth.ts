@@ -407,6 +407,9 @@ router.post('/delete-account', requireAuth, async (req: Request, res: Response) 
     }
     const [user] = await db.select().from(users).where(eq(users.id, userId))
     if (!user) return res.status(404).json({ success: false, error: 'User not found' })
+    if (['admin', 'developer'].includes(user.role)) {
+      return res.status(403).json({ success: false, error: 'Admin and developer accounts cannot be deleted', error_code: 'ROLE_PROTECTED' })
+    }
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) return res.status(401).json({ success: false, error: 'Incorrect password', error_code: 'AUTH_INVALID' })
 
@@ -439,6 +442,9 @@ router.post('/delete-account/immediate', requireAuth, async (req: Request, res: 
     }
     const [user] = await db.select().from(users).where(eq(users.id, userId))
     if (!user) return res.status(404).json({ success: false, error: 'User not found' })
+    if (['admin', 'developer'].includes(user.role)) {
+      return res.status(403).json({ success: false, error: 'Admin and developer accounts cannot be deleted', error_code: 'ROLE_PROTECTED' })
+    }
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) return res.status(401).json({ success: false, error: 'Incorrect password', error_code: 'AUTH_INVALID' })
 
