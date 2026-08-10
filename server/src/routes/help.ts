@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit'
 import { z } from 'zod'
 import { requireAuth } from '../middleware/auth'
 import { validate } from '../middleware/validate'
-import { completeWithRouter } from '../services/ai/aiRouter'
+import { completeWithRouter, classifyAIError } from '../services/ai/aiRouter'
 
 export const router = Router()
 
@@ -136,13 +136,8 @@ router.post('/chat', validate(chatSchema), async (req: Request, res: Response) =
 
     return res.json({ success: true, data: { reply: reply.trim() } })
   } catch (err) {
-    const status = (err as { status?: number }).status === 429 ? 429 : 500
     console.error('[Help chat error]', err)
-    return res.status(status).json({
-      success: false,
-      error: status === 429
-        ? 'AI is busy right now — try again in a moment.'
-        : 'Failed to get a response. Please try again.',
-    })
+    const { httpStatus, message } = classifyAIError(err)
+    return res.status(httpStatus).json({ success: false, error: message })
   }
 })

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Loader2, BookOpen, Zap, FileStack, ShieldCheck, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../lib/utils'
-import { api } from '../../lib/api'
+import { api, extractApiError } from '../../lib/api'
 import { Button } from '../../components/ui/button'
 
 type Message = { role: 'user' | 'assistant'; content: string }
@@ -92,12 +92,7 @@ export default function HelpTab() {
       const { reply } = await api.help.chat({ message: trimmed, history })
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status
-      if (status === 429) {
-        toast.error('AI is busy — try again in a moment.')
-      } else {
-        toast.error('Could not get a response. Please try again.')
-      }
+      toast.error(extractApiError(err, 'Could not get a response. Please try again.'))
       // Remove the user message that failed
       setMessages(prev => prev.slice(0, -1))
       setInput(trimmed)

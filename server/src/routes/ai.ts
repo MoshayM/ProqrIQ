@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { validate } from '../middleware/validate'
 import { drawingUpload, saveUploadedFile } from '../middleware/upload'
 import { analyseDrawing, costOnePart, estimateAssemblyOps, queryOnQuote, regenerateQuote } from '../services/ai'
+import { classifyAIError } from '../services/ai/aiRouter'
 import { CONFIDENCE_GATE } from '../config'
 
 const router = Router()
@@ -110,11 +111,8 @@ router.post('/analyse-drawing', drawingUpload, async (req: Request, res: Respons
     return res.json({ success: true, data: { ...result, drawing_path: drawingPath } })
   } catch (err) {
     console.error('Analyse drawing error:', err)
-    return res.status(500).json({
-      success: false,
-      error: String(err),
-      error_code: 'AI_ANALYSE_FAILED',
-    })
+    const { httpStatus, message, code } = classifyAIError(err)
+    return res.status(httpStatus).json({ success: false, error: message, error_code: code })
   }
 })
 
@@ -175,17 +173,12 @@ router.post('/estimate-cost', validate(estimateCostSchema), async (req: Request,
     return res.json({ success: true, data: result })
   } catch (err) {
     console.error('Estimate cost error:', err)
-    const status = (err as { status?: number }).status === 429 ? 429 : 500
-    if (status === 429) {
-      // Forward Groq's retry-after so clients back off correctly (daily quota vs per-minute)
+    const { httpStatus, message, code } = classifyAIError(err)
+    if (httpStatus === 429) {
       const match = String(err).match(/retry after (\d+)s/)
       if (match) res.set('retry-after', match[1])
     }
-    return res.status(status).json({
-      success: false,
-      error: String(err),
-      error_code: status === 429 ? 'AI_RATE_LIMITED' : 'AI_ESTIMATE_FAILED',
-    })
+    return res.status(httpStatus).json({ success: false, error: message, error_code: code })
   }
 })
 
@@ -229,11 +222,8 @@ router.post('/estimate-assembly', validate(estimateAssemblySchema), async (req: 
     return res.json({ success: true, data: result })
   } catch (err) {
     console.error('Estimate assembly error:', err)
-    return res.status(500).json({
-      success: false,
-      error: String(err),
-      error_code: 'AI_ESTIMATE_FAILED',
-    })
+    const { httpStatus, message, code } = classifyAIError(err)
+    return res.status(httpStatus).json({ success: false, error: message, error_code: code })
   }
 })
 
@@ -261,11 +251,8 @@ router.post('/query', validate(querySchema), async (req: Request, res: Response)
     return res.json({ success: true, data: { answer: result.answer } })
   } catch (err) {
     console.error('AI query error:', err)
-    return res.status(500).json({
-      success: false,
-      error: String(err),
-      error_code: 'AI_QUERY_FAILED',
-    })
+    const { httpStatus, message, code } = classifyAIError(err)
+    return res.status(httpStatus).json({ success: false, error: message, error_code: code })
   }
 })
 
@@ -304,11 +291,8 @@ router.post('/regenerate', validate(regenerateSchema), async (req: Request, res:
     return res.json({ success: true, data: result })
   } catch (err) {
     console.error('Regenerate quote error:', err)
-    return res.status(500).json({
-      success: false,
-      error: String(err),
-      error_code: 'AI_REGENERATE_FAILED',
-    })
+    const { httpStatus, message, code } = classifyAIError(err)
+    return res.status(httpStatus).json({ success: false, error: message, error_code: code })
   }
 })
 

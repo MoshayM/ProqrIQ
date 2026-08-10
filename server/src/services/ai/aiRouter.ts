@@ -173,11 +173,70 @@ export function trackUsage(opts: {
   })
 }
 
+// ─── Retry + error classification helpers ─────────────────────────────────────
+
+function isTransientAIError(err: unknown): boolean {
+  const msg    = ((err as Error).message ?? '').toLowerCase()
+  const status = (err as { status?: number }).status
+  return (
+    status === 529 || status === 503 || status === 502 || status === 504 ||
+    msg.includes('overload') || msg.includes('unavailable') ||
+    msg.includes('timeout') || msg.includes('econnreset') ||
+    msg.includes('service_unavailable') || msg.includes('internal_server_error')
+  )
+}
+
+function isRateLimitError(err: unknown): boolean {
+  const msg    = ((err as Error).message ?? '').toLowerCase()
+  const status = (err as { status?: number }).status
+  return status === 429 || msg.includes('rate limit') || msg.includes('rate_limit')
+}
+
+/** Retry fn up to maxAttempts for transient errors with exponential backoff. */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxAttempts = 3,
+): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      if (!isTransientAIError(err)) throw err
+      const delayMs = Math.min(800 * Math.pow(2, attempt), 8000) // 800 ms → 1.6 s → 3.2 s
+      console.warn(`[AI Router] transient error on "${label}" (attempt ${attempt + 1}/${maxAttempts}), retrying in ${delayMs}ms: ${(err as Error).message}`)
+      await new Promise(r => setTimeout(r, delayMs))
+    }
+  }
+  throw lastErr
+}
+
+/** Classify an AI error into a user-friendly message + HTTP status. */
+export function classifyAIError(err: unknown): { httpStatus: number; message: string; code: string } {
+  const msg = ((err as Error).message ?? '').toLowerCase()
+  const status = (err as { status?: number }).status
+
+  if (isRateLimitError(err)) {
+    return { httpStatus: 429, message: 'AI rate limit reached — please wait a moment and try again.', code: 'AI_RATE_LIMITED' }
+  }
+  if (status === 402 || msg.includes('budget exhaust') || msg.includes('budget')) {
+    return { httpStatus: 402, message: 'Monthly AI budget exhausted. Contact your admin to increase the limit.', code: 'AI_BUDGET_EXCEEDED' }
+  }
+  if (isTransientAIError(err)) {
+    return { httpStatus: 503, message: 'AI is temporarily busy — please try again in a few seconds.', code: 'AI_BUSY' }
+  }
+  if (msg.includes('api key') || msg.includes('not configured') || msg.includes('unauthorized') || status === 401) {
+    return { httpStatus: 503, message: 'AI provider not configured. Please contact support.', code: 'AI_NOT_CONFIGURED' }
+  }
+  return { httpStatus: 500, message: 'AI processing failed — please try again.', code: 'AI_FAILED' }
+}
+
 // ─── Main completion helper (drop-in for callers) ─────────────────────────────
 
-const HAIKU_FALLBACK = { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
-const GROQ_FALLBACK  = { provider: 'groq',      model: 'llama-3.3-70b-versatile' }
-const GROQ_FAST_FALLBACK = { provider: 'groq',  model: 'llama-3.1-8b-instant' }
+const HAIKU_FALLBACK     = { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
+const GROQ_FALLBACK      = { provider: 'groq',      model: 'llama-3.3-70b-versatile' }
 
 async function tryFallbacks(
   primaryErr: unknown,
@@ -185,7 +244,6 @@ async function tryFallbacks(
   request: Omit<AIRequest, 'model'>,
   task: string,
 ): Promise<{ response: AIResponse; usedRoute: RouteResult }> {
-  // Build fallback chain: Groq 70B → Together AI 70B → Haiku → throw
   const fallbacks: RouteResult[] = []
   if (process.env.GROQ_API_KEY && primaryRoute.provider !== 'groq') {
     fallbacks.push(GROQ_FALLBACK)
@@ -193,7 +251,7 @@ async function tryFallbacks(
   if (process.env.TOGETHER_API_KEY && primaryRoute.provider !== 'together') {
     fallbacks.push({ provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' })
   }
-  if (process.env.ANTHROPIC_API_KEY || primaryRoute.provider !== 'anthropic') {
+  if (primaryRoute.provider !== 'anthropic' && (getStoredKey('anthropic') ?? process.env.ANTHROPIC_API_KEY)) {
     fallbacks.push(HAIKU_FALLBACK)
   }
 
@@ -201,7 +259,12 @@ async function tryFallbacks(
   for (const fb of fallbacks) {
     try {
       const fbProvider = getProvider(fb.provider)
-      const response = await fbProvider.complete({ ...request, model: fb.model })
+      // Each fallback also gets 2 retry attempts for transient errors
+      const response = await withRetry(
+        () => fbProvider.complete({ ...request, model: fb.model }),
+        `${fb.provider}/${fb.model}`,
+        2,
+      )
       console.warn(`[AI Router] task "${task}" fell back from ${primaryRoute.provider}/${primaryRoute.model} → ${fb.provider}/${fb.model}`)
       return { response, usedRoute: fb }
     } catch (e) {
@@ -227,15 +290,18 @@ export async function completeWithRouter(opts: {
 
   try {
     const provider = getProvider(route.provider)
-    response = await provider.complete({ ...opts.request, model: route.model })
+    // Primary: up to 3 attempts for transient errors before falling back
+    response = await withRetry(
+      () => provider.complete({ ...opts.request, model: route.model }),
+      `${route.provider}/${route.model}`,
+      3,
+    )
   } catch (primaryErr) {
     const msg = (primaryErr as Error).message ?? ''
-    console.warn(`[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}": ${msg}`)
-    // Rate-limit errors: all retries already exhausted in the provider — propagate 429
-    // so the client can back off rather than cascading to a potentially unconfigured provider.
-    if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('rate limited')) {
-      const err = Object.assign(primaryErr as Error, { status: 429 })
-      throw err
+    console.warn(`[AI Router] ${route.provider}/${route.model} exhausted retries for task "${opts.task}": ${msg}`)
+    // Rate-limit: propagate immediately — client must back off, not cascade
+    if (isRateLimitError(primaryErr)) {
+      throw Object.assign(primaryErr as Error, { status: 429 })
     }
     const fb = await tryFallbacks(primaryErr, route, opts.request, opts.task)
     response  = fb.response
@@ -243,11 +309,11 @@ export async function completeWithRouter(opts: {
   }
 
   trackUsage({
-    userId:  opts.userId,
-    task:    opts.task,
+    userId:   opts.userId,
+    task:     opts.task,
     response: { ...response, provider: usedRoute.provider, model: usedRoute.model },
-    quoteId: opts.quoteId,
-    batchId: opts.batchId,
+    quoteId:  opts.quoteId,
+    batchId:  opts.batchId,
   })
 
   return response.content

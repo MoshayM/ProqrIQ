@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from 'react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, FileText, X, Box, CheckCircle } from 'lucide-react'
-import { api } from '../../../lib/api'
+import { api, extractApiError } from '../../../lib/api'
 import { useQuoteContext } from '../../../contexts/QuoteContext'
 import { Button } from '../../../components/ui/button'
 import { Card, CardContent } from '../../../components/ui/card'
@@ -99,8 +99,8 @@ export default function Step1() {
       const result = await api.ai.analyseDrawing(formData)
       setAnalysisResult(result)
       context.setDrawingFile(file)
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to analyse drawing. Please try again.')
+    } catch (err: unknown) {
+      toast.error(extractApiError(err, 'Failed to analyse drawing. Please try again.'))
     } finally {
       setIsAnalysing(false)
     }

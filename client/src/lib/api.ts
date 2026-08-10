@@ -28,6 +28,12 @@ client.interceptors.response.use(
 // Helper: unwrap server envelope { success, data }
 const d = <T = any>(res: { data: { data: T } }): T => res.data.data
 
+/** Extract the friendliest possible error message from an Axios/API error. */
+export function extractApiError(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  const axiosErr = err as { response?: { data?: { error?: string } }; message?: string }
+  return axiosErr?.response?.data?.error ?? axiosErr?.message ?? fallback
+}
+
 // Helper: unwrap paginated list envelope { success, data: { data: T[], total } } → T[]
 const pl = <T = any>(res: { data: { data: { data: T[] } } }): T[] => res.data.data.data
 

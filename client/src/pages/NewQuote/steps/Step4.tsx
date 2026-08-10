@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { Zap, RefreshCw, ChevronDown, ChevronUp, AlertTriangle, Loader2, X, Timer, HelpCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { api } from '../../../lib/api';
+import { api, extractApiError } from '../../../lib/api';
 import { useQuoteContext } from '../../../contexts/QuoteContext';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent, CardHeader } from '../../../components/ui/card';
@@ -90,8 +90,8 @@ export default function Step4() {
         overall_cost_eur: result.overall_cost_eur,
       });
       toast.success('AI estimate complete!');
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to run cost estimate.');
+    } catch (err: unknown) {
+      toast.error(extractApiError(err, 'AI is busy — please try again in a moment.'));
     } finally {
       setIsRunning(false);
     }
@@ -114,8 +114,8 @@ export default function Step4() {
       setShowRegenerateModal(false);
       setRegenerateInstructions('');
       toast.success('Estimate regenerated!');
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to regenerate estimate.');
+    } catch (err: unknown) {
+      toast.error(extractApiError(err, 'AI is busy — please try again in a moment.'));
     } finally {
       setIsRegenerating(false);
     }
