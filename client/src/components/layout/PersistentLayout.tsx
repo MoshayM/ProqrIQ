@@ -49,7 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/bulk',          label: 'Bulk Costing',   icon: Layers },
   { to: '/assemblies',    label: 'Assemblies',     icon: Package },
   { to: '/supplier-map',  label: 'Supplier Map',   icon: MapPin },
-  { to: '/ai-control',    label: 'AI Control',     icon: Brain },
+  { to: '/ai-control',    label: 'AI Control',     icon: Brain,    roles: ['admin', 'developer'] },
   { to: '/device-preview',label: 'Device Preview', icon: Monitor,   roles: ['admin', 'developer'] },
 ]
 

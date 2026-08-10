@@ -21,7 +21,7 @@ import { Skeleton } from '../../components/ui/skeleton'
 import { ProgressBar } from '../../components/ui/progress-bar'
 import { cn } from '../../lib/utils'
 
-const ADMIN_ROLES = ['admin', 'ceo', 'developer', 'owner', 'engineer', 'cost_analyst']
+const ADMIN_ROLES = ['admin', 'developer']
 
 interface AiConfig {
   models: {
@@ -1540,12 +1540,6 @@ export default function AiControl() {
   const { isFeatureEnabled } = usePlan()
 
   if (!hasRole(ADMIN_ROLES)) return <AccessDenied />
-  if (!isFeatureEnabled('ai_cost_control')) {
-    return (
-      <div className="page-content">
-        <PlanGate feature="ai_cost_control" />
-      </div>
-    )
-  }
+  // Admin and developer always bypass the plan gate for AI Control
   return <AiControlInner />
 }
