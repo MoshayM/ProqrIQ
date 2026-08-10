@@ -390,12 +390,12 @@ export default function Dashboard() {
           { label: 'All Quotes',   icon: FileText,    to: '/quotes',      color: 'text-emerald-600' },
         ].map((a) => (
           <Link key={a.to} to={a.to}>
-            <Card variant="hover" className="p-4 flex items-center gap-3 border-[#e5e8ef]">
-              <div className={`w-8 h-8 rounded-lg bg-surface-3 flex items-center justify-center ${a.color}`}>
+            <Card variant="hover" className="p-4 flex items-center gap-3 border-[#e5e8ef] group">
+              <div className={`w-8 h-8 rounded-lg bg-surface-3 flex items-center justify-center ${a.color} group-hover:scale-110 transition-transform duration-200`}>
                 <a.icon className="w-4 h-4" />
               </div>
               <span className="text-sm font-medium text-[#0f1729]">{a.label}</span>
-              <ArrowRight className="w-3.5 h-3.5 text-[#9aa3b2] ml-auto" />
+              <ArrowRight className="w-3.5 h-3.5 text-[#9aa3b2] ml-auto group-hover:translate-x-0.5 transition-transform duration-150" />
             </Card>
           </Link>
         ))}
@@ -408,18 +408,18 @@ export default function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <div className="flex items-center justify-between bg-[#eef2ff] border border-[#c7d2fe] rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between bg-gradient-to-r from-[#eef2ff] to-[#f0f7ff] border border-[#c7d2fe] rounded-xl px-4 py-3 hover:shadow-sm transition-shadow duration-200">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#6366f1]/10 flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-[#6366f1]/12 flex items-center justify-center flex-shrink-0">
                 <ArrowRight className="w-4 h-4 text-[#6366f1]" />
               </div>
               <div>
-                <p className="text-sm font-medium text-[#0f1729]">Continue where you left off</p>
+                <p className="text-sm font-semibold text-[#0f1729]">Continue where you left off</p>
                 <p className="text-xs text-[#6366f1]">{lastInProgress.part.name} — <span className="capitalize">{lastInProgress.status.replace('_', ' ')}</span></p>
               </div>
             </div>
-            <Button size="sm" variant="ghost" className="text-[#6366f1] hover:bg-[#6366f1]/10" onClick={() => navigate(`/quotes/${lastInProgress.id}`)}>
-              Resume <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            <Button size="sm" variant="ghost" className="text-[#6366f1] hover:bg-[#6366f1]/10 gap-1.5" onClick={() => navigate(`/quotes/${lastInProgress.id}`)}>
+              Resume <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </div>
         </motion.div>
@@ -432,18 +432,20 @@ export default function Dashboard() {
       <div className={`grid gap-4 grid-cols-1 sm:grid-cols-2 ${kpiCards.length === 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
         {kpiCards.map((kpi, i) => (
           <motion.div key={kpi.label} custom={i} initial="hidden" animate="show" variants={fadeUp}>
-            <Card className={`border-l-4 ${kpi.accent}`}>
-              <CardContent className="flex items-start justify-between py-5">
+            <Card className={`border-l-4 ${kpi.accent} card-hover overflow-hidden relative`}>
+              <div className="absolute top-0 right-0 w-24 h-24 -translate-y-8 translate-x-8 rounded-full opacity-[0.055] pointer-events-none"
+                style={{ background: 'radial-gradient(circle, #1e2d4e, transparent)' }} />
+              <CardContent className="flex items-start justify-between py-5 relative z-10">
                 <div>
-                  <p className="text-xs text-[#9aa3b2] font-medium uppercase tracking-wider">{kpi.label}</p>
+                  <p className="text-[11px] text-[#9aa3b2] font-semibold uppercase tracking-[0.08em]">{kpi.label}</p>
                   {kpi.value === null ? (
-                    <Skeleton variant="line" height="28px" width="60px" className="mt-1.5" />
+                    <Skeleton variant="line" height="32px" width="64px" className="mt-2" />
                   ) : (
-                    <p className="text-2xl font-bold text-[#0f1729] mt-0.5 font-mono">{kpi.value}</p>
+                    <p className="text-[1.75rem] font-extrabold text-[#0f1729] mt-1.5 font-mono leading-none tracking-tight">{kpi.value}</p>
                   )}
                   {kpi.sub}
                 </div>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${kpi.color} flex-shrink-0`}>
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${kpi.color} flex-shrink-0 shadow-sm`}>
                   <kpi.icon className="w-5 h-5" />
                 </div>
               </CardContent>
@@ -486,14 +488,20 @@ export default function Dashboard() {
             <CardContent>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={monthlyData} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#1e2d4e" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="#2d6ac8" stopOpacity={0.6} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e8ebf2" vertical={false} />
                   <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9aa3b2' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#9aa3b2' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: '#9aa3b2' }} axisLine={false} tickLine={false} allowDecimals={false} />
                   <Tooltip
-                    contentStyle={{ borderRadius: '10px', border: '1px solid #e5e8ef', fontSize: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.07)' }}
-                    cursor={{ fill: '#f1f3f7' }}
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #e5e8ef', fontSize: '12px', boxShadow: '0 8px 20px rgba(0,0,0,0.09)', padding: '8px 12px' }}
+                    cursor={{ fill: '#f4f6fb', radius: 4 }}
                   />
-                  <Bar dataKey="quotes" fill="#1e2d4e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="quotes" fill="url(#barGrad)" radius={[5, 5, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

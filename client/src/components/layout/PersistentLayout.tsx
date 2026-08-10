@@ -388,12 +388,20 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
         variants={sidebarVariants}
         transition={{ type: 'spring', stiffness: 380, damping: 35 }}
         className={cn(
-          'flex flex-col bg-navy text-white flex-shrink-0 relative z-40 overflow-hidden',
-          // Desktop: always visible inline
+          'flex flex-col text-white flex-shrink-0 relative z-40 overflow-hidden',
           'hidden lg:flex',
         )}
-        style={{ minWidth: collapsed ? 64 : 240 }}
+        style={{ minWidth: collapsed ? 64 : 240, background: 'linear-gradient(170deg, #0b1525 0%, #1a2844 55%, #1e2d4e 100%)' }}
       >
+        {/* subtle dot grid texture */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: 'radial-gradient(rgba(255,255,255,0.55) 1px, transparent 1px)',
+            backgroundSize: '22px 22px',
+            opacity: 0.055,
+          }}
+        />
         {/* Brand header */}
         <div className="flex items-center h-16 px-4 border-b border-white/10 flex-shrink-0">
           <AnimatePresence mode="wait" initial={false}>
@@ -468,11 +476,12 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
           <button
             onClick={() => navigate('/quotes/new')}
             className={cn(
-              'flex items-center gap-2 w-full bg-brand hover:bg-brand-600 active:bg-brand-700 text-white rounded-lg font-medium transition-all duration-150 text-sm shadow-sm hover:-translate-y-px active:translate-y-0',
+              'group relative flex items-center gap-2 w-full bg-brand hover:bg-brand-600 active:bg-brand-700 text-white rounded-lg font-medium transition-all duration-150 text-sm shadow-md shadow-[#e85c1a]/20 hover:-translate-y-px active:translate-y-0 overflow-hidden',
               collapsed ? 'justify-center p-2' : 'px-3 py-2',
             )}
           >
-            <Plus className="w-4 h-4 flex-shrink-0" />
+            <span className="absolute inset-0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
+            <Plus className="w-4 h-4 flex-shrink-0 relative z-10" />
             <AnimatePresence>
               {!collapsed && (
                 <motion.span
@@ -480,7 +489,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
                   animate={{ opacity: 1, width: 'auto' }}
                   exit={{ opacity: 0, width: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="overflow-hidden whitespace-nowrap"
+                  className="overflow-hidden whitespace-nowrap relative z-10"
                 >
                   New Quote
                 </motion.span>
@@ -525,11 +534,14 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
               {({ isActive }) => (
                 <>
                   {isActive && (
-                    <motion.span
-                      layoutId="nav-indicator"
-                      className="absolute inset-0 bg-white/15 rounded-lg"
-                      transition={{ type: 'spring', stiffness: 380, damping: 35 }}
-                    />
+                    <>
+                      <motion.span
+                        layoutId="nav-indicator"
+                        className="absolute inset-0 bg-white/12 rounded-lg"
+                        transition={{ type: 'spring', stiffness: 380, damping: 35 }}
+                      />
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-[#e85c1a] rounded-r-full shadow-[0_0_8px_rgba(232,92,26,0.6)]" />
+                    </>
                   )}
                   <item.icon className="w-4 h-4 flex-shrink-0 relative z-10" />
                   <AnimatePresence>
@@ -608,7 +620,8 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', stiffness: 380, damping: 35 }}
-            className="lg:hidden fixed top-0 left-0 bottom-0 w-64 bg-navy text-white z-50 flex flex-col overflow-hidden"
+            className="lg:hidden fixed top-0 left-0 bottom-0 w-64 text-white z-50 flex flex-col overflow-hidden"
+            style={{ background: 'linear-gradient(170deg, #0b1525 0%, #1a2844 55%, #1e2d4e 100%)' }}
           >
             <div className="flex items-center h-14 px-4 border-b border-white/10 flex-shrink-0 gap-3">
               <Logo size="sm" inverted />

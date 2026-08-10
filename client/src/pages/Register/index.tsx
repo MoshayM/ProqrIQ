@@ -5,13 +5,34 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useConfetti } from '../../hooks/useConfetti'
 import { api } from '../../lib/api'
 import { Button } from '../../components/ui/button'
-import { Logo } from '../../components/ui/logo'
+import { Logo, LogoMark } from '../../components/ui/logo'
 import { cn } from '../../lib/utils'
+
+function Particle({ x, y, size, delay, dur }: { x: number; y: number; size: number; delay: number; dur: number }) {
+  return (
+    <motion.div
+      className="absolute rounded-full bg-[#e85c1a] pointer-events-none"
+      style={{ left: `${x}%`, top: `${y}%`, width: size, height: size, opacity: 0.15 }}
+      animate={{ y: [0, -28, 0], opacity: [0.08, 0.28, 0.08] }}
+      transition={{ duration: dur, delay, repeat: Infinity, ease: 'easeInOut' }}
+    />
+  )
+}
+
+const PARTICLES = [
+  { x: 7,  y: 14, size: 5,  delay: 0,   dur: 5.1 },
+  { x: 85, y: 8,  size: 3,  delay: 1.2, dur: 6.2 },
+  { x: 16, y: 70, size: 7,  delay: 0.7, dur: 7.1 },
+  { x: 76, y: 55, size: 4,  delay: 1.8, dur: 5.7 },
+  { x: 52, y: 86, size: 6,  delay: 1.0, dur: 6.5 },
+  { x: 66, y: 24, size: 3,  delay: 2.1, dur: 4.9 },
+  { x: 88, y: 80, size: 8,  delay: 0.4, dur: 5.8 },
+]
 
 const registerSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -80,69 +101,101 @@ export default function Register() {
   return (
     <div className="min-h-screen flex">
 
-      {/* LEFT PANEL — hero (identical to login) */}
-      <div
-        className="hidden lg:flex lg:w-3/5 relative overflow-hidden flex-col justify-between p-12"
-        style={{ background: 'linear-gradient(135deg, #080f1e 0%, #0f1629 45%, #1a2744 100%)' }}
-      >
-        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '56px 56px' }} />
-        <div className="absolute top-24 right-16 w-80 h-80 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(232,92,26,0.13) 0%, transparent 70%)' }} />
-        <div className="absolute bottom-24 left-8 w-56 h-56 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%)' }} />
+      {/* LEFT PANEL — hero */}
+      <div className="hidden lg:flex lg:w-[58%] relative flex-col overflow-hidden">
+        {/* Animated blobs */}
+        <motion.div className="absolute top-[-15%] left-[-10%] w-[65%] h-[65%] rounded-full opacity-[0.18]"
+          style={{ background: 'radial-gradient(circle, #1e2d4e 0%, transparent 70%)', filter: 'blur(60px)' }}
+          animate={{ scale: [1, 1.08, 1], x: [0, 18, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }} />
+        <motion.div className="absolute top-[10%] right-[-12%] w-[55%] h-[55%] rounded-full opacity-[0.14]"
+          style={{ background: 'radial-gradient(circle, #e85c1a 0%, transparent 70%)', filter: 'blur(80px)' }}
+          animate={{ scale: [1, 1.12, 1], y: [0, -28, 0] }}
+          transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut', delay: 2 }} />
+        <motion.div className="absolute bottom-[5%] left-[15%] w-[45%] h-[45%] rounded-full opacity-[0.10]"
+          style={{ background: 'radial-gradient(circle, #2d6ac8 0%, transparent 70%)', filter: 'blur(70px)' }}
+          animate={{ scale: [1, 1.1, 1], x: [0, -18, 0] }}
+          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut', delay: 4 }} />
+        {/* Dot grid */}
+        <div className="absolute inset-0 opacity-[0.22]"
+          style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.4) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+        {/* Particles */}
+        {PARTICLES.map((p, i) => <Particle key={i} {...p} />)}
 
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 flex items-center gap-3"
-        >
-          <Logo size="md" inverted />
-          <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(232,92,26,0.18)', color: '#f0916a' }}>Powered by AI</span>
-        </motion.div>
+        <div className="relative z-10 flex flex-col h-full px-14 py-12 justify-between"
+          style={{ background: 'linear-gradient(135deg, #080f1e 0%, #0f1629 45%, #1a2744 100%)' }}>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 space-y-6"
-        >
-          <div>
-            <h1 className="text-5xl font-extrabold text-white leading-[1.15] tracking-tight">
-              Turn Drawings<br />Into Accurate<br /><span className="text-[#e85c1a]">Cost Quotes</span>
-            </h1>
-            <p className="text-blue-200 mt-4 text-[15px] leading-relaxed max-w-[22rem] opacity-80">
-              Upload part drawings, query your engineering knowledge base, and generate structured cost breakdowns with 98% confidence — entirely on-premise.
-            </p>
+          {/* Logo */}
+          <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="flex items-center gap-3">
+            <Logo size="md" inverted />
+            <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold"
+              style={{ background: 'rgba(232,92,26,0.18)', color: '#f0916a' }}>
+              Powered by AI
+            </span>
+          </motion.div>
+
+          {/* 3D logo + headline */}
+          <div className="space-y-8">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.6, rotateY: -30 }}
+              animate={{ opacity: 1, scale: 1, rotateY: 0 }}
+              transition={{ duration: 1, ease: [0.25, 0.46, 0.45, 0.94] }}
+              style={{ transformStyle: 'preserve-3d', perspective: '600px' }}
+            >
+              <motion.div animate={{ rotateY: [0, 8, 0, -8, 0] }}
+                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+                style={{ transformStyle: 'preserve-3d' }} className="relative w-fit">
+                <div className="absolute inset-0 translate-y-3 blur-xl opacity-25 rounded-2xl bg-[#1e2d4e] scale-90" />
+                <LogoMark size={64} className="relative drop-shadow-2xl" />
+              </motion.div>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}>
+              <h1 className="text-[3rem] font-extrabold text-white leading-[1.1] tracking-tight">
+                Turn Drawings<br />Into Accurate<br />
+                <span className="relative inline-block">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#f5761a] to-[#f5a623]">Cost Quotes</span>
+                  <motion.span className="absolute -bottom-1 left-0 h-1 w-full rounded-full bg-[#e85c1a]/30"
+                    initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+                    transition={{ delay: 1, duration: 0.6, ease: 'easeOut' }} style={{ originX: 0 }} />
+                </span>
+              </h1>
+              <p className="text-[#8ba5c8] mt-4 text-[15px] leading-relaxed max-w-[22rem]">
+                Upload part drawings, query your engineering KB, and generate structured cost breakdowns with 98% confidence — entirely on-premise.
+              </p>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              transition={{ delay: 0.45, duration: 0.6 }}
+              className="flex flex-wrap gap-2">
+              {FEATURE_CHIPS.map((label, i) => (
+                <motion.span key={label}
+                  initial={{ opacity: 0, scale: 0.88 }} animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.5 + i * 0.06 }}
+                  className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-full border font-medium"
+                  style={{ borderColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.65)', background: 'rgba(255,255,255,0.05)' }}>
+                  <CheckCircle2 className="w-3 h-3 text-[#22c55e]" />
+                  {label}
+                </motion.span>
+              ))}
+            </motion.div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {FEATURE_CHIPS.map((label, i) => (
-              <motion.span
-                key={label}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 + i * 0.05 }}
-                className="text-xs px-3 py-1.5 rounded-full border font-medium"
-                style={{ borderColor: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.65)', background: 'rgba(255,255,255,0.05)' }}
-              >
-                {label}
-              </motion.span>
+
+          {/* Stats */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+            className="flex gap-10 border-t pt-7" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+            {STATS.map((s) => (
+              <div key={s.label}>
+                <p className="text-3xl font-extrabold text-white tracking-tight">{s.value}</p>
+                <p className="text-[11px] text-[#8ba5c8] mt-0.5">{s.label}</p>
+              </div>
             ))}
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="relative z-10 flex gap-10 border-t pt-7"
-          style={{ borderColor: 'rgba(255,255,255,0.08)' }}
-        >
-          {STATS.map((s) => (
-            <div key={s.label}>
-              <p className="text-3xl font-bold text-white">{s.value}</p>
-              <p className="text-xs text-blue-300 mt-0.5 opacity-70">{s.label}</p>
-            </div>
-          ))}
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
 
       {/* RIGHT PANEL — form */}
