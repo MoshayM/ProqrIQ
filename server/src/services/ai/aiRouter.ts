@@ -4,6 +4,7 @@ import { aiRouteOverrides, aiUsageLog, users } from '../../db/schema'
 import { getProvider, estimateCost } from './providers'
 import { toTogetherModel } from './providers/together'
 import type { AIRequest, AIResponse } from './providers'
+import { getStoredKey } from './keyStore'
 
 // ─── Task types ───────────────────────────────────────────────────────────────
 
@@ -39,38 +40,42 @@ const ENV_OVERRIDES: Partial<Record<AITask, string | undefined>> = {
   generic:            process.env.AI_ROUTE_GENERIC,
 }
 
-// When OLLAMA_ENABLED=true, high-volume cheap tasks route to local inference by default.
-// Tasks needing vision (cad_costing) or high accuracy (costing, negotiation) stay on Claude.
-// Any task can be overridden via the AiControl UI or AI_ROUTE_* env vars.
-const OLLAMA_ENABLED = process.env.OLLAMA_ENABLED === 'true'
-const OLLAMA_MODEL   = process.env.OLLAMA_DEFAULT_MODEL ?? 'qwen2.5:14b'
-const OLLAMA_FAST    = process.env.OLLAMA_FAST_MODEL    ?? 'qwen2.5:7b'
-const GROQ_ENABLED   = !!(process.env.GROQ_API_KEY)
+// Compute routing dynamically so admin-UI key changes + cold-start env vars are always respected.
+// Never freeze provider availability at module-load time — check at call time instead.
 
-function ollama(model: string): RouteResult {
-  if (OLLAMA_ENABLED)  return { provider: 'ollama', model }
-  if (GROQ_ENABLED)    return { provider: 'groq',   model: 'llama-3.1-8b-instant' }
-  return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
+function isGroqEnabled(): boolean {
+  return !!(getStoredKey('groq') || process.env.GROQ_API_KEY)
 }
 
 function quality(): RouteResult {
-  if (GROQ_ENABLED) return { provider: 'groq', model: 'llama-3.3-70b-versatile' }
+  if (isGroqEnabled()) return { provider: 'groq', model: 'llama-3.3-70b-versatile' }
   return { provider: 'anthropic', model: 'claude-sonnet-4-5' }
 }
 
-const DEFAULTS: Record<AITask, RouteResult> = {
-  costing:            quality(),
-  // When Ollama is unavailable, fall back to Sonnet (not Haiku) — Haiku scores ~62% which is
-  // below the 70% confidence gate, so bulk items would always return needs_clarification.
-  bulk_costing:       OLLAMA_ENABLED ? { provider: 'ollama', model: OLLAMA_MODEL } : quality(),
-  cad_costing:        quality(),
-  kb_summary:         ollama(OLLAMA_FAST),
-  supplier_suggest:   ollama(OLLAMA_FAST),
-  supplier_recommend: quality(),
-  negotiation:        quality(),
-  clarification:      ollama(OLLAMA_FAST),
-  extraction:         OLLAMA_ENABLED ? { provider: 'ollama', model: OLLAMA_MODEL } : quality(),
-  generic:            quality(),
+function ollama(model: string): RouteResult {
+  if (process.env.OLLAMA_ENABLED === 'true') return { provider: 'ollama', model }
+  if (isGroqEnabled())                        return { provider: 'groq',   model: 'llama-3.1-8b-instant' }
+  return { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
+}
+
+function getDefault(task: AITask): RouteResult {
+  const ollamaEnabled = process.env.OLLAMA_ENABLED === 'true'
+  const ollamaModel   = process.env.OLLAMA_DEFAULT_MODEL ?? 'qwen2.5:14b'
+  const ollamaFast    = process.env.OLLAMA_FAST_MODEL    ?? 'qwen2.5:7b'
+  switch (task) {
+    case 'costing':            return quality()
+    // When Ollama is unavailable, fall back to Sonnet (not Haiku) — Haiku scores ~62% which is
+    // below the 70% confidence gate, so bulk items would always return needs_clarification.
+    case 'bulk_costing':       return ollamaEnabled ? { provider: 'ollama', model: ollamaModel } : quality()
+    case 'cad_costing':        return quality()
+    case 'kb_summary':         return ollama(ollamaFast)
+    case 'supplier_suggest':   return ollama(ollamaFast)
+    case 'supplier_recommend': return quality()
+    case 'negotiation':        return quality()
+    case 'clarification':      return ollama(ollamaFast)
+    case 'extraction':         return ollamaEnabled ? { provider: 'ollama', model: ollamaModel } : quality()
+    case 'generic':            return quality()
+  }
 }
 
 function parseRoute(raw: string): RouteResult {
@@ -101,7 +106,7 @@ export async function getModelForTask(task: AITask): Promise<RouteResult> {
   if (dbOverrides[task]) return dbOverrides[task]
   const envRaw = ENV_OVERRIDES[task]
   if (envRaw) return parseRoute(envRaw)
-  return DEFAULTS[task]
+  return getDefault(task)
 }
 
 export async function setRouteOverride(task: AITask, provider: string, model: string, updatedBy: string): Promise<void> {
