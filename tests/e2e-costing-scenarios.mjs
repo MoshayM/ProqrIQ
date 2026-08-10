@@ -32,15 +32,29 @@ async function api(method, path, body, multipart = false) {
     headers['Content-Type'] = 'application/json'
     bodyData = JSON.stringify(body)
   }
-  const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyData })
-  const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }))
-  if (!json.success) {
-    const err = new Error(json.error ?? `HTTP ${res.status}`)
-    err.status = res.status
-    err.response = json
-    throw err
+
+  const MAX_RETRIES = 3
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyData })
+    const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }))
+
+    // Groq free tier: 6000 tokens/min. On 429, wait for the window to reset and retry.
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const retryAfter = res.headers.get('retry-after')
+      const waitMs = retryAfter ? Math.ceil(parseFloat(retryAfter)) * 1000 : 65_000
+      log(`[rate-limit] AI quota hit — waiting ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${MAX_RETRIES})`)
+      await sleep(waitMs)
+      continue
+    }
+
+    if (!json.success) {
+      const err = new Error(json.error ?? `HTTP ${res.status}`)
+      err.status = res.status
+      err.response = json
+      throw err
+    }
+    return json.data
   }
-  return json.data
 }
 
 const get    = (p)     => api('GET',    p)

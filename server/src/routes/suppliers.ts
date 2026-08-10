@@ -80,11 +80,10 @@ const suggestSchema = z.object({
   country:        z.string().optional(), // legacy single-country field
 })
 
-// Extract-only schema: no pre-existing supplier_quote_id required.
-// Returns AI-extracted lines without saving so the user can review before saving.
 const extractQuoteSchema = z.object({
-  raw_text:       z.string().min(1),
-  commodity_type: z.string().optional(),
+  raw_text:          z.string().min(1),
+  commodity_type:    z.string().optional(),
+  supplier_quote_id: z.string().optional(), // when provided, saves extracted lines to DB
 })
 
 const compareSchema = z.object({
@@ -559,7 +558,7 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
 router.post('/extract-quote', requireRole(WRITE_ROLES), validate(extractQuoteSchema), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id
-    const { raw_text, commodity_type } = req.body as z.infer<typeof extractQuoteSchema>
+    const { raw_text, commodity_type, supplier_quote_id } = req.body as z.infer<typeof extractQuoteSchema>
 
     const ctxType = commodity_type ?? 'manufacturing'
 
@@ -632,7 +631,25 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
         ? l.category : 'manufacturing',
     }))
 
-    return res.json({ success: true, data: { lines } })
+    // If a supplier_quote_id is provided, persist the extracted lines to DB so
+    // the compare endpoint can find them without a separate save step.
+    if (supplier_quote_id) {
+      await db.delete(supplierQuoteLines).where(eq(supplierQuoteLines.supplier_quote_id, supplier_quote_id))
+      if (lines.length > 0) {
+        await db.insert(supplierQuoteLines).values(
+          lines.map(l => ({
+            supplier_quote_id,
+            category:    l.category as 'material' | 'manufacturing' | 'special_direct' | 'overheads',
+            label:       l.label,
+            value_eur:   l.value_eur,
+            source_tier: l.source_tier,
+            notes:       l.notes ?? null,
+          }))
+        )
+      }
+    }
+
+    return res.json({ success: true, data: lines })
   } catch (err) {
     console.error('Extract supplier quote error:', err)
     return res.status(500).json({ success: false, error: String(err) })

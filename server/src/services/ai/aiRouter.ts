@@ -229,7 +229,14 @@ export async function completeWithRouter(opts: {
     const provider = getProvider(route.provider)
     response = await provider.complete({ ...opts.request, model: route.model })
   } catch (primaryErr) {
-    console.warn(`[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}": ${(primaryErr as Error).message}`)
+    const msg = (primaryErr as Error).message ?? ''
+    console.warn(`[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}": ${msg}`)
+    // Rate-limit errors: all retries already exhausted in the provider — propagate 429
+    // so the client can back off rather than cascading to a potentially unconfigured provider.
+    if (msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('rate limited')) {
+      const err = Object.assign(primaryErr as Error, { status: 429 })
+      throw err
+    }
     const fb = await tryFallbacks(primaryErr, route, opts.request, opts.task)
     response  = fb.response
     usedRoute = fb.usedRoute

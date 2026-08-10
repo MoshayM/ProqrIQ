@@ -175,10 +175,11 @@ router.post('/estimate-cost', validate(estimateCostSchema), async (req: Request,
     return res.json({ success: true, data: result })
   } catch (err) {
     console.error('Estimate cost error:', err)
-    return res.status(500).json({
+    const status = (err as { status?: number }).status === 429 ? 429 : 500
+    return res.status(status).json({
       success: false,
       error: String(err),
-      error_code: 'AI_ESTIMATE_FAILED',
+      error_code: status === 429 ? 'AI_RATE_LIMITED' : 'AI_ESTIMATE_FAILED',
     })
   }
 })
