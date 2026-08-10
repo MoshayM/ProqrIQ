@@ -1,8 +1,7 @@
 import { db } from '../../db/index'
 import { eq, sql } from 'drizzle-orm'
 import { aiRouteOverrides, aiUsageLog, users } from '../../db/schema'
-import { getProvider, estimateCost } from './providers'
-import { toTogetherModel } from './providers/together'
+import { getProvider, activeProviders, estimateCost } from './providers'
 import type { AIRequest, AIResponse } from './providers'
 import { getStoredKey } from './keyStore'
 
@@ -213,65 +212,102 @@ async function withRetry<T>(
   throw lastErr
 }
 
+// ─── All-providers-exhausted sentinel ────────────────────────────────────────
+
+class AllProvidersExhaustedError extends Error {
+  constructor(providerCount: number) {
+    super(`ALL_PROVIDERS_EXHAUSTED:${providerCount}`)
+    this.name = 'AllProvidersExhaustedError'
+  }
+}
+
+// ─── Per-provider representative fallback model ───────────────────────────────
+// Used when a provider is selected as a fallback and we need a good default model.
+
+const PROVIDER_FALLBACK_MODEL: Record<string, string> = {
+  anthropic: 'claude-haiku-4-5-20251001',
+  groq:      'llama-3.3-70b-versatile',
+  together:  'meta-llama/Llama-3.1-70B-Instruct-Turbo',
+  openai:    'gpt-4o-mini',
+  google:    'gemini-1.5-flash',
+  xai:       'grok-2-1212',
+  azure:     process.env.AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o-mini',
+  ollama:    process.env.OLLAMA_DEFAULT_MODEL    ?? 'qwen2.5:14b',
+}
+
+function isBudgetError(err: unknown): boolean {
+  const msg    = ((err as Error).message ?? '').toLowerCase()
+  const status = (err as { status?: number }).status
+  return status === 402 || msg.includes('budget exhaust')
+}
+
 /** Classify an AI error into a user-friendly message + HTTP status. */
 export function classifyAIError(err: unknown): { httpStatus: number; message: string; code: string } {
-  const msg = ((err as Error).message ?? '').toLowerCase()
+  if (err instanceof AllProvidersExhaustedError) {
+    return {
+      httpStatus: 503,
+      message:    'No AI provider could complete this request. Ask your admin to configure additional providers in AI Control settings.',
+      code:       'AI_ALL_PROVIDERS_FAILED',
+    }
+  }
+
+  const msg    = ((err as Error).message ?? '').toLowerCase()
   const status = (err as { status?: number }).status
 
+  if (isBudgetError(err)) {
+    return { httpStatus: 402, message: 'Monthly AI budget exhausted. Contact your admin to increase the limit.', code: 'AI_BUDGET_EXCEEDED' }
+  }
   if (isRateLimitError(err)) {
     return { httpStatus: 429, message: 'AI rate limit reached — please wait a moment and try again.', code: 'AI_RATE_LIMITED' }
   }
-  if (status === 402 || msg.includes('budget exhaust') || msg.includes('budget')) {
-    return { httpStatus: 402, message: 'Monthly AI budget exhausted. Contact your admin to increase the limit.', code: 'AI_BUDGET_EXCEEDED' }
+  if (msg.includes('api key') || msg.includes('not configured') || msg.includes('unauthorized') || status === 401) {
+    return { httpStatus: 503, message: 'AI provider not configured. Ask your admin to check AI Control settings.', code: 'AI_NOT_CONFIGURED' }
   }
   if (isTransientAIError(err)) {
-    return { httpStatus: 503, message: 'AI is temporarily busy — please try again in a few seconds.', code: 'AI_BUSY' }
-  }
-  if (msg.includes('api key') || msg.includes('not configured') || msg.includes('unauthorized') || status === 401) {
-    return { httpStatus: 503, message: 'AI provider not configured. Please contact support.', code: 'AI_NOT_CONFIGURED' }
+    // This path is only reached if called directly — completeWithRouter never lets a transient error bubble
+    return { httpStatus: 503, message: 'AI processing failed — please try again.', code: 'AI_BUSY' }
   }
   return { httpStatus: 500, message: 'AI processing failed — please try again.', code: 'AI_FAILED' }
 }
 
 // ─── Main completion helper (drop-in for callers) ─────────────────────────────
 
-const HAIKU_FALLBACK     = { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' }
-const GROQ_FALLBACK      = { provider: 'groq',      model: 'llama-3.3-70b-versatile' }
-
+/** Try every configured provider (except the one that already failed) in sequence.
+ *  Each gets 2 retry attempts for transient errors. If ALL fail, throws
+ *  AllProvidersExhaustedError so the caller sees a clear "no provider worked" signal.
+ */
 async function tryFallbacks(
-  primaryErr: unknown,
   primaryRoute: RouteResult,
-  request: Omit<AIRequest, 'model'>,
-  task: string,
+  request:      Omit<AIRequest, 'model'>,
+  task:         string,
 ): Promise<{ response: AIResponse; usedRoute: RouteResult }> {
-  const fallbacks: RouteResult[] = []
-  if (process.env.GROQ_API_KEY && primaryRoute.provider !== 'groq') {
-    fallbacks.push(GROQ_FALLBACK)
-  }
-  if (process.env.TOGETHER_API_KEY && primaryRoute.provider !== 'together') {
-    fallbacks.push({ provider: 'together', model: 'meta-llama/Llama-3.1-70B-Instruct-Turbo' })
-  }
-  if (primaryRoute.provider !== 'anthropic' && (getStoredKey('anthropic') ?? process.env.ANTHROPIC_API_KEY)) {
-    fallbacks.push(HAIKU_FALLBACK)
-  }
+  const allActive = activeProviders()
+  // Build ordered fallback list — every configured provider except the one that just failed
+  const fallbacks: RouteResult[] = allActive
+    .filter(p => p.id !== primaryRoute.provider)
+    .map(p => ({
+      provider: p.id,
+      model:    PROVIDER_FALLBACK_MODEL[p.id] ?? p.id,
+    }))
 
-  let lastErr: unknown = primaryErr
   for (const fb of fallbacks) {
     try {
       const fbProvider = getProvider(fb.provider)
-      // Each fallback also gets 2 retry attempts for transient errors
       const response = await withRetry(
         () => fbProvider.complete({ ...request, model: fb.model }),
         `${fb.provider}/${fb.model}`,
         2,
       )
-      console.warn(`[AI Router] task "${task}" fell back from ${primaryRoute.provider}/${primaryRoute.model} → ${fb.provider}/${fb.model}`)
+      console.warn(`[AI Router] task "${task}" fell back: ${primaryRoute.provider}/${primaryRoute.model} → ${fb.provider}/${fb.model}`)
       return { response, usedRoute: fb }
     } catch (e) {
-      lastErr = e
+      console.warn(`[AI Router] fallback ${fb.provider}/${fb.model} also failed (task "${task}"): ${(e as Error).message}`)
     }
   }
-  throw lastErr
+
+  // Every available provider (primary + all fallbacks) has been exhausted
+  const totalTried = 1 + fallbacks.length
+  throw new AllProvidersExhaustedError(totalTried)
 }
 
 export async function completeWithRouter(opts: {
@@ -297,13 +333,11 @@ export async function completeWithRouter(opts: {
       3,
     )
   } catch (primaryErr) {
-    const msg = (primaryErr as Error).message ?? ''
-    console.warn(`[AI Router] ${route.provider}/${route.model} exhausted retries for task "${opts.task}": ${msg}`)
-    // Rate-limit: propagate immediately — client must back off, not cascade
-    if (isRateLimitError(primaryErr)) {
-      throw Object.assign(primaryErr as Error, { status: 429 })
-    }
-    const fb = await tryFallbacks(primaryErr, route, opts.request, opts.task)
+    console.warn(`[AI Router] ${route.provider}/${route.model} failed for task "${opts.task}" — cascading to other providers: ${(primaryErr as Error).message}`)
+    // Budget exhaustion is a per-user limit, not a provider issue — propagate immediately
+    if (isBudgetError(primaryErr)) throw primaryErr
+    // For everything else (transient, rate limit, not configured) — try every other active provider
+    const fb  = await tryFallbacks(route, opts.request, opts.task)
     response  = fb.response
     usedRoute = fb.usedRoute
   }
