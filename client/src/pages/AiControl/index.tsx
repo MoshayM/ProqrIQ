@@ -143,6 +143,23 @@ const PROVIDER_META = [
     preferDesc: 'Free Llama 3.3 70B / 3.1 8B — 1,000+ req/day at no cost',
     dotColor: '#f59e0b',
   },
+  {
+    id: 'xai',
+    name: 'xAI (Grok)',
+    subtitle: 'Get your key at console.x.ai → API Keys',
+    models: ['grok-3', 'grok-3-fast', 'grok-3-mini', 'grok-3-mini-fast', 'grok-2-vision-1212', 'grok-2-1212'],
+    defaultModel: 'grok-3',
+    placeholder: 'xai-...',
+    icon: (
+      <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor">
+        <path d="M16.99 3H20.5L13.19 12.46L21 21H14.68L9.76 14.9L4.15 21H0.64L8.43 11L1 3H7.47L11.96 8.6L16.99 3ZM15.83 19H17.77L6.26 5H4.18L15.83 19Z"/>
+      </svg>
+    ),
+    iconBg: 'bg-rose-100 text-rose-700',
+    preferLabel: 'Grok (xAI)',
+    preferDesc: 'xAI Grok 3 — vision support, strong reasoning',
+    dotColor: '#e11d48',
+  },
 ] as const
 
 interface AiUsage {
@@ -183,6 +200,10 @@ const AVAILABLE_MODELS = [
   { id: 'mixtral-8x7b-32768',                             label: 'Mixtral 8x7B',           tier: 'Groq — 32K ctx (FREE)',  color: 'text-amber-500' },
   { id: 'gemma2-9b-it',                                   label: 'Gemma 2 9B',             tier: 'Groq — Google (FREE)',   color: 'text-amber-500' },
   { id: 'deepseek-r1-distill-llama-70b',                  label: 'DeepSeek R1 70B',        tier: 'Groq — reasoning (FREE)',color: 'text-amber-600' },
+  { id: 'grok-3',                                         label: 'Grok 3',                 tier: 'xAI — flagship',         color: 'text-rose-600' },
+  { id: 'grok-3-fast',                                    label: 'Grok 3 Fast',            tier: 'xAI — balanced',         color: 'text-rose-500' },
+  { id: 'grok-3-mini',                                    label: 'Grok 3 Mini',            tier: 'xAI — cheap',            color: 'text-rose-500' },
+  { id: 'grok-2-vision-1212',                             label: 'Grok 2 Vision',          tier: 'xAI — vision',           color: 'text-rose-600' },
 ]
 
 const TASK_LABELS: Record<string, string> = {
@@ -204,7 +225,8 @@ const PROVIDER_COLORS: Record<string, { dot: string; label: string; bg: string }
   google:    { dot: '#3b82f6', label: 'Google',      bg: 'bg-blue-50' },
   ollama:    { dot: '#7c3aed', label: 'Ollama',      bg: 'bg-violet-50' },
   together:  { dot: '#0ea5e9', label: 'Together AI', bg: 'bg-sky-50' },
-  groq:      { dot: '#f59e0b', label: 'Groq',        bg: 'bg-amber-50' },
+  groq:      { dot: '#f59e0b', label: 'Groq',    bg: 'bg-amber-50' },
+  xai:       { dot: '#e11d48', label: 'xAI',     bg: 'bg-rose-50'  },
 }
 
 function ProviderDot({ provider }: { provider: string }) {
@@ -912,6 +934,7 @@ function AiControlInner() {
                 { id: 'ollama',    displayName: 'Ollama (Local LLM)',   envVar: 'OLLAMA_ENABLED=true' },
                 { id: 'together',  displayName: 'Together AI (Cloud)',  envVar: 'TOGETHER_API_KEY' },
                 { id: 'groq',      displayName: 'Groq (Free — Llama)', envVar: 'GROQ_API_KEY' },
+                { id: 'xai',       displayName: 'xAI (Grok)',          envVar: 'GROK_API_KEY' },
               ].map(p => {
                 const live = providers.find(lp => lp.id === p.id)
                 const available = live?.available ?? false
@@ -1148,6 +1171,10 @@ function AiControlInner() {
                           'groq/mixtral-8x7b-32768',
                           'groq/gemma2-9b-it',
                           'groq/deepseek-r1-distill-llama-70b',
+                          'xai/grok-3',
+                          'xai/grok-3-fast',
+                          'xai/grok-3-mini',
+                          'xai/grok-2-vision-1212',
                         ].map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
                         ))}

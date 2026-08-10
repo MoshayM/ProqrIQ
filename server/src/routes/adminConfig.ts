@@ -330,7 +330,7 @@ router.delete('/routes/:task', async (req, res) => {
 
 // ─── LLM API Key management ───────────────────────────────────────────────────
 
-const MASKED_PROVIDERS = ['anthropic', 'openai', 'google', 'together', 'groq'] as const
+const MASKED_PROVIDERS = ['anthropic', 'openai', 'google', 'together', 'groq', 'xai'] as const
 
 function maskKey(key: string): string {
   if (key.length <= 12) return '***'
@@ -432,6 +432,7 @@ router.post('/llm-keys/:provider/test', async (req, res) => {
         : provider === 'google'    ? process.env.GEMINI_API_KEY
         : provider === 'together'  ? process.env.TOGETHER_API_KEY
         : provider === 'groq'      ? process.env.GROQ_API_KEY
+        : provider === 'xai'       ? process.env.GROK_API_KEY
         : undefined)
 
     if (!keyToTest) {
@@ -456,6 +457,25 @@ router.post('/llm-keys/:provider/test', async (req, res) => {
       const genAI = new GoogleGenerativeAI(keyToTest)
       const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
       await model.generateContent({ contents: [{ role: 'user', parts: [{ text: `${testPrompt.systemPrompt}\n${testPrompt.userPrompt}` }] }] })
+    } else if (provider === 'xai') {
+      const xaiResp = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${keyToTest}` },
+        body: JSON.stringify({
+          model: 'grok-3-mini-fast',
+          max_tokens: 32,
+          temperature: 0,
+          messages: [
+            { role: 'system', content: testPrompt.systemPrompt },
+            { role: 'user',   content: testPrompt.userPrompt },
+          ],
+          stream: false,
+        }),
+      })
+      if (!xaiResp.ok) {
+        const text = await xaiResp.text().catch(() => '')
+        throw new Error(`xAI Grok returned ${xaiResp.status}: ${text || xaiResp.statusText}`)
+      }
     } else if (provider === 'groq') {
       const groqResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
