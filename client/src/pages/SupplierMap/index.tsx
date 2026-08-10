@@ -125,7 +125,7 @@ interface SupplierCustomer {
   created_at: string
 }
 
-type RightPanelTab = 'info' | 'quotes' | 'compare' | 'negotiate' | 'customers'
+type RightPanelTab = 'quotes' | 'compare' | 'negotiate' | 'customers'
 
 // ─── TIER STARS ──────────────────────────────────────────────────────────────
 
@@ -408,7 +408,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
   onToggleExpand: () => void
 }) {
   const qc = useQueryClient()
-  const [tab, setTab] = useState<RightPanelTab>('info')
+  const [tab, setTab] = useState<RightPanelTab>('quotes')
   const [showAddQuote, setShowAddQuote] = useState(false)
   const [showCompose, setShowCompose] = useState(false)
   const [compareResult, setCompareResult] = useState<any>(null)
@@ -480,7 +480,6 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
   const totalShare = customers.reduce((s, c) => s + (c.business_share_pct ?? 0), 0)
 
   const TABS: { key: RightPanelTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'info',      label: 'Info',      icon: <Building2 className="w-3.5 h-3.5" /> },
     { key: 'quotes',    label: 'Quotes',    icon: <Upload className="w-3.5 h-3.5" /> },
     { key: 'customers', label: 'Customers', icon: <Users className="w-3.5 h-3.5" /> },
     { key: 'compare',  label: 'Compare',   icon: <BarChart3 className="w-3.5 h-3.5" /> },
@@ -533,7 +532,101 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
         <TierStars rating={supplier.tier_rating} />
       </div>
 
-      {/* Tabs — horizontally scrollable so all tabs are reachable on narrow panels */}
+      {/* ── Always-visible info section ─────────────────────────────────────── */}
+      <div className="flex-shrink-0 border-b border-[#e5e8ef] overflow-y-auto max-h-72 p-4 space-y-3">
+        {/* Capabilities */}
+        {caps.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide mb-1.5">Capabilities</p>
+            <div className="flex flex-wrap gap-1">
+              {caps.map(c => (
+                <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-brand/10 text-brand font-medium capitalize">
+                  {c.replace(/_/g, ' ')}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Contact details */}
+        <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2">
+          <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide">Contact Details</p>
+          {supplier.contact_name ? (
+            <div className="flex items-start gap-2">
+              <Building2 className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[#0f1729]">{supplier.contact_name}</p>
+                {(supplier.contact_title || supplier.contact_department) && (
+                  <p className="text-xs text-[#9aa3b2]">
+                    {[supplier.contact_title, supplier.contact_department].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-[#9aa3b2] italic">No contact person on file</p>
+          )}
+          {supplier.contact_email ? (
+            <div className="flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+              <a href={`mailto:${supplier.contact_email}`} className="text-xs text-brand hover:underline truncate">{supplier.contact_email}</a>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Mail className="w-3.5 h-3.5 text-[#e5e8ef] flex-shrink-0" />
+              <span className="text-xs text-[#9aa3b2] italic">No email on file</span>
+            </div>
+          )}
+          {supplier.contact_phone ? (
+            <div className="flex items-center gap-2">
+              <Phone className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+              <a href={`tel:${supplier.contact_phone}`} className="text-xs text-[#0f1729] hover:underline">{supplier.contact_phone}</a>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Phone className="w-3.5 h-3.5 text-[#e5e8ef] flex-shrink-0" />
+              <span className="text-xs text-[#9aa3b2] italic">No phone on file</span>
+            </div>
+          )}
+          {supplier.website && (
+            <div className="flex items-center gap-2">
+              <Link2 className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
+              <a href={supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`}
+                target="_blank" rel="noopener noreferrer"
+                className="text-xs text-brand hover:underline truncate">{supplier.website}</a>
+            </div>
+          )}
+          {(supplier.full_address || supplier.city) && (
+            <div className="flex items-start gap-2">
+              <MapPin className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-[#4a5568]">
+                {supplier.full_address || [supplier.city, COUNTRY_NAMES[supplier.country_code] ?? supplier.country_code].filter(Boolean).join(', ')}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Notes */}
+        {supplier.notes && (
+          <p className="text-xs text-[#4a5568] italic">{supplier.notes}</p>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex gap-2">
+          {supplier.contact_email && (
+            <Button variant="outline" size="sm" className="flex-1" iconLeft={<Mail className="w-3.5 h-3.5" />}
+              onClick={() => setShowCompose(true)}>
+              Email
+            </Button>
+          )}
+          <Button variant="primary" size="sm" className="flex-1" iconLeft={<Upload className="w-3.5 h-3.5" />}
+            onClick={() => setShowAddQuote(true)}>
+            Add Quote
+          </Button>
+        </div>
+      </div>
+
+      {/* Tabs — Quotes / Customers / Compare / Negotiate */}
       <div className="flex overflow-x-auto border-b border-[#e5e8ef] flex-shrink-0 scrollbar-none">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -547,87 +640,6 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {tab === 'info' && (
-          <div className="space-y-4">
-            {caps.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide mb-1.5">Capabilities</p>
-                <div className="flex flex-wrap gap-1">
-                  {caps.map(c => (
-                    <span key={c} className="text-[10px] px-2 py-0.5 rounded-full bg-brand/10 text-brand font-medium capitalize">
-                      {c.replace(/_/g, ' ')}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Contact details card */}
-            {(supplier.contact_name || supplier.contact_email || supplier.contact_phone || supplier.website || supplier.full_address) && (
-              <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2.5">
-                <p className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide">Contact Details</p>
-                {supplier.contact_name && (
-                  <div className="flex items-start gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#0f1729]">{supplier.contact_name}</p>
-                      {(supplier.contact_title || supplier.contact_department) && (
-                        <p className="text-xs text-[#9aa3b2]">
-                          {[supplier.contact_title, supplier.contact_department].filter(Boolean).join(' · ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {supplier.contact_email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
-                    <a href={`mailto:${supplier.contact_email}`} className="text-sm text-brand hover:underline truncate">{supplier.contact_email}</a>
-                  </div>
-                )}
-                {supplier.contact_phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
-                    <a href={`tel:${supplier.contact_phone}`} className="text-sm text-[#0f1729] hover:underline">{supplier.contact_phone}</a>
-                  </div>
-                )}
-                {supplier.website && (
-                  <div className="flex items-center gap-2">
-                    <Link2 className="w-3.5 h-3.5 text-[#9aa3b2] flex-shrink-0" />
-                    <a href={supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="text-sm text-brand hover:underline truncate">{supplier.website}</a>
-                  </div>
-                )}
-                {(supplier.full_address || supplier.city) && (
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-[#4a5568]">
-                      {supplier.full_address || [supplier.city, COUNTRY_NAMES[supplier.country_code] ?? supplier.country_code].filter(Boolean).join(', ')}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-            {/* Compose Email button */}
-            {supplier.contact_email && (
-              <Button variant="outline" size="sm" className="w-full" iconLeft={<Mail className="w-3.5 h-3.5" />}
-                onClick={() => setShowCompose(true)}>
-                Compose Email to Supplier
-              </Button>
-            )}
-            {supplier.notes && (
-              <div>
-                <p className="text-xs font-semibold text-[#9aa3b2] uppercase tracking-wide mb-1">Notes</p>
-                <p className="text-sm text-[#4a5568]">{supplier.notes}</p>
-              </div>
-            )}
-            <Button variant="primary" size="sm" className="w-full" iconLeft={<Upload className="w-3.5 h-3.5" />}
-              onClick={() => { setShowAddQuote(true) }}>
-              Ingest Supplier Quote
-            </Button>
-          </div>
-        )}
-
         {tab === 'quotes' && (
           <div className="space-y-3">
             <Button variant="outline" size="sm" iconLeft={<Plus className="w-3.5 h-3.5" />}
