@@ -613,12 +613,6 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
 
         {/* Action buttons */}
         <div className="flex gap-2">
-          {supplier.contact_email && (
-            <Button variant="outline" size="sm" className="flex-1" iconLeft={<Mail className="w-3.5 h-3.5" />}
-              onClick={() => setShowCompose(true)}>
-              Email
-            </Button>
-          )}
           <Button variant="primary" size="sm" className="flex-1" iconLeft={<Upload className="w-3.5 h-3.5" />}
             onClick={() => setShowAddQuote(true)}>
             Add Quote
@@ -839,7 +833,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
         {tab === 'negotiate' && (
           <div className="space-y-3">
             {!negotiation ? (
-              <p className="text-xs text-[#9aa3b2] text-center py-6">Run a comparison first, then generate a negotiation report from the Quotes tab.</p>
+              <p className="text-xs text-[#9aa3b2] text-center py-4">Run a comparison first, then generate a negotiation report from the Quotes tab.</p>
             ) : (
               <>
                 {negotiation.recommended_target_eur && (
@@ -863,6 +857,16 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
                   </div>
                 )}
               </>
+            )}
+            {/* Compose Email — always available in Negotiate tab */}
+            {supplier.contact_email && (
+              <div className="pt-2 border-t border-[#e5e8ef]">
+                <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide mb-2">Outreach</p>
+                <Button variant="outline" size="sm" className="w-full" iconLeft={<Mail className="w-3.5 h-3.5" />}
+                  onClick={() => setShowCompose(true)}>
+                  Compose Email to Supplier
+                </Button>
+              </div>
             )}
           </div>
         )}
