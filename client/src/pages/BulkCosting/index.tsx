@@ -222,6 +222,53 @@ function getStepStates(status: BatchItemStatus): [StepState, StepState, StepStat
   }
 }
 
+// ─── Resolution param form sub-component (needs its own hooks) ───────────────
+
+function ResolutionParamForm({ item, sharedParams, getNotes, isPending, onApply }: {
+  item: BatchItem
+  sharedParams: Record<string, unknown>
+  getNotes: () => string
+  isPending: boolean
+  onApply: (overrides: Record<string, unknown>) => void
+}) {
+  const ov = (item.overrides_json ?? {}) as Record<string, unknown>
+  const [sc,  setSc]  = useState(String(ov.supplier_country  ?? sharedParams.supplier_country  ?? 'DE'))
+  const [cur, setCur] = useState(String(ov.supplier_currency ?? sharedParams.supplier_currency ?? 'EUR'))
+  const [av,  setAv]  = useState(Number(ov.annual_volume  ?? sharedParams.annual_volume  ?? 1000))
+  const [ls,  setLs]  = useState(Number(ov.lot_size       ?? sharedParams.lot_size       ?? 100))
+  const [pt,  setPt]  = useState(String(ov.procurement_type ?? sharedParams.procurement_type ?? 'in_house'))
+  return (
+    <div className="space-y-2 pt-1">
+      <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] font-semibold">Parameter overrides</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div><p className={LBL}>Country</p>
+          <input value={sc} onChange={e => setSc(e.target.value)} className={INP} placeholder="DE" maxLength={3} />
+        </div>
+        <div><p className={LBL}>Currency</p>
+          <input value={cur} onChange={e => setCur(e.target.value)} className={INP} placeholder="EUR" maxLength={3} />
+        </div>
+        <div><p className={LBL}>Annual volume</p>
+          <input type="number" min={1} value={av} onChange={e => setAv(Number(e.target.value)||1)} className={NUM} />
+        </div>
+        <div><p className={LBL}>Lot size</p>
+          <input type="number" min={1} value={ls} onChange={e => setLs(Number(e.target.value)||1)} className={NUM} />
+        </div>
+        <div><p className={LBL}>Procurement</p>
+          <select value={pt} onChange={e => setPt(e.target.value)} className={SEL}>
+            <option value="in_house">In-house</option>
+            <option value="purchased">Purchased</option>
+            <option value="sub_contracted">Sub-contracted</option>
+          </select>
+        </div>
+      </div>
+      <Button size="sm" variant="primary" loading={isPending} iconLeft={<RefreshCw className="w-3 h-3" />}
+        onClick={() => onApply({ supplier_country: sc, supplier_currency: cur, annual_volume: av, lot_size: ls, procurement_type: pt, notes: getNotes() })}>
+        Apply &amp; Re-run
+      </Button>
+    </div>
+  )
+}
+
 // ─── BATCH DETAIL VIEW ───────────────────────────────────────────────────────
 
 function BatchDetail({ id }: { id: string }) {
@@ -255,15 +302,69 @@ function BatchDetail({ id }: { id: string }) {
   })
 
   // ── Per-item editing ────────────────────────────────────────────────────────
-  type EditForm = { part_name: string; supplier_country: string; supplier_currency: string; annual_volume: number; lot_size: number; procurement_type: string }
+  type EditForm = { part_name: string; supplier_country: string; supplier_currency: string; annual_volume: number; lot_size: number; procurement_type: string; notes: string }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<EditForm | null>(null)
 
+  // ── Resolution state (notes per item, param expand toggle) ──────────────────
+  const [itemNotes,      setItemNotes]      = useState<Map<string, string>>(new Map())
+  const [expandParamsFor, setExpandParamsFor] = useState<Set<string>>(new Set())
+
   const editItemMut = useMutation({
     mutationFn: ({ itemId, data }: { itemId: string; data: unknown }) => api.bulk.editItem(id, itemId, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['batch', id] }); toast.success('Item updated'); setEditingId(null); setEditForm(null) },
+    onSuccess: (_, v) => {
+      queryClient.invalidateQueries({ queryKey: ['batch', id] })
+      toast.success('Re-running item...')
+      setEditingId(null); setEditForm(null)
+      setExpandParamsFor(prev => { const n = new Set(prev); n.delete(v.itemId); return n })
+    },
     onError: () => toast.error('Failed to update item'),
   })
+
+  const retryItemMut = useMutation({
+    mutationFn: (itemId: string) => api.bulk.editItem(id, itemId, { rerun: true }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['batch', id] }); toast.success('Re-running...') },
+    onError: () => toast.error('Failed to retry'),
+  })
+
+  function getItemNote(item: BatchItem): string {
+    if (itemNotes.has(item.id)) return itemNotes.get(item.id)!
+    const existingNotes = String((item.overrides_json as any)?.notes ?? '')
+    if (existingNotes) return existingNotes
+    if (item.status === 'needs_clarification' && Array.isArray(item.clarification_json) && item.clarification_json.length > 0) {
+      return item.clarification_json.map((q, i) => `${i + 1}. ${q}\n   Answer: `).join('\n\n')
+    }
+    return ''
+  }
+
+  function setItemNote(itemId: string, note: string) {
+    setItemNotes(prev => { const n = new Map(prev); n.set(itemId, note); return n })
+  }
+
+  function submitWithContext(item: BatchItem) {
+    const notes = getItemNote(item)
+    const ov = (item.overrides_json ?? {}) as Record<string, unknown>
+    const sp = (batch?.shared_params_json ?? {}) as Record<string, unknown>
+    editItemMut.mutate({
+      itemId: item.id,
+      data: {
+        part_name: item.part_name,
+        overrides: {
+          supplier_country:  String(ov.supplier_country  ?? sp.supplier_country  ?? 'DE'),
+          supplier_currency: String(ov.supplier_currency ?? sp.supplier_currency ?? 'EUR'),
+          annual_volume:     Number(ov.annual_volume  ?? sp.annual_volume  ?? 1000),
+          lot_size:          Number(ov.lot_size       ?? sp.lot_size       ?? 100),
+          procurement_type:  String(ov.procurement_type ?? sp.procurement_type ?? 'in_house'),
+          notes,
+        },
+        rerun: true,
+      },
+    })
+  }
+
+  function isTransientError(item: BatchItem): boolean {
+    return item.error_code === 'AI_RATE_LIMITED' || item.error_code === 'AI_ALL_PROVIDERS_FAILED'
+  }
 
   function startEdit(item: BatchItem) {
     const ov = (item.overrides_json ?? {}) as Record<string, unknown>
@@ -276,13 +377,14 @@ function BatchDetail({ id }: { id: string }) {
       annual_volume:     Number(ov.annual_volume  ?? sp.annual_volume  ?? 1000),
       lot_size:          Number(ov.lot_size       ?? sp.lot_size       ?? 100),
       procurement_type:  String(ov.procurement_type ?? sp.procurement_type ?? 'in_house'),
+      notes:             String(ov.notes ?? ''),
     })
   }
 
   function saveEdit(rerun: boolean) {
     if (!editForm || !editingId) return
-    const { part_name, ...overrides } = editForm
-    editItemMut.mutate({ itemId: editingId, data: { part_name, overrides, rerun } })
+    const { part_name, notes, ...rest } = editForm
+    editItemMut.mutate({ itemId: editingId, data: { part_name, overrides: { ...rest, notes }, rerun } })
   }
 
   async function handleExportExcel() {
@@ -646,38 +748,121 @@ function BatchDetail({ id }: { id: string }) {
                         </div>
                       </div>
 
-                      {/* ── Error panel ─────────────────────────────────────── */}
-                      {item.status === 'failed' && (
-                        <div className="mx-4 mb-3 p-3 rounded-lg bg-red-50 border border-red-200">
-                          <p className="text-xs font-semibold text-red-700 mb-1 flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            {item.error_code ? item.error_code.replace(/_/g, ' ') : 'Error'}
-                          </p>
-                          <p className="text-xs text-red-600">{item.error_message ?? 'An unexpected error occurred.'}</p>
-                          <p className="text-[10px] text-red-400 mt-1.5">Edit the parameters below and re-run, or use the batch Retry button.</p>
+                      {/* ── Interactive resolution panel (failed / needs_clarification) ── */}
+                      {(item.status === 'failed' || item.status === 'needs_clarification') && (
+                        <div className={cn(
+                          'mx-4 mb-3 rounded-xl border overflow-hidden',
+                          item.status === 'failed' ? 'border-red-200 bg-red-50/40' : 'border-amber-200 bg-amber-50/40',
+                        )}>
+                          {/* Info header */}
+                          <div className={cn(
+                            'px-4 py-3 border-b',
+                            item.status === 'failed' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200',
+                          )}>
+                            {item.status === 'failed' ? (
+                              <>
+                                <p className="text-xs font-semibold text-red-700 flex items-center gap-1.5 mb-1">
+                                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  {isTransientError(item) ? 'Temporary AI issue — retry when ready' : 'Estimation failed — add context to fix'}
+                                  {item.error_code && <span className="ml-auto text-[10px] font-mono text-red-400">{item.error_code}</span>}
+                                </p>
+                                <p className="text-xs text-red-600/90 leading-relaxed">{item.error_message ?? 'An unexpected error occurred.'}</p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5 mb-1.5">
+                                  <HelpCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                  AI needs your answers before it can estimate this part
+                                </p>
+                                {Array.isArray(item.clarification_json) && item.clarification_json.map((q, qi) => (
+                                  <div key={qi} className="flex gap-2 mt-1.5">
+                                    <span className="flex-shrink-0 text-[10px] font-bold font-mono text-amber-500 mt-0.5">{qi + 1}.</span>
+                                    <p className="text-xs text-amber-700 leading-relaxed">{q}</p>
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                          </div>
+
+                          {/* Notes / answers textarea — main interaction */}
+                          <div className="px-4 py-3 space-y-2">
+                            <p className="text-[10px] uppercase tracking-wide font-semibold text-[#9aa3b2]">
+                              {item.status === 'needs_clarification' ? 'Your answers' : 'Additional context (helps AI estimate better)'}
+                            </p>
+                            <textarea
+                              value={getItemNote(item)}
+                              onChange={e => setItemNote(item.id, e.target.value)}
+                              rows={item.status === 'needs_clarification' && Array.isArray(item.clarification_json) ? Math.max(3, item.clarification_json.length * 2) : 3}
+                              placeholder={item.status === 'needs_clarification'
+                                ? 'Type your answers here…'
+                                : 'Describe the part, process, material spec, tolerances, machine rates, or anything that helps…'}
+                              className="w-full rounded-lg border border-[#e5e8ef] bg-white px-3 py-2 text-xs text-[#0f1729] resize-none focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand transition-colors placeholder:text-[#c8cdd8] leading-relaxed"
+                              disabled={editItemMut.isPending && editItemMut.variables?.itemId === item.id}
+                            />
+
+                            {/* CTA buttons */}
+                            <div className="flex items-center gap-2 flex-wrap pt-1">
+                              {/* Primary: submit with context */}
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                loading={editItemMut.isPending && editItemMut.variables?.itemId === item.id}
+                                onClick={() => submitWithContext(item)}
+                                iconLeft={<RefreshCw className="w-3 h-3" />}
+                              >
+                                {item.status === 'needs_clarification' ? 'Submit answers & re-estimate' : 'Re-run with context'}
+                              </Button>
+
+                              {/* Retry as-is (for transient or when user has nothing to add) */}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                loading={retryItemMut.isPending && retryItemMut.variables === item.id}
+                                onClick={() => retryItemMut.mutate(item.id)}
+                                iconLeft={<RefreshCw className="w-3 h-3" />}
+                                className="text-[#4a5568]"
+                              >
+                                Retry as-is
+                              </Button>
+
+                              {/* Toggle advanced params */}
+                              <button
+                                type="button"
+                                onClick={() => setExpandParamsFor(prev => {
+                                  const n = new Set(prev)
+                                  n.has(item.id) ? n.delete(item.id) : n.add(item.id)
+                                  return n
+                                })}
+                                className="inline-flex items-center gap-1 text-xs text-[#9aa3b2] hover:text-brand ml-auto transition-colors"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                {expandParamsFor.has(item.id) ? 'Hide parameters' : 'Edit parameters'}
+                              </button>
+                            </div>
+
+                            {/* Expandable parameters section */}
+                            <AnimatePresence>
+                              {expandParamsFor.has(item.id) && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="overflow-hidden pt-2 border-t border-[#e5e8ef]"
+                                >
+                                  <ResolutionParamForm
+                                    item={item}
+                                    sharedParams={(batch?.shared_params_json ?? {}) as Record<string, unknown>}
+                                    getNotes={() => getItemNote(item)}
+                                    isPending={editItemMut.isPending && editItemMut.variables?.itemId === item.id}
+                                    onApply={(overrides) => editItemMut.mutate({ itemId: item.id, data: { part_name: item.part_name, overrides, rerun: true } })}
+                                  />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
                         </div>
                       )}
 
-                      {/* ── Clarification questions panel ───────────────────── */}
-                      {item.status === 'needs_clarification' && Array.isArray(item.clarification_json) && item.clarification_json.length > 0 && (
-                        <div className="mx-4 mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-                          <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5">
-                            <HelpCircle className="w-3.5 h-3.5" />
-                            AI needs more information to complete this estimate:
-                          </p>
-                          <ol className="space-y-1.5">
-                            {item.clarification_json.map((q, qi) => (
-                              <li key={qi} className="text-xs text-amber-700 flex gap-2">
-                                <span className="flex-shrink-0 font-mono text-amber-400">{qi + 1}.</span>
-                                <span>{q}</span>
-                              </li>
-                            ))}
-                          </ol>
-                          <p className="text-[10px] text-amber-500 mt-2">Edit the part parameters to add clarifying context, then re-run.</p>
-                        </div>
-                      )}
-
-                      {/* ── Action row ───────────────────────────────────────── */}
+                      {/* ── Action row (completed items + general edit) ──────── */}
                       <div className="flex items-center gap-2 px-4 pb-3 flex-wrap">
                         {item.quotation_id && (
                           <Link to={`/quotes/${item.quotation_id}`}
@@ -687,45 +872,38 @@ function BatchDetail({ id }: { id: string }) {
                         )}
                         {item.quotation_id && (
                           <>
-                            <Button size="sm" variant="outline"
-                              className="h-7 px-2.5 text-xs"
-                              onClick={() => handleItemPdf(item)}
-                              loading={downloadingItemPdf === item.id}
-                              iconLeft={<FileText className="w-3 h-3" />}>
-                              PDF
-                            </Button>
+                            <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs"
+                              onClick={() => handleItemPdf(item)} loading={downloadingItemPdf === item.id}
+                              iconLeft={<FileText className="w-3 h-3" />}>PDF</Button>
                             {canUse('excel_export') && (
-                              <Button size="sm" variant="outline"
-                                className="h-7 px-2.5 text-xs"
-                                onClick={() => handleItemExcel(item)}
-                                loading={downloadingItemExcel === item.quotation_id}
-                                iconLeft={<FileSpreadsheet className="w-3 h-3" />}>
-                                Excel
-                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs"
+                                onClick={() => handleItemExcel(item)} loading={downloadingItemExcel === item.quotation_id}
+                                iconLeft={<FileSpreadsheet className="w-3 h-3" />}>Excel</Button>
                             )}
                           </>
                         )}
-                        <div className="flex-1" />
-                        {!isRunning && (
-                          <button
-                            type="button"
-                            onClick={() => editingId === item.id ? (setEditingId(null), setEditForm(null)) : startEdit(item)}
-                            className={cn(
-                              'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors',
-                              editingId === item.id
-                                ? 'text-brand border-brand/30 bg-brand/5'
-                                : 'text-[#9aa3b2] border-[#e5e8ef] hover:text-brand hover:border-brand/30 hover:bg-brand/5',
-                            )}
-                          >
-                            <Edit2 className="w-3 h-3" />
-                            {editingId === item.id ? 'Close Edit' : 'Edit Parameters'}
-                          </button>
+                        {/* Edit toggle — only for non-error items (errors use the resolution panel above) */}
+                        {!isRunning && !['failed','needs_clarification'].includes(item.status) && (
+                          <>
+                            <div className="flex-1" />
+                            <button
+                              type="button"
+                              onClick={() => editingId === item.id ? (setEditingId(null), setEditForm(null)) : startEdit(item)}
+                              className={cn(
+                                'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors',
+                                editingId === item.id ? 'text-brand border-brand/30 bg-brand/5' : 'text-[#9aa3b2] border-[#e5e8ef] hover:text-brand hover:border-brand/30 hover:bg-brand/5',
+                              )}
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              {editingId === item.id ? 'Close Edit' : 'Edit Parameters'}
+                            </button>
+                          </>
                         )}
                       </div>
 
-                      {/* ── Inline edit panel ────────────────────────────────── */}
+                      {/* ── Full edit panel (for queued/completed items) ─────── */}
                       <AnimatePresence>
-                        {editingId === item.id && editForm && (
+                        {editingId === item.id && editForm && !['failed','needs_clarification'].includes(item.status) && (
                           <motion.div
                             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.2 }}
@@ -733,6 +911,13 @@ function BatchDetail({ id }: { id: string }) {
                           >
                             <div className="px-4 pb-4 pt-3 space-y-3">
                               <p className="text-[10px] uppercase tracking-wide text-brand font-semibold">Edit Parameters</p>
+                              <div>
+                                <p className={LBL}>Additional context / notes for AI</p>
+                                <textarea rows={2} value={editForm.notes}
+                                  onChange={e => setEditForm(f => f ? { ...f, notes: e.target.value } : f)}
+                                  placeholder="Optional: describe tolerances, machine rates, material spec, etc."
+                                  className="w-full rounded-lg border border-[#e5e8ef] bg-white px-3 py-2 text-xs text-[#0f1729] resize-none focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand transition-colors placeholder:text-[#c8cdd8] leading-relaxed" />
+                              </div>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                 <div className="col-span-full">
                                   <p className={LBL}>Part name</p>
@@ -740,32 +925,27 @@ function BatchDetail({ id }: { id: string }) {
                                     onChange={e => setEditForm(f => f ? { ...f, part_name: e.target.value } : f)}
                                     className={INP} placeholder="Part name" />
                                 </div>
-                                <div>
-                                  <p className={LBL}>Supplier country</p>
+                                <div><p className={LBL}>Supplier country</p>
                                   <input value={editForm.supplier_country}
                                     onChange={e => setEditForm(f => f ? { ...f, supplier_country: e.target.value } : f)}
                                     className={INP} placeholder="DE" maxLength={3} />
                                 </div>
-                                <div>
-                                  <p className={LBL}>Currency</p>
+                                <div><p className={LBL}>Currency</p>
                                   <input value={editForm.supplier_currency}
                                     onChange={e => setEditForm(f => f ? { ...f, supplier_currency: e.target.value } : f)}
                                     className={INP} placeholder="EUR" maxLength={3} />
                                 </div>
-                                <div>
-                                  <p className={LBL}>Annual volume</p>
+                                <div><p className={LBL}>Annual volume</p>
                                   <input type="number" min={1} value={editForm.annual_volume}
                                     onChange={e => setEditForm(f => f ? { ...f, annual_volume: Number(e.target.value) || 1 } : f)}
                                     className={NUM} />
                                 </div>
-                                <div>
-                                  <p className={LBL}>Lot size</p>
+                                <div><p className={LBL}>Lot size</p>
                                   <input type="number" min={1} value={editForm.lot_size}
                                     onChange={e => setEditForm(f => f ? { ...f, lot_size: Number(e.target.value) || 1 } : f)}
                                     className={NUM} />
                                 </div>
-                                <div>
-                                  <p className={LBL}>Procurement</p>
+                                <div><p className={LBL}>Procurement</p>
                                   <select value={editForm.procurement_type}
                                     onChange={e => setEditForm(f => f ? { ...f, procurement_type: e.target.value } : f)}
                                     className={SEL}>
@@ -777,21 +957,12 @@ function BatchDetail({ id }: { id: string }) {
                               </div>
                               <div className="flex items-center gap-2 pt-1">
                                 <Button type="button" size="sm" variant="outline"
-                                  onClick={() => saveEdit(false)} loading={editItemMut.isPending}>
-                                  Save Only
-                                </Button>
-                                {['queued','failed','needs_clarification'].includes(item.status) && (
-                                  <Button type="button" size="sm" variant="primary"
-                                    onClick={() => saveEdit(true)} loading={editItemMut.isPending}
-                                    iconLeft={<RefreshCw className="w-3 h-3" />}>
-                                    Save &amp; Re-run
-                                  </Button>
-                                )}
-                                <button type="button"
-                                  onClick={() => { setEditingId(null); setEditForm(null) }}
-                                  className="text-xs text-[#9aa3b2] hover:text-[#4a5568] ml-auto">
-                                  Cancel
-                                </button>
+                                  onClick={() => saveEdit(false)} loading={editItemMut.isPending}>Save</Button>
+                                <Button type="button" size="sm" variant="primary"
+                                  onClick={() => saveEdit(true)} loading={editItemMut.isPending}
+                                  iconLeft={<RefreshCw className="w-3 h-3" />}>Save &amp; Re-run</Button>
+                                <button type="button" onClick={() => { setEditingId(null); setEditForm(null) }}
+                                  className="text-xs text-[#9aa3b2] hover:text-[#4a5568] ml-auto">Cancel</button>
                               </div>
                             </div>
                           </motion.div>

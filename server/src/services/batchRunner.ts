@@ -169,6 +169,7 @@ function buildCostInput(
     exchange_rate: merged.exchange_rate,
     exchange_rate_source: merged.exchange_rate_source,
     is_bulk: true,
+    additional_context: (overrides as any).notes ?? null,
   }
 }
 
@@ -343,10 +344,18 @@ export async function runBatch(batchId: string): Promise<void> {
       return
     }
 
-    const allItems = finalBatch.total_items ?? items.length
-    const completed = finalBatch.completed_items ?? 0
-    const failed = finalBatch.failed_items ?? 0
-    const clarification = finalBatch.clarification_items ?? 0
+    // Count directly from DB — stored counters may be stale after per-item reruns
+    const currentItems = await db.select().from(batchItems)
+      .where(eq(batchItems.batch_id, batchId))
+    const allItems = finalBatch.total_items ?? currentItems.length
+    const completed = currentItems.filter(i => i.status === 'completed').length
+    const failed = currentItems.filter(i => i.status === 'failed').length
+    const clarification = currentItems.filter(i => i.status === 'needs_clarification').length
+
+    // Sync counters back to DB for accurate client polling
+    await db.update(costingBatches)
+      .set({ completed_items: completed, failed_items: failed, clarification_items: clarification })
+      .where(eq(costingBatches.id, batchId))
 
     let finalStatus: string
     if (failed === 0 && clarification === 0 && completed === allItems) {

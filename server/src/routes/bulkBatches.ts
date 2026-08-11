@@ -18,7 +18,7 @@ import {
   notifications,
   users,
 } from '../db/index'
-import { eq, isNull, and, desc, inArray } from 'drizzle-orm'
+import { eq, isNull, and, desc, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { validate } from '../middleware/validate'
 import { runBatch } from '../services/batchRunner'
@@ -918,8 +918,18 @@ router.patch('/:id/items/:itemId', validate(itemEditSchema), async (req: Request
     })
 
     if (rerun) {
+      // Set batch back to 'processing' (never 'queued') and decrement the counter
+      // for this item's previous terminal state so finalization counts stay accurate.
+      const batchUpdate: Record<string, unknown> = { status: 'processing', completed_at: null }
+      if (item.status === 'failed') {
+        batchUpdate.failed_items = sql`MAX(0, ${costingBatches.failed_items} - 1)`
+      } else if (item.status === 'needs_clarification') {
+        batchUpdate.clarification_items = sql`MAX(0, ${costingBatches.clarification_items} - 1)`
+      } else if (item.status === 'completed') {
+        batchUpdate.completed_items = sql`MAX(0, ${costingBatches.completed_items} - 1)`
+      }
       await db.update(costingBatches)
-        .set({ status: 'queued', completed_at: null })
+        .set(batchUpdate as any)
         .where(eq(costingBatches.id, req.params.id))
       runBatch(req.params.id).catch(async err => {
         console.error(`Batch runner (item rerun) failed for ${req.params.id}:`, err)

@@ -253,10 +253,14 @@ export async function costOnePart(input: CostInput): Promise<CostEstimateResult>
       ? `Engineer-specified process steps:\n${input.modified_process_steps.map((s) => `  ${s.step_number}. ${s.process_name}`).join('\n')}`
       : ''
 
+  const additionalContextText = input.additional_context?.trim()
+    ? `\n═══ ENGINEER CLARIFICATIONS (use these to improve confidence) ═══\n${input.additional_context.trim()}\n`
+    : ''
+
   const systemPrompt = `You are an expert manufacturing cost engineer. You produce accurate, traceable cost estimates for B2B manufactured parts. You ALWAYS ground estimates in the provided KB data. You are precise, conservative, and thorough.`
 
   const userPrompt = `Estimate the full manufacturing cost for this part. Ground every cost line in the KB data provided.
-${cadMetadataText}
+${cadMetadataText}${additionalContextText}
 ═══ PART DETAILS ═══
 Part Name: ${part.part_name}
 Part Number: ${part.part_number ?? 'N/A'}

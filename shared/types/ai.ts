@@ -153,6 +153,7 @@ export interface CostInput {
   force_regenerate?: boolean;
   user_id?: string;
   is_bulk?: boolean;
+  additional_context?: string | null;
 }
 
 // ─── AI Query / Regenerate Results ───────────────────────────────────────────
