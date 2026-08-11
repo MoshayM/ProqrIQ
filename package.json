@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
-    "concurrently": "^8.2.2",
+    "concurrently": "^10.0.4",
     "drizzle-kit": "^0.27.0",
     "tsx": "^4.19.0"
   }
