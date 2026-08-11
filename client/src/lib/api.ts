@@ -93,6 +93,7 @@ export const api = {
     createFromSpreadsheet:(file: File) => { const fd = new FormData(); fd.append('file', file); return client.post('/bulk-batches/from-spreadsheet', fd).then(d) },
     analyzeDrawings: (files: File[]) => { const fd = new FormData(); files.forEach(f => fd.append('files', f)); return client.post('/bulk-batches/analyze-drawings', fd).then(d) },
     parseManifest:  (file: File)  => { const fd = new FormData(); fd.append('file', file); return client.post('/bulk-batches/parse-manifest', fd).then(d) },
+    editItem:       (batchId: string, itemId: string, data: unknown) => client.patch(`/bulk-batches/${batchId}/items/${itemId}`, data).then(d),
   },
   assemblies: {
     create:          (u: unknown)                           => client.post('/assemblies', u).then(d),

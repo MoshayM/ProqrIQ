@@ -46,9 +46,11 @@ interface BatchItem {
   status: BatchItemStatus
   error_message: string | null
   quotation_id: string | null
+  overrides_json: Record<string, unknown> | null
 }
 
 interface CostingBatchWithItems extends CostingBatch {
+  shared_params_json: Record<string, unknown> | null
   items: BatchItem[]
 }
 
@@ -158,6 +160,7 @@ const DEFAULT_PARAMS: ItemParams = {
 const SEL = 'w-full border border-[#e5e8ef] rounded-md px-2 py-1.5 text-xs text-[#0f1729] bg-white focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand transition-colors'
 const NUM = 'w-full border border-[#e5e8ef] rounded-md px-2 py-1.5 text-xs font-mono text-[#0f1729] bg-white focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand transition-colors text-right'
 const INP = 'w-full border border-[#e5e8ef] rounded-md px-2 py-1.5 text-xs text-[#0f1729] bg-white focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand transition-colors'
+const LBL = 'text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5'
 
 const SPREADSHEET_TEMPLATE_CSV =
   'part_name,description,material,supplier_country,supplier_currency,procurement_type,annual_volume,lot_size\n' +
@@ -219,6 +222,37 @@ function BatchDetail({ id }: { id: string }) {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['batch', id] }); toast.success('Batch cancelled') },
     onError: () => toast.error('Failed to cancel batch'),
   })
+
+  // ── Per-item editing ────────────────────────────────────────────────────────
+  type EditForm = { part_name: string; supplier_country: string; supplier_currency: string; annual_volume: number; lot_size: number; procurement_type: string }
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<EditForm | null>(null)
+
+  const editItemMut = useMutation({
+    mutationFn: ({ itemId, data }: { itemId: string; data: unknown }) => api.bulk.editItem(id, itemId, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['batch', id] }); toast.success('Item updated'); setEditingId(null); setEditForm(null) },
+    onError: () => toast.error('Failed to update item'),
+  })
+
+  function startEdit(item: BatchItem) {
+    const ov = (item.overrides_json ?? {}) as Record<string, unknown>
+    const sp = (batch?.shared_params_json ?? {}) as Record<string, unknown>
+    setEditingId(item.id)
+    setEditForm({
+      part_name:         item.part_name,
+      supplier_country:  String(ov.supplier_country  ?? sp.supplier_country  ?? 'DE'),
+      supplier_currency: String(ov.supplier_currency ?? sp.supplier_currency ?? 'EUR'),
+      annual_volume:     Number(ov.annual_volume  ?? sp.annual_volume  ?? 1000),
+      lot_size:          Number(ov.lot_size       ?? sp.lot_size       ?? 100),
+      procurement_type:  String(ov.procurement_type ?? sp.procurement_type ?? 'in_house'),
+    })
+  }
+
+  function saveEdit(rerun: boolean) {
+    if (!editForm || !editingId) return
+    const { part_name, ...overrides } = editForm
+    editItemMut.mutate({ itemId: editingId, data: { part_name, overrides, rerun } })
+  }
 
   async function handleExport() {
     setIsExporting(true)
@@ -389,37 +423,125 @@ function BatchDetail({ id }: { id: string }) {
                     initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.03, duration: 0.2 }}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 border transition-colors',
+                      'rounded-lg border transition-colors',
                       item.status === 'processing' ? 'border-blue-200 bg-blue-50/40' :
                       item.status === 'completed'   ? 'border-green-100 bg-green-50/30' :
                       item.status === 'failed'      ? 'border-red-100 bg-red-50/20' :
+                      item.status === 'needs_clarification' ? 'border-amber-100 bg-amber-50/20' :
+                      editingId === item.id         ? 'border-brand/30 bg-brand/5' :
                       'border-transparent hover:bg-surface-2',
                     )}
                   >
-                    <div className="flex-shrink-0">
-                      {item.status === 'processing' ? (
-                        <div className="relative w-5 h-5">
-                          <span className="absolute inset-0 rounded-full bg-blue-400/30 animate-ping" style={{ animationDuration: '1.2s' }} />
-                          <span className="absolute inset-1 rounded-full bg-blue-500" />
-                        </div>
-                      ) : item.status === 'completed'           ? <CheckCircle  className="w-4 h-4 text-green-600" />
-                        : item.status === 'failed'              ? <AlertCircle  className="w-4 h-4 text-red-500" />
-                        : item.status === 'needs_clarification' ? <AlertTriangle className="w-4 h-4 text-amber-500" />
-                        : item.status === 'queued'              ? <div className="w-4 h-4 rounded-full border-2 border-[#c8cdd8] border-t-amber-400 animate-spin" style={{ animationDuration: '1s' }} />
-                        : <div className="w-4 h-4 rounded-full bg-[#e5e8ef]" />}
+                    {/* ── Main row ─────────────────────────────────────────── */}
+                    <div className="flex items-center gap-3 px-3 py-2.5">
+                      <div className="flex-shrink-0">
+                        {item.status === 'processing' ? (
+                          <div className="relative w-5 h-5">
+                            <span className="absolute inset-0 rounded-full bg-blue-400/30 animate-ping" style={{ animationDuration: '1.2s' }} />
+                            <span className="absolute inset-1 rounded-full bg-blue-500" />
+                          </div>
+                        ) : item.status === 'completed'           ? <CheckCircle  className="w-4 h-4 text-green-600" />
+                          : item.status === 'failed'              ? <AlertCircle  className="w-4 h-4 text-red-500" />
+                          : item.status === 'needs_clarification' ? <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          : item.status === 'queued'              ? <div className="w-4 h-4 rounded-full border-2 border-[#c8cdd8] border-t-amber-400 animate-spin" style={{ animationDuration: '1s' }} />
+                          : <div className="w-4 h-4 rounded-full bg-[#e5e8ef]" />}
+                      </div>
+                      <p className="flex-1 min-w-0 text-sm font-medium text-[#0f1729] truncate">{item.part_name}</p>
+                      <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize flex-shrink-0', ITEM_STATUS_COLORS[item.status])}>
+                        {item.status.replace(/_/g, ' ')}
+                      </span>
+                      {item.error_message ? (
+                        <span className="text-red-500 text-xs truncate max-w-[120px] flex-shrink-0" title={item.error_message}>{item.error_message}</span>
+                      ) : item.quotation_id ? (
+                        <Link to={`/quotes/${item.quotation_id}`} onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-brand hover:underline text-xs font-medium flex-shrink-0">
+                          <Eye className="w-3 h-3" /> View
+                        </Link>
+                      ) : null}
+                      {/* Edit toggle — not available while actively running */}
+                      {!['analysing','searching_kb','estimating','processing'].includes(item.status) && (
+                        <button
+                          type="button"
+                          onClick={() => editingId === item.id ? (setEditingId(null), setEditForm(null)) : startEdit(item)}
+                          title={editingId === item.id ? 'Close' : 'Edit parameters'}
+                          className={cn(
+                            'flex-shrink-0 p-1 rounded transition-colors',
+                            editingId === item.id ? 'text-brand bg-brand/10' : 'text-[#c8cdd8] hover:text-brand hover:bg-brand/5',
+                          )}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
-                    <p className="flex-1 min-w-0 text-sm font-medium text-[#0f1729] truncate">{item.part_name}</p>
-                    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize flex-shrink-0', ITEM_STATUS_COLORS[item.status])}>
-                      {item.status.replace(/_/g, ' ')}
-                    </span>
-                    {item.error_message ? (
-                      <span className="text-red-500 text-xs truncate max-w-[180px] flex-shrink-0" title={item.error_message}>{item.error_message}</span>
-                    ) : item.quotation_id ? (
-                      <Link to={`/quotes/${item.quotation_id}`} onClick={e => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 text-brand hover:underline text-xs font-medium flex-shrink-0">
-                        <Eye className="w-3 h-3" /> View
-                      </Link>
-                    ) : null}
+
+                    {/* ── Inline edit panel ────────────────────────────────── */}
+                    {editingId === item.id && editForm && (
+                      <div className="px-3 pb-3 space-y-3 border-t border-brand/10">
+                        <p className="text-[10px] uppercase tracking-wide text-brand font-semibold pt-2">Edit Parameters</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          <div className="col-span-full">
+                            <p className={LBL}>Part name</p>
+                            <input value={editForm.part_name}
+                              onChange={e => setEditForm(f => f ? { ...f, part_name: e.target.value } : f)}
+                              className={INP} placeholder="Part name" />
+                          </div>
+                          <div>
+                            <p className={LBL}>Supplier country</p>
+                            <input value={editForm.supplier_country}
+                              onChange={e => setEditForm(f => f ? { ...f, supplier_country: e.target.value } : f)}
+                              className={INP} placeholder="DE" maxLength={3} />
+                          </div>
+                          <div>
+                            <p className={LBL}>Currency</p>
+                            <input value={editForm.supplier_currency}
+                              onChange={e => setEditForm(f => f ? { ...f, supplier_currency: e.target.value } : f)}
+                              className={INP} placeholder="EUR" maxLength={3} />
+                          </div>
+                          <div>
+                            <p className={LBL}>Annual volume</p>
+                            <input type="number" min={1} value={editForm.annual_volume}
+                              onChange={e => setEditForm(f => f ? { ...f, annual_volume: Number(e.target.value) || 1 } : f)}
+                              className={NUM} />
+                          </div>
+                          <div>
+                            <p className={LBL}>Lot size</p>
+                            <input type="number" min={1} value={editForm.lot_size}
+                              onChange={e => setEditForm(f => f ? { ...f, lot_size: Number(e.target.value) || 1 } : f)}
+                              className={NUM} />
+                          </div>
+                          <div>
+                            <p className={LBL}>Procurement</p>
+                            <select value={editForm.procurement_type}
+                              onChange={e => setEditForm(f => f ? { ...f, procurement_type: e.target.value } : f)}
+                              className={SEL}>
+                              <option value="in_house">In-house</option>
+                              <option value="purchased">Purchased</option>
+                              <option value="sub_contracted">Sub-contracted</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <Button type="button" size="sm" variant="outline"
+                            onClick={() => saveEdit(false)}
+                            loading={editItemMut.isPending}>
+                            Save
+                          </Button>
+                          {['queued','failed','needs_clarification'].includes(item.status) && (
+                            <Button type="button" size="sm" variant="primary"
+                              onClick={() => saveEdit(true)}
+                              loading={editItemMut.isPending}
+                              iconLeft={<RefreshCw className="w-3 h-3" />}>
+                              Save &amp; Re-run
+                            </Button>
+                          )}
+                          <button type="button"
+                            onClick={() => { setEditingId(null); setEditForm(null) }}
+                            className="text-xs text-[#9aa3b2] hover:text-[#4a5568] ml-auto">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 ))}
               </AnimatePresence>

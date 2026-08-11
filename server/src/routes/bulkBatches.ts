@@ -856,4 +856,76 @@ router.get('/:id/export-excel', requirePlan('pro'), async (req: Request, res: Re
   }
 })
 
+// ─── PATCH /bulk-batches/:id/items/:itemId ───────────────────────────────────
+const itemEditSchema = z.object({
+  part_name:  z.string().min(1).optional(),
+  overrides:  z.record(z.any()).optional(),
+  rerun:      z.boolean().optional(),
+})
+
+router.patch('/:id/items/:itemId', validate(itemEditSchema), async (req: Request, res: Response) => {
+  try {
+    const [batch] = await db.select().from(costingBatches)
+      .where(and(eq(costingBatches.id, req.params.id), isNull(costingBatches.deleted_at)))
+    if (!batch) return res.status(404).json({ success: false, error: 'Batch not found' })
+
+    const [item] = await db.select().from(batchItems)
+      .where(and(eq(batchItems.id, req.params.itemId), eq(batchItems.batch_id, req.params.id)))
+    if (!item) return res.status(404).json({ success: false, error: 'Item not found' })
+
+    const LOCKED = ['analysing', 'searching_kb', 'estimating']
+    if (LOCKED.includes(item.status)) {
+      return res.status(409).json({ success: false, error: 'Cannot edit item while it is being processed' })
+    }
+
+    const { part_name, overrides, rerun } = req.body
+    const updates: Record<string, unknown> = {}
+    if (part_name !== undefined) updates.part_name = part_name
+    if (overrides !== undefined) updates.overrides_json = JSON.stringify(overrides)
+    if (rerun) {
+      updates.status            = 'queued'
+      updates.error_code        = null
+      updates.error_message     = null
+      updates.confidence_score  = null
+      updates.clarification_json = null
+      updates.started_at        = null
+      updates.completed_at      = null
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db.update(batchItems).set(updates as any).where(eq(batchItems.id, req.params.itemId))
+    }
+
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(),
+      user_id: (req as any).user!.id,
+      action: 'UPDATE',
+      entity_type: 'batch_item',
+      entity_id: req.params.itemId,
+      details: JSON.stringify({ action: rerun ? 'edit_rerun' : 'edit', batch_id: req.params.id }),
+      created_at: new Date().toISOString(),
+    })
+
+    if (rerun) {
+      await db.update(costingBatches)
+        .set({ status: 'queued', completed_at: null })
+        .where(eq(costingBatches.id, req.params.id))
+      runBatch(req.params.id).catch(async err => {
+        console.error(`Batch runner (item rerun) failed for ${req.params.id}:`, err)
+        try {
+          await db.update(costingBatches)
+            .set({ status: 'failed', completed_at: new Date().toISOString() })
+            .where(eq(costingBatches.id, req.params.id))
+        } catch { /* best-effort */ }
+      })
+    }
+
+    const [updated] = await db.select().from(batchItems).where(eq(batchItems.id, req.params.itemId))
+    return res.json({ success: true, data: updated })
+  } catch (err) {
+    console.error('Edit batch item error:', err)
+    return res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+})
+
 export { router }
