@@ -35,7 +35,7 @@ interface Quotation {
     primary_process: string | null;
     dimensions: Record<string, number> | null;
     weight_kg: number | null;
-  };
+  } | null;
   kb_coverage_pct: number | null;
   ai_reasoning: string | null;
   routing_path: string[] | null;
