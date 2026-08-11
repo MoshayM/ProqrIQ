@@ -20,7 +20,7 @@ const DRAWING_MIME_TYPES = new Set([
   'application/octet-stream', // fallback for STEP/IGES from most browsers
 ])
 
-const CAD_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs'])
+const CAD_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs', '.stl', '.obj', '.dxf'])
 
 const KB_MIME_TYPES = new Set([
   'application/pdf',
@@ -43,7 +43,7 @@ function drawingFileFilter(
     cb(null, true)
   } else {
     cb(
-      Object.assign(new Error('Invalid file type. Allowed: PDF, PNG, JPG, WEBP, STEP, IGES'), {
+      Object.assign(new Error('Invalid file type. Allowed: PDF, PNG, JPG, WEBP, STEP, STP, IGES, IGS, STL, OBJ, DXF'), {
         error_code: 'INVALID_FILE_TYPE',
         status:     400,
       }) as unknown as null,

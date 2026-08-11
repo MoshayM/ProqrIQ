@@ -97,16 +97,18 @@ router.post(
         'image/webp': 'image/webp',
       }
 
-      const PROMPT = `You are analyzing an engineering drawing or technical document.
+      const CAD_TEXT_EXTS = new Set(['.step', '.stp', '.iges', '.igs', '.stl', '.obj', '.dxf'])
+
+      const PROMPT = `You are analyzing an engineering drawing, 3D model, or technical document.
 Extract part metadata from it. Output ONLY valid JSON. No markdown fences. No preamble.
 
 Format: {"part_name":"...","description":"...","material":"...","drawing_number":"...","confidence":0.85}
 
 Rules:
-- part_name: the main part identifier or title (required; derive from drawing if possible)
+- part_name: the main part identifier or title (required; derive from filename if not found in content)
 - description: one-sentence description of the part function or geometry (or "")
-- material: material specification from title block or BOM notes (or "")
-- drawing_number: drawing or document number from title block (or "")
+- material: material specification from title block, header, or BOM notes (or "")
+- drawing_number: drawing or document number from title block or header (or "")
 - confidence: 0.0–1.0 how confident you are in the extraction`
 
       type AIResult = { part_name: string; description: string; material: string; drawing_number: string; confidence: number }
@@ -116,8 +118,17 @@ Rules:
           type ImageBlock = { type: 'image'; source: { type: 'base64'; media_type: 'image/png' | 'image/jpeg' | 'image/webp'; data: string } }
           type TextBlock  = { type: 'text'; text: string }
 
+          const ext = path.extname(file.originalname).toLowerCase()
           let contentBlocks: Array<ImageBlock | TextBlock>
-          if (file.mimetype === 'application/pdf') {
+
+          if (CAD_TEXT_EXTS.has(ext)) {
+            // 3D CAD / vector formats: read as text, send header section to Claude
+            const cadText = file.buffer.toString('utf-8').slice(0, 8000)
+            contentBlocks = [
+              { type: 'text', text: `3D CAD file (${ext.toUpperCase()}, filename: ${file.originalname}):\n\`\`\`\n${cadText}\n\`\`\`` },
+              { type: 'text', text: PROMPT },
+            ]
+          } else if (file.mimetype === 'application/pdf') {
             // PDF: extract text with pdf-parse then send as text block
             // eslint-disable-next-line @typescript-eslint/no-var-requires
             const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>

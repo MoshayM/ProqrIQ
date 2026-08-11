@@ -135,7 +135,7 @@ const PROCUREMENT_TYPES = [
   { value: 'sub_contracted', label: 'Sub-contracted' },
 ]
 
-const ACCEPTED_DRAWING_EXTS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'tiff'])
+const ACCEPTED_DRAWING_EXTS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'tiff', 'step', 'stp', 'iges', 'igs', 'stl', 'obj', 'dxf'])
 
 const BULK_MAX = 50
 
@@ -589,7 +589,7 @@ function UnifiedUploadMode({ onCreated }: { onCreated: () => void }) {
     const valid = incoming.filter(f =>
       ACCEPTED_DRAWING_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ''))
     if (valid.length < incoming.length)
-      toast.error('Some files skipped — only PDF / PNG / JPG / WEBP accepted')
+      toast.error('Some files skipped — accepted: PDF, PNG, JPG, STEP, STP, IGES, STL, DXF')
     if (!valid.length) return
     setDrawingFiles(prev => {
       const existing = new Set(prev.map(f => f.name))
@@ -942,7 +942,7 @@ function UnifiedUploadMode({ onCreated }: { onCreated: () => void }) {
                   </button>
                   <input
                     ref={el => { rowFileRefs.current[row._id] = el }}
-                    type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="hidden"
+                    type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.step,.stp,.iges,.igs,.stl,.obj,.dxf" className="hidden"
                     onChange={e => {
                       const f = e.target.files?.[0]
                       if (f) assignDrawingToRow(row._id, f)
@@ -1013,7 +1013,7 @@ function UnifiedUploadMode({ onCreated }: { onCreated: () => void }) {
         {/* Drawing files */}
         <div>
           <p className="text-xs font-semibold text-[#4a5568] mb-1.5">
-            Drawing files <span className="font-normal text-[#9aa3b2]">PDF · PNG · JPG · WEBP</span>
+            Drawing files <span className="font-normal text-[#9aa3b2]">PDF · PNG · JPG · STEP · IGES · STL · DXF</span>
           </p>
           <div
             onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
@@ -1028,7 +1028,7 @@ function UnifiedUploadMode({ onCreated }: { onCreated: () => void }) {
             )}
           >
             <input ref={drawingInputRef} type="file" multiple
-              accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff" className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff,.step,.stp,.iges,.igs,.stl,.obj,.dxf" className="hidden"
               onChange={e => { if (e.target.files) addFiles(Array.from(e.target.files)); e.target.value = '' }} />
             {hasDrawings ? (
               <>
