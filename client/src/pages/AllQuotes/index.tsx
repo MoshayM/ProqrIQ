@@ -39,7 +39,7 @@ interface Quotation {
     commodity_type: string; material: string | null
     primary_process: string | null
     dimensions: Record<string, number> | null; weight_kg: number | null
-  }
+  } | null
   kb_coverage_pct: number | null
   ai_reasoning: string | null
   routing_path: string[] | null
@@ -123,7 +123,7 @@ export default function AllQuotes() {
         if (!['admin', 'developer'].includes(user?.role ?? '')) return false
         if (!showArchived) return false
       }
-      if (q && !quote.part.name.toLowerCase().includes(q) && !(quote.part.part_number ?? '').toLowerCase().includes(q)) return false
+      if (q && !(quote.part?.name ?? '').toLowerCase().includes(q) && !(quote.part?.part_number ?? '').toLowerCase().includes(q)) return false
       if (statusFilter && quote.status !== statusFilter) return false
       if (typeFilter && quote.quote_type !== typeFilter) return false
       return true
@@ -318,8 +318,8 @@ export default function AllQuotes() {
                   <Link key={quote.id} to={`/quotes/${quote.id}`} className="block px-4 py-3.5 hover:bg-surface-2 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-[#0f1729] truncate">{quote.part.name}</p>
-                        <p className="text-xs text-[#9aa3b2] mt-0.5">{quote.part.commodity_type}{quote.part.part_number ? ` · ${quote.part.part_number}` : ''}</p>
+                        <p className="text-sm font-semibold text-[#0f1729] truncate">{quote.part?.name ?? '—'}</p>
+                        <p className="text-xs text-[#9aa3b2] mt-0.5">{quote.part?.commodity_type ?? ''}{quote.part?.part_number ? ` · ${quote.part.part_number}` : ''}</p>
                       </div>
                       <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0', cfg.className)}>{cfg.label}</span>
                     </div>
@@ -372,12 +372,12 @@ export default function AllQuotes() {
                       <tr key={quote.id} className="hover:bg-surface-2 transition-colors group">
                         {/* Part Name */}
                         <td className="px-4 py-3.5 max-w-[200px]">
-                          <p className="text-sm font-medium text-[#0f1729] truncate">{quote.part.name}</p>
-                          <p className="text-xs text-[#9aa3b2] truncate">{quote.part.commodity_type}</p>
+                          <p className="text-sm font-medium text-[#0f1729] truncate">{quote.part?.name ?? '—'}</p>
+                          <p className="text-xs text-[#9aa3b2] truncate">{quote.part?.commodity_type ?? ''}</p>
                         </td>
                         {/* Part No */}
                         <td className="px-4 py-3.5 text-sm text-[#4a5568] font-mono whitespace-nowrap">
-                          {quote.part.part_number ?? '—'}
+                          {quote.part?.part_number ?? '—'}
                         </td>
                         {/* Type */}
                         <td className="px-4 py-3.5 text-sm text-[#4a5568] capitalize whitespace-nowrap">

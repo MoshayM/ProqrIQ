@@ -406,7 +406,7 @@ function AssemblyDetail({ id }: { id: string }) {
   const { data: quotation } = useQuery<Quotation>({ queryKey: ['quote', id], queryFn: () => api.quotes.get(id) })
   const { data: components = [] } = useQuery<AssemblyComponent[]>({
     queryKey: ['assembly-components', id],
-    queryFn: () => api.assemblies.get(id),
+    queryFn: () => api.assemblies.get(id).then((r: any) => r.components ?? []),
   })
   const { data: costLines = [] } = useQuery<CostLine[]>({
     queryKey: ['cost-lines', id],

@@ -29,7 +29,7 @@ interface Quotation {
   confidence_score: number | null
   cost_eur: number | null
   created_at: string
-  part: { id: string; name: string; part_number: string | null; commodity_type: string }
+  part: { id: string; name: string; part_number: string | null; commodity_type: string } | null
 }
 
 interface CostingBatch {
@@ -415,7 +415,7 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-[#0f1729]">Continue where you left off</p>
-                <p className="text-xs text-[#6366f1]">{lastInProgress.part.name} — <span className="capitalize">{lastInProgress.status.replace('_', ' ')}</span></p>
+                <p className="text-xs text-[#6366f1]">{lastInProgress.part?.name ?? '—'} — <span className="capitalize">{lastInProgress.status.replace('_', ' ')}</span></p>
               </div>
             </div>
             <Button size="sm" variant="ghost" className="text-[#6366f1] hover:bg-[#6366f1]/10 gap-1.5" onClick={() => navigate(`/quotes/${lastInProgress.id}`)}>
@@ -576,7 +576,7 @@ export default function Dashboard() {
                   {recentQuotes.map((q) => (
                     <Link key={q.id} to={`/quotes/${q.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2 transition-colors">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#0f1729] truncate">{q.part.name}</p>
+                        <p className="text-sm font-medium text-[#0f1729] truncate">{q.part?.name ?? '—'}</p>
                         <p className="text-xs text-[#9aa3b2] mt-0.5">
                           {format(new Date(q.created_at), 'MMM d')}
                           {q.confidence_score !== null && ` · ${q.confidence_score.toFixed(0)}% conf`}
@@ -607,8 +607,8 @@ export default function Dashboard() {
                       {recentQuotes.map((q) => (
                         <tr key={q.id} className="hover:bg-surface-2 transition-colors group">
                           <td className="px-6 py-3.5 text-sm font-medium text-[#0f1729] max-w-[200px] truncate">
-                            {q.part.name}
-                            {q.part.part_number && (
+                            {q.part?.name ?? '—'}
+                            {q.part?.part_number && (
                               <span className="block text-xs text-[#9aa3b2] font-normal">{q.part.part_number}</span>
                             )}
                           </td>
@@ -662,8 +662,8 @@ export default function Dashboard() {
                   <div key={q.id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-[#0f1729] truncate">{q.part.name}</p>
-                        {q.part.part_number && <p className="text-xs text-[#9aa3b2]">{q.part.part_number}</p>}
+                        <p className="text-sm font-medium text-[#0f1729] truncate">{q.part?.name ?? '—'}</p>
+                        {q.part?.part_number && <p className="text-xs text-[#9aa3b2]">{q.part.part_number}</p>}
                       </div>
                       <span className="font-mono text-xs font-semibold text-[#0f1729] flex-shrink-0">
                         {q.cost_eur === null ? '—' : new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(q.cost_eur)}
@@ -690,8 +690,8 @@ export default function Dashboard() {
                     {pendingList.map((q) => (
                       <tr key={q.id} className="hover:bg-surface-2 transition-colors">
                         <td className="px-6 py-3.5 text-sm font-medium text-[#0f1729]">
-                          {q.part.name}
-                          {q.part.part_number && <span className="block text-xs text-[#9aa3b2] font-normal">{q.part.part_number}</span>}
+                          {q.part?.name ?? '—'}
+                          {q.part?.part_number && <span className="block text-xs text-[#9aa3b2] font-normal">{q.part.part_number}</span>}
                         </td>
                         <td className="px-6 py-3.5 text-sm font-mono text-[#0f1729]">
                           {q.cost_eur === null ? '—' : new Intl.NumberFormat('en-DE', { style: 'currency', currency: 'EUR' }).format(q.cost_eur)}

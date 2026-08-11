@@ -35,7 +35,7 @@ interface Quotation {
     id: string; name: string; part_number: string | null; commodity_type: string
     material: string | null; primary_process: string | null
     dimensions: Record<string, number> | null; weight_kg: number | null
-  }
+  } | null
   kb_coverage_pct: number | null; ai_reasoning: string | null
   routing_path: string[] | null; volume_sensitivity: Record<string, number> | null
 }
@@ -329,8 +329,8 @@ export default function QuoteDetail() {
           {/* Left — part info */}
           <div className="space-y-3 flex-1 min-w-0">
             <div>
-              <h1 className="text-2xl font-bold text-[#0f1729] tracking-tight truncate">{quotation.part.name}</h1>
-              <p className="text-sm text-[#9aa3b2] mt-0.5">{quotation.part.part_number ?? 'No part number'} · {quotation.part.commodity_type}</p>
+              <h1 className="text-2xl font-bold text-[#0f1729] tracking-tight truncate">{quotation.part?.name ?? 'Unknown Part'}</h1>
+              <p className="text-sm text-[#9aa3b2] mt-0.5">{quotation.part?.part_number ?? 'No part number'} · {quotation.part?.commodity_type ?? '—'}</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
