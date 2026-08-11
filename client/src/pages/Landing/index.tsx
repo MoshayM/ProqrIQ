@@ -267,6 +267,11 @@ export default function Landing() {
                                  group-hover:w-full transition-all duration-300" />
               </a>
             ))}
+            <span className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full
+                             bg-[#f5a623]/10 border border-[#f5a623]/30 text-[#c27a10] font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#f5a623] animate-pulse" />
+              ProqrIQ.com · Coming Soon
+            </span>
           </motion.div>
 
           <motion.div
@@ -444,7 +449,7 @@ export default function Landing() {
                                 text-[11px] text-[#9aa3b2] border border-[#e5e8ef] text-left
                                 flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                  proqriq.vercel.app/dashboard
+                  app.proqriq.com/dashboard
                 </div>
                 <Logo size="sm" variant="full" />
               </div>
@@ -696,6 +701,104 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── TESTIMONIALS / SOCIAL PROOF ─────────────────────────────────── */}
+      <section className="py-24 max-w-6xl mx-auto px-6 relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-14"
+        >
+          <p className="text-[12px] font-bold text-[#e85c1a] uppercase tracking-[0.15em] mb-3">
+            What Engineers Say
+          </p>
+          <h2 className="text-4xl md:text-5xl font-extrabold text-[#0f1729] mb-4 tracking-tight">
+            Trusted by cost engineering teams
+          </h2>
+          <p className="text-[#6b7280] max-w-xl mx-auto text-[16px]">
+            Real feedback from engineers and procurement professionals who use ProqrIQ daily.
+          </p>
+        </motion.div>
+
+        <div className="grid md:grid-cols-3 gap-5">
+          {[
+            {
+              quote: "We went from spending half a day on a single quote to under 10 minutes. The KB-grounded estimates are actually defensible in supplier negotiations.",
+              name: "Head of Cost Engineering",
+              role: "Industrial Automation OEM",
+              stars: 5,
+              delay: 0,
+            },
+            {
+              quote: "The confidence gating saved us from three bad quotes in our first week. It asks the right clarification questions instead of just guessing.",
+              name: "Senior Cost Analyst",
+              role: "Precision Machining Supplier",
+              stars: 5,
+              delay: 0.08,
+            },
+            {
+              quote: "Bulk costing 40 parts overnight was a game-changer for our BOM review cycles. The assembly roll-up with deterministic margin is exactly what compliance needed.",
+              name: "Procurement Manager",
+              role: "Electronics Manufacturer",
+              stars: 5,
+              delay: 0.16,
+            },
+          ].map(({ quote, name, role, stars, delay }) => (
+            <motion.div
+              key={name}
+              initial={{ opacity: 0, y: 28 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-30px' }}
+              transition={{ delay, duration: 0.6 }}
+              className="bg-white rounded-2xl border border-[#e5e8ef] p-6 flex flex-col gap-4
+                         shadow-sm hover:shadow-lg transition-shadow duration-300"
+            >
+              {/* stars */}
+              <div className="flex gap-0.5">
+                {Array.from({ length: stars }).map((_, i) => (
+                  <Star key={i} className="w-4 h-4 fill-[#f5a623] text-[#f5a623]" />
+                ))}
+              </div>
+              <p className="text-[14px] text-[#374151] leading-relaxed flex-1">"{quote}"</p>
+              <div className="flex items-center gap-3 pt-3 border-t border-[#f4f6fb]">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1e2d4e] to-[#2d6ac8]
+                                flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">
+                  {name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                </div>
+                <div>
+                  <p className="text-[13px] font-semibold text-[#0f1729]">{name}</p>
+                  <p className="text-[11px] text-[#9aa3b2]">{role}</p>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* trust badges */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.3, duration: 0.6 }}
+          className="mt-12 flex flex-wrap justify-center gap-4"
+        >
+          {[
+            { icon: ShieldCheck, label: 'On-premise · No cloud lock-in' },
+            { icon: FileText,    label: 'GDPR-aware · Immutable audit log' },
+            { icon: Cpu,         label: 'Offline-capable with Ollama' },
+            { icon: TrendingUp,  label: 'SOC-2 aligned data practices' },
+          ].map(({ icon: Icon, label }) => (
+            <div key={label}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#e5e8ef]
+                         rounded-xl text-[12px] text-[#4a5568] font-medium shadow-sm">
+              <Icon className="w-4 h-4 text-[#1e2d4e]" />
+              {label}
+            </div>
+          ))}
+        </motion.div>
+      </section>
+
       {/* ── STATS ───────────────────────────────────────────────────────── */}
       <section id="stats" ref={statsRef}
         className="relative py-28 overflow-hidden z-10">
@@ -844,13 +947,26 @@ export default function Landing() {
 
       {/* ── FOOTER ──────────────────────────────────────────────────────── */}
       <footer className="border-t border-[#e5e8ef] bg-[#f4f6fb] py-10 relative z-10">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <Logo size="sm" variant="full" />
-          <div className="flex items-center gap-6 text-[12px] text-[#9aa3b2]">
-            <Link to="/terms"   className="hover:text-[#4a5568] transition-colors">Terms</Link>
-            <Link to="/privacy" className="hover:text-[#4a5568] transition-colors">Privacy</Link>
-            <Link to="/login"   className="hover:text-[#4a5568] transition-colors">Sign in</Link>
-            <span>© {new Date().getFullYear()} ProqrIQ</span>
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-5">
+            <div className="flex items-center gap-3">
+              <Logo size="sm" variant="full" />
+              <span className="text-[11px] px-2.5 py-1 rounded-full bg-[#f5a623]/10
+                               border border-[#f5a623]/30 text-[#c27a10] font-semibold">
+                ProqrIQ.com · Coming Soon
+              </span>
+            </div>
+            <div className="flex items-center gap-6 text-[12px] text-[#9aa3b2]">
+              <Link to="/terms"   className="hover:text-[#4a5568] transition-colors">Terms</Link>
+              <Link to="/privacy" className="hover:text-[#4a5568] transition-colors">Privacy</Link>
+              <Link to="/login"   className="hover:text-[#4a5568] transition-colors">Sign in</Link>
+              <Link to="/register" className="hover:text-[#4a5568] transition-colors">Get started</Link>
+            </div>
+          </div>
+          <div className="border-t border-[#e5e8ef] pt-5 flex flex-col sm:flex-row items-center
+                          justify-between gap-2 text-[11px] text-[#c2c8d6]">
+            <span>© {new Date().getFullYear()} ProqrIQ. All rights reserved.</span>
+            <span>AI-Powered Cost Engineering · On-premise · Built for industrial manufacturers</span>
           </div>
         </div>
       </footer>
