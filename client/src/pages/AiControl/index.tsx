@@ -35,7 +35,7 @@ interface AiConfig {
   confidence_gate: number; margin_pct: number; max_batch_items: number; bulk_concurrency: number
 }
 
-interface LlmKeyStatus { provider: string; key_preview: string; model: string | null; enabled: boolean }
+interface LlmKeyStatus { provider: string; key_preview: string; model: string | null; enabled: boolean; source?: 'db' | 'env' }
 
 interface LlmPreference { preferred_provider: string }
 
@@ -630,6 +630,7 @@ function AiControlInner() {
               const stored = llmKeys?.find(k => k.provider === meta.id)
               const form   = providerForms[meta.id]
               const connected = !!stored
+              const isEnvKey  = stored?.source === 'env'
 
               return (
                 <div key={meta.id} className={cn(
@@ -649,30 +650,43 @@ function AiControlInner() {
                     </div>
                     <span className={cn(
                       'flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0',
-                      connected ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-3 text-[#9aa3b2]',
+                      connected && !isEnvKey ? 'bg-emerald-50 text-emerald-700'
+                        : isEnvKey           ? 'bg-blue-50 text-blue-700'
+                        :                      'bg-surface-3 text-[#9aa3b2]',
                     )}>
-                      <span className={cn('w-1.5 h-1.5 rounded-full', connected ? 'bg-emerald-500' : 'bg-[#c8cdd8]')} />
-                      {connected ? 'Connected' : 'Not configured'}
+                      <span className={cn('w-1.5 h-1.5 rounded-full',
+                        connected && !isEnvKey ? 'bg-emerald-500'
+                          : isEnvKey           ? 'bg-blue-500'
+                          :                      'bg-[#c8cdd8]',
+                      )} />
+                      {connected && !isEnvKey ? 'Connected' : isEnvKey ? 'Connected (env)' : 'Not configured'}
                     </span>
                   </div>
 
                   {/* Connected state */}
                   {connected && (
                     <>
-                      {/* Masked key + remove */}
+                      {/* Masked key + optional remove */}
                       <div className="flex items-center gap-2">
                         <code className="flex-1 text-xs font-mono bg-surface-3 border border-[#e5e8ef] rounded-lg px-3 py-2 text-[#4a5568]">
                           {stored!.key_preview}
                         </code>
-                        <button
-                          onClick={() => handleRemoveKey(meta.id)}
-                          disabled={form.removing}
-                          className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Remove
-                        </button>
+                        {!isEnvKey && (
+                          <button
+                            onClick={() => handleRemoveKey(meta.id)}
+                            disabled={form.removing}
+                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Remove
+                          </button>
+                        )}
                       </div>
+                      {isEnvKey && (
+                        <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                          Configured via server <code className="font-mono">.env</code> — save a key above to override it in the database.
+                        </p>
+                      )}
 
                       {/* Model */}
                       <div>

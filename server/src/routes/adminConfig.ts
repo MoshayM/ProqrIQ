@@ -332,23 +332,39 @@ router.delete('/routes/:task', async (req, res) => {
 
 const MASKED_PROVIDERS = ['anthropic', 'openai', 'google', 'together', 'groq', 'xai'] as const
 
+const ENV_KEY_MAP: Record<string, string> = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai:    'OPENAI_API_KEY',
+  google:    'GEMINI_API_KEY',
+  together:  'TOGETHER_API_KEY',
+  groq:      'GROQ_API_KEY',
+  xai:       'GROK_API_KEY',
+}
+
 function maskKey(key: string): string {
   if (key.length <= 12) return '***'
   return key.slice(0, 7) + '...' + key.slice(-4)
 }
 
 // GET /admin/llm-keys — list providers with masked key + status
+// Returns DB-saved keys (source:'db') AND env-configured keys not yet in DB (source:'env')
 router.get('/llm-keys', async (_req, res) => {
   try {
     const rows = await db.select().from(llmApiKeys)
-    const data = rows
-      .filter(r => MASKED_PROVIDERS.includes(r.provider as (typeof MASKED_PROVIDERS)[number]))
-      .map(r => ({
-        provider:    r.provider,
-        key_preview: maskKey(r.api_key),
-        model:       r.model,
-        enabled:     r.enabled,
-      }))
+    const dbMap = new Map(rows.map(r => [r.provider, r]))
+
+    const data = MASKED_PROVIDERS.map(provider => {
+      const row = dbMap.get(provider)
+      if (row) {
+        return { provider, key_preview: maskKey(row.api_key), model: row.model, enabled: row.enabled, source: 'db' as const }
+      }
+      const envKey = process.env[ENV_KEY_MAP[provider] ?? '']
+      if (envKey) {
+        return { provider, key_preview: maskKey(envKey), model: null, enabled: true, source: 'env' as const }
+      }
+      return null
+    }).filter((r): r is NonNullable<typeof r> => r !== null)
+
     res.json({ success: true, data })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })
