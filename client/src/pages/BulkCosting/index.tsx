@@ -7,9 +7,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload, RefreshCw, X, Play, Eye, Trash2, ChevronLeft, AlertCircle, CheckCircle,
   Clock, Zap, AlertTriangle, Download, FileText, Layers, Wand2, FolderOpen,
-  ScanSearch, CheckSquare, ArrowRight, Edit2, Plus, Link2,
+  ScanSearch, CheckSquare, ArrowRight, Edit2, Plus, Link2, Loader2, FileSpreadsheet,
+  HelpCircle, Check, BarChart2,
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { exportQuoteToPDF, exportBatchToPDF } from '../../services/pdfExport'
 import { useAuth } from '../../hooks/useAuth'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
@@ -45,7 +47,12 @@ interface BatchItem {
   part_name: string
   status: BatchItemStatus
   error_message: string | null
+  error_code: string | null
   quotation_id: string | null
+  confidence_score: number | null
+  clarification_json: string[] | null
+  started_at: string | null
+  completed_at: string | null
   overrides_json: Record<string, unknown> | null
 }
 
@@ -193,12 +200,37 @@ function matchScore(partName: string, filename: string): number {
   return union > 0 ? inter / union : 0
 }
 
+// ─── Pipeline step helpers ────────────────────────────────────────────────────
+
+const PIPELINE_STEPS = [
+  { key: 'analyse',   label: 'Analyse Drawing' },
+  { key: 'search_kb', label: 'Search KB'        },
+  { key: 'estimate',  label: 'Cost Estimation'  },
+] as const
+
+type StepState = 'pending' | 'active' | 'done' | 'error'
+
+function getStepStates(status: BatchItemStatus): [StepState, StepState, StepState] {
+  switch (status) {
+    case 'analysing':            return ['active',  'pending', 'pending']
+    case 'searching_kb':         return ['done',    'active',  'pending']
+    case 'estimating':           return ['done',    'done',    'active']
+    case 'completed':            return ['done',    'done',    'done']
+    case 'needs_clarification':  return ['done',    'done',    'done']
+    case 'failed':               return ['done',    'done',    'error']
+    default:                     return ['pending', 'pending', 'pending']
+  }
+}
+
 // ─── BATCH DETAIL VIEW ───────────────────────────────────────────────────────
 
 function BatchDetail({ id }: { id: string }) {
   const navigate     = useNavigate()
   const queryClient  = useQueryClient()
-  const [isExporting, setIsExporting] = useState(false)
+  const [isExportingExcel, setIsExportingExcel] = useState(false)
+  const [isExportingPdf,   setIsExportingPdf]   = useState(false)
+  const [downloadingItemPdf,   setDownloadingItemPdf]   = useState<string | null>(null)
+  const [downloadingItemExcel, setDownloadingItemExcel] = useState<string | null>(null)
   const { canUse } = useSubscription()
 
   const { data: batch, isLoading, isError } = useQuery<CostingBatchWithItems>({
@@ -253,16 +285,65 @@ function BatchDetail({ id }: { id: string }) {
     editItemMut.mutate({ itemId: editingId, data: { part_name, overrides, rerun } })
   }
 
-  async function handleExport() {
-    setIsExporting(true)
+  async function handleExportExcel() {
+    setIsExportingExcel(true)
     try {
       const blob = await api.bulk.exportExcel(id)
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `batch-${id}.xlsx`; a.click()
+      const a = document.createElement('a'); a.href = url; a.download = `batch-${id}.xlsx`; a.click()
       URL.revokeObjectURL(url)
-    } catch { toast.error('Failed to export') }
-    finally { setIsExporting(false) }
+    } catch { toast.error('Failed to export Excel') }
+    finally { setIsExportingExcel(false) }
+  }
+
+  async function handleExportBatchPdf() {
+    if (!batch) return
+    const completedItems = batch.items.filter(i => i.status === 'completed' && i.quotation_id)
+    if (!completedItems.length) { toast.error('No completed items to export'); return }
+    setIsExportingPdf(true)
+    try {
+      const reports = await Promise.all(completedItems.map(async item => {
+        const [quoteData, cls, cts, mbs] = await Promise.all([
+          api.quotes.get(item.quotation_id!),
+          api.costLines(item.quotation_id!).list(),
+          api.cycleTime(item.quotation_id!).list(),
+          api.materials(item.quotation_id!).list(),
+        ])
+        const part = (quoteData as any).part ?? quoteData
+        return { partName: item.part_name, quote: quoteData, part, costLines: cls, cycleTimeSteps: cts, materialBreakdowns: mbs }
+      }))
+      exportBatchToPDF(id, batch.created_at, batch.completed_at, reports)
+      toast.success('Batch PDF downloaded')
+    } catch { toast.error('Failed to generate PDF') }
+    finally { setIsExportingPdf(false) }
+  }
+
+  async function handleItemPdf(item: BatchItem) {
+    if (!item.quotation_id) return
+    setDownloadingItemPdf(item.id)
+    try {
+      const [quoteData, cls, cts, mbs] = await Promise.all([
+        api.quotes.get(item.quotation_id),
+        api.costLines(item.quotation_id).list(),
+        api.cycleTime(item.quotation_id).list(),
+        api.materials(item.quotation_id).list(),
+      ])
+      const part = (quoteData as any).part ?? quoteData
+      exportQuoteToPDF(quoteData, part, cls, cts, mbs)
+    } catch { toast.error('Failed to generate PDF') }
+    finally { setDownloadingItemPdf(null) }
+  }
+
+  async function handleItemExcel(item: BatchItem) {
+    if (!item.quotation_id) return
+    setDownloadingItemExcel(item.id)
+    try {
+      const blob = await api.quotes.exportExcel(item.quotation_id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = `quote-${item.quotation_id}.xlsx`; a.click()
+      URL.revokeObjectURL(url)
+    } catch { toast.error('Failed to export Excel') }
+    finally { setDownloadingItemExcel(null) }
   }
 
   if (isLoading) {
@@ -304,34 +385,45 @@ function BatchDetail({ id }: { id: string }) {
     )
   }
 
-  const pct        = batch.total_items > 0 ? Math.round((batch.processed_items / batch.total_items) * 100) : 0
-  const canRetry   = batch.status === 'failed' || batch.status === 'completed_with_errors'
-  const canCancel  = batch.status === 'processing' || batch.status === 'queued'
-  const isStuck    = batch.status === 'processing' && (Date.now() - new Date(batch.created_at).getTime()) > 20 * 60 * 1000
+  const pct          = batch.total_items > 0 ? Math.round((batch.processed_items / batch.total_items) * 100) : 0
+  const canRetry     = batch.status === 'failed' || batch.status === 'completed_with_errors'
+  const canCancel    = batch.status === 'processing' || batch.status === 'queued'
+  const isStuck      = batch.status === 'processing' && (Date.now() - new Date(batch.created_at).getTime()) > 20 * 60 * 1000
   const batchDuration = batch.completed_at ? differenceInSeconds(new Date(batch.completed_at), new Date(batch.created_at)) : null
   const batchTimingLabel = batchDuration !== null && batch.total_items > 0
     ? (() => { const m = Math.floor(batchDuration / 60); const s = batchDuration % 60; const dur = m > 0 ? `${m}m ${s}s` : `${s}s`; return `${batch.total_items} part${batch.total_items !== 1 ? 's' : ''} estimated in ${dur} (avg ${(batchDuration / batch.total_items).toFixed(1)}s/part)` })()
     : null
 
-  // Completed items with quotations — for "Create Assembly" pre-population
   const completedItems = batch.items.filter(i => i.status === 'completed' && i.quotation_id)
+  const isActive       = batch.status === 'processing' || batch.status === 'queued'
+
+  // ── Stats for the summary header ────────────────────────────────────────────
+  const statCards = [
+    { label: 'Total',     value: batch.total_items,     icon: <Layers className="w-4 h-4" />,        color: 'text-[#4a5568]' },
+    { label: 'Completed', value: completedItems.length,  icon: <CheckCircle className="w-4 h-4" />,   color: 'text-green-600'  },
+    { label: 'Failed',    value: batch.failed_items,     icon: <AlertCircle className="w-4 h-4" />,   color: 'text-red-600'    },
+    { label: 'Pending',   value: batch.items.filter(i => ['queued','analysing','searching_kb','estimating','processing'].includes(i.status)).length,
+                                                          icon: <Clock className="w-4 h-4" />,          color: 'text-amber-600'  },
+  ]
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
       className="page-content space-y-6"
     >
+      {/* ── Back + title ──────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate('/bulk')} iconLeft={<ChevronLeft className="w-4 h-4" />}>
           Back
         </Button>
       </div>
 
+      {/* ── Batch header card ─────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
-              <CardTitle>Batch #{id.slice(0, 8)}</CardTitle>
+              <CardTitle>Batch #{id.slice(0, 8).toUpperCase()}</CardTitle>
               {batch.completed_at && (
                 <p className="text-sm text-[#9aa3b2] mt-1">
                   Completed {format(new Date(batch.completed_at), 'dd MMM yyyy HH:mm')}
@@ -343,21 +435,31 @@ function BatchDetail({ id }: { id: string }) {
             </span>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-[#4a5568]">
-            {batch.processed_items} / {batch.total_items} items processed
-            {batch.failed_items > 0 && <span className="text-red-600 ml-2">• {batch.failed_items} failed</span>}
-          </p>
+        <CardContent className="space-y-5">
+          {/* Stat pills */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {statCards.map(s => (
+              <div key={s.label} className="bg-surface-2 rounded-lg px-3 py-2.5 flex items-center gap-2.5">
+                <span className={cn('flex-shrink-0', s.color)}>{s.icon}</span>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2]">{s.label}</p>
+                  <p className={cn('text-lg font-bold font-mono leading-none mt-0.5', s.color)}>{s.value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Progress */}
           {batchTimingLabel && (
-            <p className="text-xs text-[#9aa3b2] flex items-center gap-1 mt-0.5">
-              <Clock className="w-3 h-3" />
-              {batchTimingLabel}
+            <p className="text-xs text-[#9aa3b2] flex items-center gap-1.5">
+              <Clock className="w-3 h-3" />{batchTimingLabel}
             </p>
           )}
           <div className="space-y-1.5">
             <ProgressBar value={pct} variant={batchProgressVariant(batch.status)} size="sm" />
             <p className="text-xs text-[#9aa3b2] text-right">{pct}%</p>
           </div>
+
           {isStuck && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
@@ -367,6 +469,8 @@ function BatchDetail({ id }: { id: string }) {
               </div>
             </div>
           )}
+
+          {/* Action buttons */}
           <div className="flex flex-wrap gap-2">
             {canCancel && (
               <Button variant="outline" size="sm" onClick={() => cancelMut.mutate()} loading={cancelMut.isPending}
@@ -380,21 +484,22 @@ function BatchDetail({ id }: { id: string }) {
                 Retry Failed
               </Button>
             )}
-            {canUse('excel_export') && batch.status === 'completed' && (
-              <Button variant="outline" size="sm" onClick={handleExport} loading={isExporting}
-                iconLeft={<Download className="w-3 h-3" />}>
-                Export Excel
+            {canUse('excel_export') && completedItems.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handleExportExcel} loading={isExportingExcel}
+                iconLeft={<FileSpreadsheet className="w-3 h-3" />}>
+                Export All Excel
               </Button>
             )}
-            {/* Create Assembly from completed batch items */}
-            {batch.status === 'completed' && completedItems.length >= 2 && (
-              <Button
-                variant="outline"
-                size="sm"
-                iconLeft={<Layers className="w-3 h-3" />}
+            {completedItems.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handleExportBatchPdf} loading={isExportingPdf}
+                iconLeft={<FileText className="w-3 h-3" />}>
+                Export All PDF
+              </Button>
+            )}
+            {completedItems.length >= 2 && (
+              <Button variant="outline" size="sm" iconLeft={<Layers className="w-3 h-3" />}
                 onClick={() => navigate(`/assemblies?from_batch=${id}`)}
-                className="text-purple-700 border-purple-200 hover:bg-purple-50"
-              >
+                className="text-purple-700 border-purple-200 hover:bg-purple-50">
                 Create Assembly
               </Button>
             )}
@@ -402,152 +507,354 @@ function BatchDetail({ id }: { id: string }) {
         </CardContent>
       </Card>
 
-      {/* Items List */}
+      {/* ── Costing Workflow ──────────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Batch Items</CardTitle>
-            <span className="text-sm text-[#9aa3b2]">{batch.items.length} items</span>
+            <CardTitle>Costing Workflow</CardTitle>
+            <span className="text-sm text-[#9aa3b2]">{batch.items.length} part{batch.items.length !== 1 ? 's' : ''}</span>
+          </div>
+          {/* Batch-level step legend */}
+          <div className="mt-3 flex items-center gap-6 text-xs text-[#9aa3b2]">
+            {PIPELINE_STEPS.map((step, si) => (
+              <div key={step.key} className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded-full bg-navy flex items-center justify-center">
+                  <span className="text-white text-[9px] font-bold">{si + 1}</span>
+                </div>
+                <span>{step.label}</span>
+              </div>
+            ))}
           </div>
         </CardHeader>
         <CardContent>
           {batch.items.length === 0 ? (
             <EmptyState title="No items yet" description="Items will appear here once the batch starts processing." />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <AnimatePresence initial={false}>
-                {batch.items.map((item, i) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.03, duration: 0.2 }}
-                    className={cn(
-                      'rounded-lg border transition-colors',
-                      item.status === 'processing' ? 'border-blue-200 bg-blue-50/40' :
-                      item.status === 'completed'   ? 'border-green-100 bg-green-50/30' :
-                      item.status === 'failed'      ? 'border-red-100 bg-red-50/20' :
-                      item.status === 'needs_clarification' ? 'border-amber-100 bg-amber-50/20' :
-                      editingId === item.id         ? 'border-brand/30 bg-brand/5' :
-                      'border-transparent hover:bg-surface-2',
-                    )}
-                  >
-                    {/* ── Main row ─────────────────────────────────────────── */}
-                    <div className="flex items-center gap-3 px-3 py-2.5">
-                      <div className="flex-shrink-0">
-                        {item.status === 'processing' ? (
-                          <div className="relative w-5 h-5">
-                            <span className="absolute inset-0 rounded-full bg-blue-400/30 animate-ping" style={{ animationDuration: '1.2s' }} />
-                            <span className="absolute inset-1 rounded-full bg-blue-500" />
-                          </div>
-                        ) : item.status === 'completed'           ? <CheckCircle  className="w-4 h-4 text-green-600" />
-                          : item.status === 'failed'              ? <AlertCircle  className="w-4 h-4 text-red-500" />
-                          : item.status === 'needs_clarification' ? <AlertTriangle className="w-4 h-4 text-amber-500" />
-                          : item.status === 'queued'              ? <div className="w-4 h-4 rounded-full border-2 border-[#c8cdd8] border-t-amber-400 animate-spin" style={{ animationDuration: '1s' }} />
-                          : <div className="w-4 h-4 rounded-full bg-[#e5e8ef]" />}
-                      </div>
-                      <p className="flex-1 min-w-0 text-sm font-medium text-[#0f1729] truncate">{item.part_name}</p>
-                      <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize flex-shrink-0', ITEM_STATUS_COLORS[item.status])}>
-                        {item.status.replace(/_/g, ' ')}
-                      </span>
-                      {item.error_message ? (
-                        <span className="text-red-500 text-xs truncate max-w-[120px] flex-shrink-0" title={item.error_message}>{item.error_message}</span>
-                      ) : item.quotation_id ? (
-                        <Link to={`/quotes/${item.quotation_id}`} onClick={e => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 text-brand hover:underline text-xs font-medium flex-shrink-0">
-                          <Eye className="w-3 h-3" /> View
-                        </Link>
-                      ) : null}
-                      {/* Edit toggle — not available while actively running */}
-                      {!['analysing','searching_kb','estimating','processing'].includes(item.status) && (
-                        <button
-                          type="button"
-                          onClick={() => editingId === item.id ? (setEditingId(null), setEditForm(null)) : startEdit(item)}
-                          title={editingId === item.id ? 'Close' : 'Edit parameters'}
-                          className={cn(
-                            'flex-shrink-0 p-1 rounded transition-colors',
-                            editingId === item.id ? 'text-brand bg-brand/10' : 'text-[#c8cdd8] hover:text-brand hover:bg-brand/5',
-                          )}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                {batch.items.map((item, i) => {
+                  const stepStates = getStepStates(item.status)
+                  const isRunning  = ['analysing','searching_kb','estimating','processing'].includes(item.status)
 
-                    {/* ── Inline edit panel ────────────────────────────────── */}
-                    {editingId === item.id && editForm && (
-                      <div className="px-3 pb-3 space-y-3 border-t border-brand/10">
-                        <p className="text-[10px] uppercase tracking-wide text-brand font-semibold pt-2">Edit Parameters</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          <div className="col-span-full">
-                            <p className={LBL}>Part name</p>
-                            <input value={editForm.part_name}
-                              onChange={e => setEditForm(f => f ? { ...f, part_name: e.target.value } : f)}
-                              className={INP} placeholder="Part name" />
-                          </div>
-                          <div>
-                            <p className={LBL}>Supplier country</p>
-                            <input value={editForm.supplier_country}
-                              onChange={e => setEditForm(f => f ? { ...f, supplier_country: e.target.value } : f)}
-                              className={INP} placeholder="DE" maxLength={3} />
-                          </div>
-                          <div>
-                            <p className={LBL}>Currency</p>
-                            <input value={editForm.supplier_currency}
-                              onChange={e => setEditForm(f => f ? { ...f, supplier_currency: e.target.value } : f)}
-                              className={INP} placeholder="EUR" maxLength={3} />
-                          </div>
-                          <div>
-                            <p className={LBL}>Annual volume</p>
-                            <input type="number" min={1} value={editForm.annual_volume}
-                              onChange={e => setEditForm(f => f ? { ...f, annual_volume: Number(e.target.value) || 1 } : f)}
-                              className={NUM} />
-                          </div>
-                          <div>
-                            <p className={LBL}>Lot size</p>
-                            <input type="number" min={1} value={editForm.lot_size}
-                              onChange={e => setEditForm(f => f ? { ...f, lot_size: Number(e.target.value) || 1 } : f)}
-                              className={NUM} />
-                          </div>
-                          <div>
-                            <p className={LBL}>Procurement</p>
-                            <select value={editForm.procurement_type}
-                              onChange={e => setEditForm(f => f ? { ...f, procurement_type: e.target.value } : f)}
-                              className={SEL}>
-                              <option value="in_house">In-house</option>
-                              <option value="purchased">Purchased</option>
-                              <option value="sub_contracted">Sub-contracted</option>
-                            </select>
-                          </div>
+                  return (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.025, duration: 0.25 }}
+                      className={cn(
+                        'rounded-xl border bg-white shadow-xs overflow-hidden transition-shadow',
+                        item.status === 'completed'          ? 'border-green-200'  :
+                        item.status === 'failed'             ? 'border-red-200'    :
+                        item.status === 'needs_clarification'? 'border-amber-200'  :
+                        isRunning                            ? 'border-blue-200'   :
+                        editingId === item.id                ? 'border-brand/40'   :
+                        'border-[#e5e8ef]',
+                      )}
+                    >
+                      {/* ── Card header ────────────────────────────────────── */}
+                      <div className={cn(
+                        'flex items-center justify-between gap-3 px-4 py-3 border-b',
+                        item.status === 'completed'          ? 'bg-green-50/60 border-green-100'   :
+                        item.status === 'failed'             ? 'bg-red-50/50 border-red-100'        :
+                        item.status === 'needs_clarification'? 'bg-amber-50/60 border-amber-100'   :
+                        isRunning                            ? 'bg-blue-50/60 border-blue-100'      :
+                        'bg-surface-2 border-[#e5e8ef]',
+                      )}>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {item.status === 'completed'           ? <CheckCircle   className="w-4 h-4 text-green-600 flex-shrink-0" />
+                           : item.status === 'failed'            ? <AlertCircle   className="w-4 h-4 text-red-500 flex-shrink-0"   />
+                           : item.status === 'needs_clarification'? <HelpCircle  className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                           : isRunning                           ? <Loader2       className="w-4 h-4 text-blue-500 flex-shrink-0 animate-spin" />
+                           : <div className="w-4 h-4 rounded-full border-2 border-[#e5e8ef] flex-shrink-0" />}
+                          <p className="text-sm font-semibold text-[#0f1729] truncate">{item.part_name}</p>
                         </div>
-                        <div className="flex items-center gap-2 pt-1">
-                          <Button type="button" size="sm" variant="outline"
-                            onClick={() => saveEdit(false)}
-                            loading={editItemMut.isPending}>
-                            Save
-                          </Button>
-                          {['queued','failed','needs_clarification'].includes(item.status) && (
-                            <Button type="button" size="sm" variant="primary"
-                              onClick={() => saveEdit(true)}
-                              loading={editItemMut.isPending}
-                              iconLeft={<RefreshCw className="w-3 h-3" />}>
-                              Save &amp; Re-run
-                            </Button>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {item.confidence_score != null && (item.status === 'completed' || item.status === 'needs_clarification') && (
+                            <span className={cn(
+                              'text-xs font-mono font-bold px-2 py-0.5 rounded-full border',
+                              item.confidence_score >= 90 ? 'bg-green-50 text-green-700 border-green-200'  :
+                              item.confidence_score >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200'  :
+                              'bg-red-50 text-red-600 border-red-200',
+                            )}>
+                              {item.confidence_score.toFixed(1)}%
+                            </span>
                           )}
-                          <button type="button"
-                            onClick={() => { setEditingId(null); setEditForm(null) }}
-                            className="text-xs text-[#9aa3b2] hover:text-[#4a5568] ml-auto">
-                            Cancel
-                          </button>
+                          <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium capitalize border', ITEM_STATUS_COLORS[item.status])}>
+                            {item.status.replace(/_/g, ' ')}
+                          </span>
                         </div>
                       </div>
-                    )}
-                  </motion.div>
-                ))}
+
+                      {/* ── Pipeline stepper (like NewQuote wizard) ─────────── */}
+                      <div className="px-4 py-4">
+                        <div className="flex items-start">
+                          {PIPELINE_STEPS.map((step, si) => {
+                            const state = stepStates[si]
+                            return (
+                              <React.Fragment key={step.key}>
+                                <div className="flex flex-col items-center">
+                                  <motion.div
+                                    animate={{
+                                      backgroundColor:
+                                        state === 'done'   ? '#1e2d4e' :
+                                        state === 'active' ? '#e85c1a' :
+                                        state === 'error'  ? '#fef2f2' :
+                                        '#f1f3f7',
+                                      borderColor:
+                                        state === 'done'   ? '#1e2d4e' :
+                                        state === 'active' ? '#e85c1a' :
+                                        state === 'error'  ? '#fca5a5' :
+                                        '#e5e8ef',
+                                    }}
+                                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                                    className="w-7 h-7 rounded-full flex items-center justify-center border-2"
+                                  >
+                                    {state === 'done'  ? (
+                                      <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500 }}>
+                                        <Check className="w-3 h-3 text-white" />
+                                      </motion.span>
+                                    ) : state === 'active' ? (
+                                      <Loader2 className="w-3 h-3 text-white animate-spin" />
+                                    ) : state === 'error' ? (
+                                      <X className="w-3 h-3 text-red-500" />
+                                    ) : (
+                                      <span className="text-[10px] font-bold text-[#9aa3b2]">{si + 1}</span>
+                                    )}
+                                  </motion.div>
+                                  <span className={cn(
+                                    'mt-1.5 text-[10px] whitespace-nowrap font-medium text-center',
+                                    state === 'active' ? 'text-brand' :
+                                    state === 'done'   ? 'text-navy'  :
+                                    state === 'error'  ? 'text-red-600' :
+                                    'text-[#9aa3b2]',
+                                  )}>
+                                    {step.label}
+                                  </span>
+                                </div>
+                                {si < PIPELINE_STEPS.length - 1 && (
+                                  <div className="flex-1 mx-2 mt-3.5 h-0.5 rounded-full overflow-hidden bg-[#e5e8ef]">
+                                    <motion.div
+                                      className="h-full bg-navy rounded-full"
+                                      animate={{ width: stepStates[si] === 'done' ? '100%' : '0%' }}
+                                      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                                    />
+                                  </div>
+                                )}
+                              </React.Fragment>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* ── Error panel ─────────────────────────────────────── */}
+                      {item.status === 'failed' && (
+                        <div className="mx-4 mb-3 p-3 rounded-lg bg-red-50 border border-red-200">
+                          <p className="text-xs font-semibold text-red-700 mb-1 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            {item.error_code ? item.error_code.replace(/_/g, ' ') : 'Error'}
+                          </p>
+                          <p className="text-xs text-red-600">{item.error_message ?? 'An unexpected error occurred.'}</p>
+                          <p className="text-[10px] text-red-400 mt-1.5">Edit the parameters below and re-run, or use the batch Retry button.</p>
+                        </div>
+                      )}
+
+                      {/* ── Clarification questions panel ───────────────────── */}
+                      {item.status === 'needs_clarification' && Array.isArray(item.clarification_json) && item.clarification_json.length > 0 && (
+                        <div className="mx-4 mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                          <p className="text-xs font-semibold text-amber-700 mb-2 flex items-center gap-1.5">
+                            <HelpCircle className="w-3.5 h-3.5" />
+                            AI needs more information to complete this estimate:
+                          </p>
+                          <ol className="space-y-1.5">
+                            {item.clarification_json.map((q, qi) => (
+                              <li key={qi} className="text-xs text-amber-700 flex gap-2">
+                                <span className="flex-shrink-0 font-mono text-amber-400">{qi + 1}.</span>
+                                <span>{q}</span>
+                              </li>
+                            ))}
+                          </ol>
+                          <p className="text-[10px] text-amber-500 mt-2">Edit the part parameters to add clarifying context, then re-run.</p>
+                        </div>
+                      )}
+
+                      {/* ── Action row ───────────────────────────────────────── */}
+                      <div className="flex items-center gap-2 px-4 pb-3 flex-wrap">
+                        {item.quotation_id && (
+                          <Link to={`/quotes/${item.quotation_id}`}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-brand hover:text-brand/80 hover:underline transition-colors">
+                            <Eye className="w-3 h-3" /> View Quote
+                          </Link>
+                        )}
+                        {item.quotation_id && (
+                          <>
+                            <Button size="sm" variant="outline"
+                              className="h-7 px-2.5 text-xs"
+                              onClick={() => handleItemPdf(item)}
+                              loading={downloadingItemPdf === item.id}
+                              iconLeft={<FileText className="w-3 h-3" />}>
+                              PDF
+                            </Button>
+                            {canUse('excel_export') && (
+                              <Button size="sm" variant="outline"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={() => handleItemExcel(item)}
+                                loading={downloadingItemExcel === item.quotation_id}
+                                iconLeft={<FileSpreadsheet className="w-3 h-3" />}>
+                                Excel
+                              </Button>
+                            )}
+                          </>
+                        )}
+                        <div className="flex-1" />
+                        {!isRunning && (
+                          <button
+                            type="button"
+                            onClick={() => editingId === item.id ? (setEditingId(null), setEditForm(null)) : startEdit(item)}
+                            className={cn(
+                              'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors',
+                              editingId === item.id
+                                ? 'text-brand border-brand/30 bg-brand/5'
+                                : 'text-[#9aa3b2] border-[#e5e8ef] hover:text-brand hover:border-brand/30 hover:bg-brand/5',
+                            )}
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            {editingId === item.id ? 'Close Edit' : 'Edit Parameters'}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* ── Inline edit panel ────────────────────────────────── */}
+                      <AnimatePresence>
+                        {editingId === item.id && editForm && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="border-t border-brand/10 overflow-hidden"
+                          >
+                            <div className="px-4 pb-4 pt-3 space-y-3">
+                              <p className="text-[10px] uppercase tracking-wide text-brand font-semibold">Edit Parameters</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                <div className="col-span-full">
+                                  <p className={LBL}>Part name</p>
+                                  <input value={editForm.part_name}
+                                    onChange={e => setEditForm(f => f ? { ...f, part_name: e.target.value } : f)}
+                                    className={INP} placeholder="Part name" />
+                                </div>
+                                <div>
+                                  <p className={LBL}>Supplier country</p>
+                                  <input value={editForm.supplier_country}
+                                    onChange={e => setEditForm(f => f ? { ...f, supplier_country: e.target.value } : f)}
+                                    className={INP} placeholder="DE" maxLength={3} />
+                                </div>
+                                <div>
+                                  <p className={LBL}>Currency</p>
+                                  <input value={editForm.supplier_currency}
+                                    onChange={e => setEditForm(f => f ? { ...f, supplier_currency: e.target.value } : f)}
+                                    className={INP} placeholder="EUR" maxLength={3} />
+                                </div>
+                                <div>
+                                  <p className={LBL}>Annual volume</p>
+                                  <input type="number" min={1} value={editForm.annual_volume}
+                                    onChange={e => setEditForm(f => f ? { ...f, annual_volume: Number(e.target.value) || 1 } : f)}
+                                    className={NUM} />
+                                </div>
+                                <div>
+                                  <p className={LBL}>Lot size</p>
+                                  <input type="number" min={1} value={editForm.lot_size}
+                                    onChange={e => setEditForm(f => f ? { ...f, lot_size: Number(e.target.value) || 1 } : f)}
+                                    className={NUM} />
+                                </div>
+                                <div>
+                                  <p className={LBL}>Procurement</p>
+                                  <select value={editForm.procurement_type}
+                                    onChange={e => setEditForm(f => f ? { ...f, procurement_type: e.target.value } : f)}
+                                    className={SEL}>
+                                    <option value="in_house">In-house</option>
+                                    <option value="purchased">Purchased</option>
+                                    <option value="sub_contracted">Sub-contracted</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 pt-1">
+                                <Button type="button" size="sm" variant="outline"
+                                  onClick={() => saveEdit(false)} loading={editItemMut.isPending}>
+                                  Save Only
+                                </Button>
+                                {['queued','failed','needs_clarification'].includes(item.status) && (
+                                  <Button type="button" size="sm" variant="primary"
+                                    onClick={() => saveEdit(true)} loading={editItemMut.isPending}
+                                    iconLeft={<RefreshCw className="w-3 h-3" />}>
+                                    Save &amp; Re-run
+                                  </Button>
+                                )}
+                                <button type="button"
+                                  onClick={() => { setEditingId(null); setEditForm(null) }}
+                                  className="text-xs text-[#9aa3b2] hover:text-[#4a5568] ml-auto">
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  )
+                })}
               </AnimatePresence>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* ── Cost Comparison Table (shown once batch is done) ──────────────────── */}
+      {completedItems.length >= 2 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-brand" />
+              <CardTitle>Part Cost Comparison</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[#e5e8ef]">
+                    <th className="text-left py-2 pr-4 font-semibold text-[#4a5568] whitespace-nowrap">#</th>
+                    <th className="text-left py-2 pr-4 font-semibold text-[#4a5568] whitespace-nowrap">Part Name</th>
+                    <th className="text-right py-2 pr-4 font-semibold text-[#4a5568] whitespace-nowrap">Confidence</th>
+                    <th className="text-right py-2 pr-4 font-semibold text-[#4a5568] whitespace-nowrap">Overall Cost</th>
+                    <th className="text-right py-2 font-semibold text-[#4a5568] whitespace-nowrap">Final Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {completedItems.map((item, i) => (
+                    <tr key={item.id} className={cn('border-b border-[#f1f3f7]', i % 2 === 0 ? 'bg-white' : 'bg-surface-2')}>
+                      <td className="py-2 pr-4 text-[#9aa3b2]">{i + 1}</td>
+                      <td className="py-2 pr-4 font-medium text-[#0f1729] max-w-[200px] truncate">{item.part_name}</td>
+                      <td className="py-2 pr-4 text-right font-mono">
+                        {item.confidence_score != null ? (
+                          <span className={cn(
+                            'font-semibold',
+                            item.confidence_score >= 90 ? 'text-green-600' :
+                            item.confidence_score >= 70 ? 'text-amber-600' :
+                            'text-red-600',
+                          )}>
+                            {item.confidence_score.toFixed(1)}%
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="py-2 pr-4 text-right font-mono text-[#0f1729]">—</td>
+                      <td className="py-2 text-right font-mono font-semibold text-[#0f1729]">—</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[10px] text-[#9aa3b2] mt-2">Open individual quotes to see full cost breakdown. Use "Export All PDF" for a complete report.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </motion.div>
   )
 }

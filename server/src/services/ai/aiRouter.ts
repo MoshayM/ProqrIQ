@@ -56,13 +56,18 @@ function isGroqEnabled(): boolean {
 }
 
 // ─── Two routing tiers ────────────────────────────────────────────────────────
-// quality(): accuracy-first. Groq 70B free → Anthropic Sonnet paid.
-//   Use for: costing, extraction, negotiation — tasks where an incorrect answer
-//   costs more than the model call.
+// accuracyFirst(): always Anthropic Sonnet — for bulk/single costing where
+//   confidence gate enforcement demands the best model regardless of cost.
+// quality(): accuracy-first with Groq free fallback. Groq 70B free → Anthropic Sonnet paid.
+//   Use for: extraction, negotiation — tasks where accuracy matters but Groq is acceptable.
 // fast(): cost-first. Groq 8B free → Anthropic Haiku paid.
 //   Use for: discovery, summaries, clarification, email — tasks where speed and
 //   cheapness matter more than maximum accuracy.
 // Vision routing is handled separately via requiresVision + VISION_FALLBACK_MODEL.
+
+function accuracyFirst(): RouteResult {
+  return { provider: 'anthropic', model: 'claude-sonnet-4-20250514' }
+}
 
 function quality(): RouteResult {
   if (isGroqEnabled()) return { provider: 'groq', model: 'llama-3.3-70b-versatile' }
@@ -77,9 +82,9 @@ function fast(): RouteResult {
 function getDefault(task: AITask): RouteResult {
   switch (task) {
     // ─── Costing — accuracy critical, confidence gate enforced ────────────────
-    case 'costing':             return quality()
-    case 'bulk_costing':        return quality()
-    case 'assembly_costing':    return quality()
+    case 'costing':             return accuracyFirst()
+    case 'bulk_costing':        return accuracyFirst()
+    case 'assembly_costing':    return accuracyFirst()
     // cad_costing: quality() for text-mode 3D files; vision override kicks in for images
     case 'cad_costing':         return quality()
 
