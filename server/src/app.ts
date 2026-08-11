@@ -59,7 +59,7 @@ app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'))
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const KEY    = process.env.STRIPE_SECRET_KEY
   const SECRET = process.env.STRIPE_WEBHOOK_SECRET
-  if (!KEY || !SECRET) { res.status(200).json({ received: true }); return }
+  if (!KEY || !SECRET) { res.status(400).json({ error: 'Webhook not configured' }); return }
 
   let event: Stripe.Event
   try {
@@ -132,7 +132,7 @@ app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), as
   const sig     = req.headers['x-razorpay-signature'] as string | undefined
   const rawBody = (req.body as Buffer).toString('utf-8')
 
-  if (!process.env.RAZORPAY_WEBHOOK_SECRET) { res.status(200).json({ received: true }); return }
+  if (!process.env.RAZORPAY_WEBHOOK_SECRET) { res.status(400).json({ error: 'Webhook not configured' }); return }
   if (!sig || !verifyWebhookSignature(rawBody, sig)) {
     res.status(400).json({ error: 'Invalid signature' }); return
   }
