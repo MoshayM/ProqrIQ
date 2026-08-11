@@ -139,7 +139,6 @@ const ACCEPTED_DRAWING_EXTS = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif
 
 const BULK_MAX = 50
 
-type BatchInputMode = 'drawings' | 'spreadsheet' | 'smart'
 
 interface ItemParams {
   supplier_country: string
@@ -553,40 +552,46 @@ function BatchDetail({ id }: { id: string }) {
   )
 }
 
-// ─── DRAWING FILES MODE ───────────────────────────────────────────────────────
+// ─── UNIFIED UPLOAD MODE ─────────────────────────────────────────────────────
 
-function DrawingFilesMode({
-  onCreated,
-}: {
-  onCreated: () => void
-}) {
-  const queryClient = useQueryClient()
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [files, setFiles]         = useState<File[]>([])
-  const [isDragging, setIsDragging] = useState(false)
-  const [itemParams, setItemParams] = useState<Record<string, ItemParams>>({})
+function UnifiedUploadMode({ onCreated }: { onCreated: () => void }) {
+  const queryClient      = useQueryClient()
+  const drawingInputRef  = useRef<HTMLInputElement>(null)
+  const manifestInputRef = useRef<HTMLInputElement>(null)
+  const rowFileRefs      = useRef<Record<string, HTMLInputElement | null>>({})
+
+  // ── Files ─────────────────────────────────────────────────────────────────
+  const [drawingFiles, setDrawingFiles]     = useState<File[]>([])
+  const [isDragging, setIsDragging]         = useState(false)
+  const [manifestFile, setManifest]         = useState<File | null>(null)
+  const [sheetRowCount, setSheetRowCount]   = useState<number | null>(null)
+  const [step, setStep]                     = useState<'upload' | 'review'>('upload')
+
+  // ── Drawing-path state ────────────────────────────────────────────────────
   const [defaults, setDefaults]   = useState<ItemParams>({ ...DEFAULT_PARAMS })
-
-  // AI analysis state
+  const [itemParams, setItemParams] = useState<Record<string, ItemParams>>({})
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analyzed, setAnalyzed]       = useState<AnalyzedPart[] | null>(null)
+  const [analyzed, setAnalyzed]   = useState<AnalyzedPart[] | null>(null)
 
-  const createMut = useMutation({
-    mutationFn: (fd: FormData) => api.bulk.create(fd),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['batches'] })
-      toast.success('Batch created — processing started')
-      setFiles([]); setItemParams({}); setAnalyzed(null)
-      onCreated()
-    },
-    onError: () => toast.error('Failed to create batch'),
-  })
+  // ── Review-path state ─────────────────────────────────────────────────────
+  const [reviewRows, setReviewRows] = useState<ReviewRow[]>([])
+  const [isParsing, setIsParsing]   = useState(false)
 
+  const hasDrawings = drawingFiles.length > 0
+  const hasManifest = manifestFile !== null
+  const uploadMode  = hasDrawings && hasManifest ? 'both'
+    : hasDrawings ? 'drawings'
+    : hasManifest ? 'manifest'
+    : 'empty'
+
+  // ── Add drawings ──────────────────────────────────────────────────────────
   function addFiles(incoming: File[]) {
-    const valid = incoming.filter(f => ACCEPTED_DRAWING_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ''))
-    if (valid.length < incoming.length) toast.error('Some files skipped — only PDF / PNG / JPG / WEBP accepted')
+    const valid = incoming.filter(f =>
+      ACCEPTED_DRAWING_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ''))
+    if (valid.length < incoming.length)
+      toast.error('Some files skipped — only PDF / PNG / JPG / WEBP accepted')
     if (!valid.length) return
-    setFiles(prev => {
+    setDrawingFiles(prev => {
       const existing = new Set(prev.map(f => f.name))
       const fresh = valid.filter(f => !existing.has(f.name))
       setItemParams(curr => {
@@ -596,32 +601,49 @@ function DrawingFilesMode({
       })
       return [...prev, ...fresh]
     })
-    setAnalyzed(null) // new files invalidate previous analysis
   }
 
   function removeFile(name: string) {
-    setFiles(prev => prev.filter(f => f.name !== name))
+    setDrawingFiles(prev => prev.filter(f => f.name !== name))
     setItemParams(prev => { const { [name]: _, ...rest } = prev; return rest })
     setAnalyzed(prev => prev ? prev.filter(a => a.filename !== name) : null)
   }
 
+  // ── Set manifest ──────────────────────────────────────────────────────────
+  async function selectManifest(file: File) {
+    setManifest(file)
+    setSheetRowCount(null)
+    if (file.name.endsWith('.csv')) {
+      try {
+        const text  = await file.text()
+        const lines = text.split(/\r?\n/).filter(l => l.trim())
+        setSheetRowCount(Math.max(0, lines.length - 1))
+      } catch { /* ignore */ }
+    }
+  }
+
+  // ── Per-item params helpers ───────────────────────────────────────────────
   function setParam<K extends keyof ItemParams>(name: string, key: K, val: ItemParams[K]) {
     setItemParams(prev => ({ ...prev, [name]: { ...prev[name], [key]: val } }))
   }
 
+  function applyDefaultsToAll() {
+    setItemParams(curr => {
+      const next = { ...curr }
+      Object.keys(next).forEach(k => { next[k] = { ...defaults } })
+      return next
+    })
+    toast.success('Defaults applied to all parts')
+  }
+
+  // ── AI analysis ───────────────────────────────────────────────────────────
   async function runAIAnalysis() {
-    if (!files.length) return
+    if (!drawingFiles.length) return
     setIsAnalyzing(true)
     try {
-      const result: { parts: AnalyzedPart[] } = await api.bulk.analyzeDrawings(files)
+      const result: { parts: AnalyzedPart[] } = await api.bulk.analyzeDrawings(drawingFiles)
       setAnalyzed(result.parts)
-      // Pre-fill part params from AI results
-      result.parts.forEach(ap => {
-        if (ap.error) return
-        // Only update if there's useful data (description / material fields are metadata,
-        // not ItemParams — they go into overrides)
-      })
-      toast.success(`${result.parts.length} drawings analyzed`)
+      toast.success(`${result.parts.length} drawing${result.parts.length !== 1 ? 's' : ''} analyzed`)
     } catch {
       toast.error('AI analysis failed — you can still submit manually')
     } finally {
@@ -629,417 +651,55 @@ function DrawingFilesMode({
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!files.length) return
-    const fd = new FormData()
-    files.forEach(f => fd.append('files', f))
-    const overrides: Record<string, ItemParams & { part_description?: string; material?: string }> = {}
-    files.forEach(f => {
-      const base = itemParams[f.name] ?? defaults
-      const ai   = analyzed?.find(a => a.filename === f.name)
-      overrides[f.name] = {
-        ...base,
-        ...(ai?.description ? { part_description: ai.description } : {}),
-        ...(ai?.material    ? { material: ai.material } : {}),
-      }
-    })
-    fd.append('overrides', JSON.stringify(overrides))
-    fd.append('shared_params', JSON.stringify({ ...defaults, lots_per_year: 10, shifts_per_day: 2, annual_production_hours: 4000 }))
-    createMut.mutate(fd)
-  }
-
-  const hasAIData = analyzed && analyzed.some(a => !a.error)
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Drop zone */}
-      <div
-        onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={e => { e.preventDefault(); setIsDragging(false); addFiles(Array.from(e.dataTransfer.files)) }}
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
-          isDragging ? 'border-brand bg-brand/5' : 'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
-        )}
-      >
-        <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff" className="hidden"
-          onChange={e => { if (e.target.files) addFiles(Array.from(e.target.files)); e.target.value = '' }} />
-        <div className="flex flex-col items-center gap-2">
-          <Upload className="w-8 h-8 text-[#c8cdd8]" />
-          <p className="font-medium text-[#4a5568] text-sm">Drop drawing files or click to browse</p>
-          <p className="text-xs text-[#9aa3b2]">PDF, PNG, JPG, WEBP · up to {BULK_MAX} files</p>
-          {files.length > 0 && (
-            <span className="mt-1 inline-flex items-center gap-1.5 bg-brand/10 text-brand text-xs font-semibold px-3 py-1 rounded-full">
-              <Layers className="w-3 h-3" />
-              {files.length} file{files.length !== 1 ? 's' : ''} selected — configure below or add more
-            </span>
-          )}
-        </div>
-      </div>
-
-      {files.length > 0 && (
-        <div className="space-y-2.5">
-          {/* AI Identify bar */}
-          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-purple-50 border border-purple-100">
-            <div className="flex items-center gap-2 text-xs text-purple-700">
-              <Wand2 className="w-4 h-4 shrink-0" />
-              <span>
-                {hasAIData
-                  ? `AI identified ${analyzed!.filter(a => !a.error).length} of ${files.length} drawing${files.length !== 1 ? 's' : ''}`
-                  : 'Let AI read each drawing and extract the part name, description, and material'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={runAIAnalysis}
-              disabled={isAnalyzing}
-              className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-purple-700 border border-purple-200 bg-white rounded-lg px-3 py-1.5 hover:bg-purple-50 disabled:opacity-50 transition-colors"
-            >
-              {isAnalyzing ? (
-                <><RefreshCw className="w-3 h-3 animate-spin" /> Analyzing…</>
-              ) : (
-                <><Wand2 className="w-3 h-3" /> {hasAIData ? 'Re-analyze' : 'Identify with AI'}</>
-              )}
-            </button>
-          </div>
-
-          {/* AI results summary chips */}
-          {hasAIData && (
-            <div className="space-y-1.5">
-              {analyzed!.map(ap => (
-                <div key={ap.filename} className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg border text-xs',
-                  ap.error ? 'border-red-100 bg-red-50/30' : ap.confidence >= 0.7 ? 'border-green-100 bg-green-50/20' : 'border-amber-100 bg-amber-50/20',
-                )}>
-                  <FileText className="w-3 h-3 shrink-0 text-[#9aa3b2]" />
-                  <span className="font-medium text-[#0f1729] truncate max-w-[140px]" title={ap.filename}>{ap.filename}</span>
-                  <span className="text-[#9aa3b2]">→</span>
-                  {ap.error ? (
-                    <span className="text-red-500 truncate">{ap.part_name}</span>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-[#0f1729] truncate">{ap.part_name}</span>
-                      {ap.material && <span className="text-[#9aa3b2] truncate hidden sm:inline">· {ap.material}</span>}
-                      <span className={cn('ml-auto shrink-0 font-mono text-[10px] px-1.5 py-0.5 rounded',
-                        ap.confidence >= 0.8 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700')}>
-                        {Math.round(ap.confidence * 100)}%
-                      </span>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Batch defaults bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-xl bg-[#f8f9fc] border border-[#e5e8ef]">
-            <span className="text-xs font-semibold text-[#4a5568] shrink-0">Batch defaults:</span>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 flex-1">
-              <select value={defaults.supplier_country} onChange={e => setDefaults(p => ({ ...p, supplier_country: e.target.value }))} className={SEL}>
-                {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-              </select>
-              <select value={defaults.supplier_currency} onChange={e => setDefaults(p => ({ ...p, supplier_currency: e.target.value }))} className={SEL}>
-                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <select value={defaults.procurement_type} onChange={e => setDefaults(p => ({ ...p, procurement_type: e.target.value }))} className={cn(SEL, 'col-span-2 sm:col-span-1')}>
-                {PROCUREMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <input type="number" min={1} value={defaults.annual_volume} onChange={e => setDefaults(p => ({ ...p, annual_volume: Number(e.target.value) }))} placeholder="Annual vol" className={NUM} />
-              <input type="number" min={1} value={defaults.lot_size} onChange={e => setDefaults(p => ({ ...p, lot_size: Number(e.target.value) }))} placeholder="Lot size" className={NUM} />
-            </div>
-            <button type="button" onClick={() => { const next: Record<string, ItemParams> = {}; files.forEach(f => { next[f.name] = { ...defaults } }); setItemParams(next) }}
-              className="shrink-0 text-xs font-semibold text-brand hover:underline whitespace-nowrap self-end sm:self-auto">
-              Apply to all
-            </button>
-          </div>
-
-          {/* Column headers (desktop) */}
-          <div className="hidden sm:grid grid-cols-[1fr_110px_72px_136px_82px_74px_24px] gap-2 px-3 pb-0.5">
-            {['Drawing', 'Country', 'Ccy', 'Procurement', 'Annual vol', 'Lot size', ''].map((h, i) => (
-              <span key={i} className={cn('text-[10px] font-semibold uppercase tracking-wide text-[#9aa3b2]', i >= 4 ? 'text-right' : '')}>{h}</span>
-            ))}
-          </div>
-
-          {/* Item rows */}
-          <div className="space-y-1.5">
-            {files.map(f => {
-              const p = itemParams[f.name] ?? defaults
-              return (
-                <div key={f.name} className="rounded-xl border border-[#e5e8ef] bg-white px-3 py-2.5">
-                  <div className="hidden sm:grid grid-cols-[1fr_110px_72px_136px_82px_74px_24px] items-center gap-2">
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-[#0f1729] min-w-0" title={f.name}>
-                      <FileText className="w-3.5 h-3.5 text-brand shrink-0" />
-                      <span className="truncate">{f.name}</span>
-                    </span>
-                    <select value={p.supplier_country} onChange={e => setParam(f.name, 'supplier_country', e.target.value)} className={SEL}>
-                      {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-                    </select>
-                    <select value={p.supplier_currency} onChange={e => setParam(f.name, 'supplier_currency', e.target.value)} className={SEL}>
-                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <select value={p.procurement_type} onChange={e => setParam(f.name, 'procurement_type', e.target.value)} className={SEL}>
-                      {PROCUREMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
-                    <input type="number" min={1} value={p.annual_volume} onChange={e => setParam(f.name, 'annual_volume', Number(e.target.value))} className={NUM} />
-                    <input type="number" min={1} value={p.lot_size} onChange={e => setParam(f.name, 'lot_size', Number(e.target.value))} className={NUM} />
-                    <button type="button" onClick={() => removeFile(f.name)} className="text-[#c8cdd8] hover:text-red-500 transition-colors rounded hover:bg-red-50 p-0.5 ml-auto">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  {/* Mobile card */}
-                  <div className="sm:hidden space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5 text-sm font-medium text-[#0f1729] min-w-0" title={f.name}>
-                        <FileText className="w-3.5 h-3.5 text-brand shrink-0" />
-                        <span className="truncate">{f.name}</span>
-                      </span>
-                      <button type="button" onClick={() => removeFile(f.name)} className="shrink-0 text-[#c8cdd8] hover:text-red-500 transition-colors rounded p-1 hover:bg-red-50">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Country</p>
-                        <select value={p.supplier_country} onChange={e => setParam(f.name, 'supplier_country', e.target.value)} className={SEL}>
-                          {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Currency</p>
-                        <select value={p.supplier_currency} onChange={e => setParam(f.name, 'supplier_currency', e.target.value)} className={SEL}>
-                          {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div className="col-span-2">
-                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Procurement</p>
-                        <select value={p.procurement_type} onChange={e => setParam(f.name, 'procurement_type', e.target.value)} className={SEL}>
-                          {PROCUREMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Annual vol</p>
-                        <input type="number" min={1} value={p.annual_volume} onChange={e => setParam(f.name, 'annual_volume', Number(e.target.value))} className={NUM} />
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Lot size</p>
-                        <input type="number" min={1} value={p.lot_size} onChange={e => setParam(f.name, 'lot_size', Number(e.target.value))} className={NUM} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      <Button
-        type="submit"
-        variant="primary"
-        size="lg"
-        disabled={!files.length}
-        loading={createMut.isPending}
-        iconLeft={<Play className="w-4 h-4" />}
-        className="w-full"
-      >
-        {files.length > 0
-          ? `Start Batch Costing — ${files.length} drawing${files.length !== 1 ? 's' : ''}`
-          : 'Start Batch Costing'}
-      </Button>
-    </form>
-  )
-}
-
-// ─── SPREADSHEET MODE ─────────────────────────────────────────────────────────
-
-function SpreadsheetMode({ onCreated }: { onCreated: () => void }) {
-  const queryClient = useQueryClient()
-  const sheetInputRef = useRef<HTMLInputElement>(null)
-  const [sheetFile, setSheetFile]         = useState<File | null>(null)
-  const [sheetIsDragging, setSheetIsDrag] = useState(false)
-  const [sheetRowCount, setSheetRowCount] = useState<number | null>(null)
-
-  const sheetMut = useMutation({
-    mutationFn: (f: File) => api.bulk.createFromSpreadsheet(f),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['batches'] })
-      toast.success('Batch created — processing started')
-      setSheetFile(null); setSheetRowCount(null)
-      onCreated()
-    },
-    onError: () => toast.error('Failed to create batch from spreadsheet'),
-  })
-
-  function onFileSelected(f: File) {
-    setSheetFile(f)
-    if (f.name.endsWith('.csv')) {
-      const reader = new FileReader()
-      reader.onload = e => {
-        const rows = (e.target?.result as string ?? '').split(/\r?\n/).filter(l => l.trim())
-        setSheetRowCount(Math.max(0, rows.length - 1))
-      }
-      reader.readAsText(f)
-    } else {
-      setSheetRowCount(null)
-    }
-  }
-
-  return (
-    <form onSubmit={e => { e.preventDefault(); if (sheetFile) sheetMut.mutate(sheetFile) }} className="space-y-5">
-      {/* Info banner */}
-      <div className="flex items-start gap-3 p-3 rounded-xl bg-[#f8f9fc] border border-[#e5e8ef] text-xs text-[#4a5568]">
-        <div className="flex-1">
-          <p className="font-semibold text-[#0f1729] mb-1">Spreadsheet columns (row 1 = headers) or PDF parts list</p>
-          <p className="font-mono text-[11px] text-[#9aa3b2] leading-relaxed">
-            part_name · description · material · supplier_country · supplier_currency · procurement_type · annual_volume · lot_size
-          </p>
-          <p className="mt-1 text-[11px] text-[#9aa3b2]">
-            <strong className="text-[#0f1729]">.xlsx / .csv:</strong> row 1 = headers, only <strong className="text-[#0f1729]">part_name</strong> required.{' '}
-            <strong className="text-[#0f1729]">.pdf:</strong> AI extracts parts automatically.
-          </p>
-        </div>
-        <button type="button" onClick={downloadCSVTemplate}
-          className="shrink-0 flex items-center gap-1 text-brand hover:underline font-medium text-[11px] mt-0.5">
-          <Download className="w-3 h-3" />
-          Template
-        </button>
-      </div>
-
-      {/* Drop zone */}
-      <div
-        onDragOver={e => { e.preventDefault(); setSheetIsDrag(true) }}
-        onDragLeave={() => setSheetIsDrag(false)}
-        onDrop={e => {
-          e.preventDefault(); setSheetIsDrag(false)
-          const f = e.dataTransfer.files[0]
-          if (f && (f.name.endsWith('.xlsx') || f.name.endsWith('.csv') || f.name.endsWith('.xls') || f.name.endsWith('.pdf'))) onFileSelected(f)
-          else toast.error('Please drop an .xlsx, .csv, or .pdf file')
-        }}
-        onClick={() => sheetInputRef.current?.click()}
-        className={cn(
-          'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors',
-          sheetIsDragging ? 'border-brand bg-brand/5' : 'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
-        )}
-      >
-        <input ref={sheetInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden"
-          onChange={e => { const f = e.target.files?.[0]; if (f) onFileSelected(f); e.target.value = '' }} />
-        {sheetFile ? (
-          <div className="flex flex-col items-center gap-2">
-            <CheckCircle className="w-8 h-8 text-green-500" />
-            <p className="font-medium text-[#0f1729] text-sm">{sheetFile.name}</p>
-            {sheetRowCount !== null ? (
-              <span className="inline-flex items-center gap-1.5 bg-brand/10 text-brand text-xs font-semibold px-3 py-1 rounded-full">
-                ~{sheetRowCount} part{sheetRowCount !== 1 ? 's' : ''} detected
-              </span>
-            ) : sheetFile.name.endsWith('.pdf') ? (
-              <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full">
-                AI will extract parts from PDF
-              </span>
-            ) : null}
-            <button type="button" onClick={e => { e.stopPropagation(); setSheetFile(null); setSheetRowCount(null) }}
-              className="text-xs text-red-500 hover:underline">Remove</button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2">
-            <Upload className="w-8 h-8 text-[#c8cdd8]" />
-            <p className="font-medium text-[#4a5568] text-sm">Drop .xlsx, .csv, or .pdf here, or click to browse</p>
-            <p className="text-xs text-[#9aa3b2]">Up to {BULK_MAX} parts · Excel 2007+, CSV, or PDF (AI extraction)</p>
-          </div>
-        )}
-      </div>
-
-      <Button
-        type="submit"
-        variant="primary"
-        size="lg"
-        disabled={!sheetFile}
-        loading={sheetMut.isPending}
-        iconLeft={<Play className="w-4 h-4" />}
-        className="w-full"
-      >
-        {sheetFile
-          ? `Start Batch Costing${sheetRowCount !== null ? ` — ${sheetRowCount} parts` : ''}`
-          : 'Start Batch Costing'}
-      </Button>
-    </form>
-  )
-}
-
-// ─── SMART UPLOAD MODE (Manifest + Drawings folder matching) ──────────────────
-
-type SmartStep = 'upload' | 'review'
-
-interface SmartManifestRow {
-  part_name: string
-  description: string
-  material: string
-  supplier_country: string
-  supplier_currency: string
-  annual_volume: number
-  lot_size: number
-  procurement_type: string
-}
-
-function SmartUploadMode({ onCreated }: { onCreated: () => void }) {
-  const queryClient = useQueryClient()
-  const manifestInputRef = useRef<HTMLInputElement>(null)
-  const drawingFolderRef = useRef<HTMLInputElement>(null)
-
-  const [step, setStep]                   = useState<SmartStep>('upload')
-  const [manifestFile, setManifestFile]   = useState<File | null>(null)
-  const [drawingFiles, setDrawingFiles]   = useState<File[]>([])
-  const [isParsing, setIsParsing]         = useState(false)
-  const [reviewRows, setReviewRows]       = useState<ReviewRow[]>([])
-
-  // ── Parse manifest and build review rows ─────────────────────────────────
-
+  // ── Parse manifest + match drawings ───────────────────────────────────────
   async function parseAndMatch() {
     if (!manifestFile) return
     setIsParsing(true)
     try {
-      let rows: SmartManifestRow[] = []
+      type ManRow = {
+        part_name: string; description: string; material: string
+        supplier_country: string; supplier_currency: string
+        annual_volume: number; lot_size: number; procurement_type: string
+      }
+      let rows: ManRow[] = []
+
       if (manifestFile.name.endsWith('.csv')) {
-        // Parse CSV client-side
-        const text = await manifestFile.text()
-        const lines = text.split(/\r?\n/).filter(l => l.trim())
-        if (lines.length >= 2) {
-          const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
-          rows = lines.slice(1).map(line => {
+        const text    = await manifestFile.text()
+        const csvLines = text.split(/\r?\n/).filter(l => l.trim())
+        if (csvLines.length >= 2) {
+          const headers = csvLines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+          rows = csvLines.slice(1).map(line => {
             const vals = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
             const obj: Record<string, string> = {}
             headers.forEach((h, i) => { if (h) obj[h] = vals[i] ?? '' })
             return {
-              part_name:        obj.part_name ?? '',
-              description:      obj.description ?? '',
-              material:         obj.material ?? '',
-              supplier_country: obj.supplier_country ?? obj.country ?? 'DE',
-              supplier_currency:obj.supplier_currency ?? obj.currency ?? 'EUR',
-              annual_volume:    parseFloat(obj.annual_volume ?? '1000') || 1000,
-              lot_size:         parseFloat(obj.lot_size ?? '100') || 100,
-              procurement_type: obj.procurement_type ?? 'in_house',
+              part_name:         obj.part_name ?? '',
+              description:       obj.description ?? '',
+              material:          obj.material ?? '',
+              supplier_country:  obj.supplier_country ?? obj.country ?? 'DE',
+              supplier_currency: obj.supplier_currency ?? obj.currency ?? 'EUR',
+              annual_volume:     parseFloat(obj.annual_volume ?? '1000') || 1000,
+              lot_size:          parseFloat(obj.lot_size ?? '100') || 100,
+              procurement_type:  obj.procurement_type ?? 'in_house',
             }
           }).filter(r => !!r.part_name.trim())
         }
       } else {
-        // XLSX or PDF — send to server parse-manifest endpoint
-        const result: { rows: Record<string, string>[] } = await api.bulk.parseManifest(manifestFile)
-        rows = (result.rows ?? []).map(obj => ({
-          part_name:        obj.part_name ?? '',
-          description:      obj.description ?? '',
-          material:         obj.material ?? '',
-          supplier_country: obj.supplier_country ?? obj.country ?? 'DE',
-          supplier_currency:obj.supplier_currency ?? obj.currency ?? 'EUR',
-          annual_volume:    parseFloat(obj.annual_volume ?? '1000') || 1000,
-          lot_size:         parseFloat(obj.lot_size ?? '100') || 100,
-          procurement_type: obj.procurement_type ?? 'in_house',
+        const res: { rows: Record<string, string>[] } = await api.bulk.parseManifest(manifestFile)
+        rows = (res.rows ?? []).map(obj => ({
+          part_name:         obj.part_name ?? '',
+          description:       obj.description ?? '',
+          material:          obj.material ?? '',
+          supplier_country:  obj.supplier_country ?? obj.country ?? 'DE',
+          supplier_currency: obj.supplier_currency ?? obj.currency ?? 'EUR',
+          annual_volume:     parseFloat(obj.annual_volume ?? '1000') || 1000,
+          lot_size:          parseFloat(obj.lot_size ?? '100') || 100,
+          procurement_type:  obj.procurement_type ?? 'in_house',
         })).filter(r => !!r.part_name.trim())
       }
 
-      if (!rows.length) { toast.error('No parts found in manifest'); return }
+      if (!rows.length) { toast.error('No parts found in manifest'); setIsParsing(false); return }
 
-      // Match drawing files by fuzzy filename similarity (reduce avoids let-in-closure TS issues)
       const matched = new Set<string>()
       const result: ReviewRow[] = rows.slice(0, BULK_MAX).map(row => {
         const best = drawingFiles.reduce<{ file: File; score: number } | null>((acc, df) => {
@@ -1050,99 +710,91 @@ function SmartUploadMode({ onCreated }: { onCreated: () => void }) {
         const drawingFile: File | null = best !== null && best.score >= 0.5 ? best.file : null
         if (drawingFile) matched.add(drawingFile.name)
         return {
-          _id: crypto.randomUUID(),
-          part_name:        row.part_name,
-          description:      row.description,
-          material:         row.material,
-          supplier_country: row.supplier_country,
-          supplier_currency:row.supplier_currency,
-          annual_volume:    row.annual_volume,
-          lot_size:         row.lot_size,
+          _id: crypto.randomUUID(), part_name: row.part_name,
+          description: row.description, material: row.material,
+          supplier_country: row.supplier_country, supplier_currency: row.supplier_currency,
+          annual_volume: row.annual_volume, lot_size: row.lot_size,
           procurement_type: row.procurement_type,
-          drawing_file:     drawingFile,
-          drawing_filename: drawingFile ? drawingFile.name : '',
-          match_score:      best !== null ? best.score : 0,
-          match_status:     drawingFile ? 'auto' : 'missing',
+          drawing_file: drawingFile, drawing_filename: drawingFile?.name ?? '',
+          match_score: best?.score ?? 0,
+          match_status: drawingFile ? 'auto' : 'missing',
         }
       })
-
-      // Unmatched drawing files → extra rows (user can assign them to parts)
       drawingFiles.filter(df => !matched.has(df.name)).forEach(df => {
         result.push({
-          _id:              crypto.randomUUID(),
-          part_name:        df.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
-          description:      '',
-          material:         '',
-          supplier_country: 'DE',
-          supplier_currency:'EUR',
-          annual_volume:    1000,
-          lot_size:         100,
-          procurement_type: 'in_house',
-          drawing_file:     df,
-          drawing_filename: df.name,
-          match_score:      0,
-          match_status:     'extra',
+          _id: crypto.randomUUID(),
+          part_name: df.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
+          description: '', material: '',
+          supplier_country: 'DE', supplier_currency: 'EUR',
+          annual_volume: 1000, lot_size: 100, procurement_type: 'in_house',
+          drawing_file: df, drawing_filename: df.name, match_score: 0, match_status: 'extra',
         })
       })
-
       setReviewRows(result)
       setStep('review')
-    } catch (err) {
+    } catch {
       toast.error('Failed to parse manifest')
     } finally {
       setIsParsing(false)
     }
   }
 
-  // ── Inline edit helpers ───────────────────────────────────────────────────
-
-  function updateRow(id: string, patch: Partial<ReviewRow>) {
-    setReviewRows(prev => prev.map(r => r._id === id ? { ...r, ...patch, match_status: r.match_status === 'auto' ? 'manual' : r.match_status } : r))
-  }
-
-  function removeRow(id: string) {
-    setReviewRows(prev => prev.filter(r => r._id !== id))
-  }
-
-  function addManualRow() {
-    setReviewRows(prev => [...prev, {
-      _id: crypto.randomUUID(),
-      part_name: '', description: '', material: '',
-      supplier_country: 'DE', supplier_currency: 'EUR',
-      annual_volume: 1000, lot_size: 100, procurement_type: 'in_house',
-      drawing_file: null, drawing_filename: '',
-      match_score: 0, match_status: 'missing',
-    }])
-  }
-
-  // ── Upload drawing for a specific row ────────────────────────────────────
-
-  const rowFileRefs = useRef<Record<string, HTMLInputElement | null>>({})
-
-  function assignDrawingToRow(rowId: string, file: File) {
-    setReviewRows(prev => prev.map(r => r._id === rowId ? { ...r, drawing_file: file, drawing_filename: file.name, match_status: 'manual' } : r))
-  }
-
-  // ── Submit ────────────────────────────────────────────────────────────────
-
-  const createMut = useMutation({
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  const batchMut = useMutation({
     mutationFn: (fd: FormData) => api.bulk.create(fd),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['batches'] })
       toast.success('Batch created — processing started')
-      setStep('upload'); setManifestFile(null); setDrawingFiles([])
-      setReviewRows([])
+      setDrawingFiles([]); setItemParams({}); setAnalyzed(null)
       onCreated()
     },
     onError: () => toast.error('Failed to create batch'),
   })
 
-  function handleSubmit(e: React.FormEvent) {
+  const sheetMut = useMutation({
+    mutationFn: (file: File) => api.bulk.createFromSpreadsheet(file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['batches'] })
+      toast.success('Batch created — processing started')
+      setManifest(null); setSheetRowCount(null)
+      onCreated()
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      toast.error(msg ?? 'Failed to create batch')
+    },
+  })
+
+  // ── Submit: drawings only ─────────────────────────────────────────────────
+  function submitDrawings(e: React.FormEvent) {
+    e.preventDefault()
+    if (!drawingFiles.length) return
+    const fd = new FormData()
+    drawingFiles.forEach(f => fd.append('files', f))
+    const overrides: Record<string, unknown> = {}
+    drawingFiles.forEach(f => {
+      const base = itemParams[f.name] ?? defaults
+      const ai   = analyzed?.find(a => a.filename === f.name)
+      overrides[f.name] = {
+        ...base,
+        ...(ai?.description ? { part_description: ai.description } : {}),
+        ...(ai?.material    ? { material: ai.material }            : {}),
+      }
+    })
+    fd.append('overrides',     JSON.stringify(overrides))
+    fd.append('shared_params', JSON.stringify({
+      ...defaults, lots_per_year: 10, shifts_per_day: 2, annual_production_hours: 4000,
+    }))
+    batchMut.mutate(fd)
+  }
+
+  // ── Submit: review (manifest + drawings) ──────────────────────────────────
+  function submitReview(e: React.FormEvent) {
     e.preventDefault()
     const valid = reviewRows.filter(r => r.part_name.trim())
     if (!valid.length) { toast.error('No valid parts to submit'); return }
-    const fd = new FormData()
-    const overrides: Record<string, object> = {}
+    const fd        = new FormData()
+    const overrides: Record<string, unknown> = {}
     valid.forEach(r => {
       if (r.drawing_file) {
         fd.append('files', r.drawing_file)
@@ -1153,276 +805,455 @@ function SmartUploadMode({ onCreated }: { onCreated: () => void }) {
           annual_volume:     r.annual_volume,
           lot_size:          r.lot_size,
           ...(r.description ? { part_description: r.description } : {}),
-          ...(r.material    ? { material: r.material } : {}),
+          ...(r.material    ? { material: r.material }            : {}),
         }
       }
-      // Items with no drawing file will be submitted as name-only via a JSON body —
-      // but the current API requires files. We attach a tiny text placeholder.
     })
-    fd.append('overrides', JSON.stringify(overrides))
-    fd.append('shared_params', JSON.stringify({ supplier_country: 'DE', supplier_currency: 'EUR', annual_volume: 1000, lot_size: 100, procurement_type: 'in_house', lots_per_year: 10, shifts_per_day: 2, annual_production_hours: 4000 }))
-    createMut.mutate(fd)
+    fd.append('overrides',     JSON.stringify(overrides))
+    fd.append('shared_params', JSON.stringify({
+      supplier_country: 'DE', supplier_currency: 'EUR',
+      annual_volume: 1000, lot_size: 100, procurement_type: 'in_house',
+      lots_per_year: 10, shifts_per_day: 2, annual_production_hours: 4000,
+    }))
+    batchMut.mutate(fd)
   }
 
-  // ─── Step 1: Upload ───────────────────────────────────────────────────────
+  // ── Review row helpers ────────────────────────────────────────────────────
+  function updateRow(id: string, patch: Partial<ReviewRow>) {
+    setReviewRows(prev => prev.map(r => r._id === id ? { ...r, ...patch } : r))
+  }
+  function removeRow(id: string) {
+    setReviewRows(prev => prev.filter(r => r._id !== id))
+  }
+  function addManualRow() {
+    setReviewRows(prev => [...prev, {
+      _id: crypto.randomUUID(), part_name: '', description: '', material: '',
+      supplier_country: 'DE', supplier_currency: 'EUR',
+      annual_volume: 1000, lot_size: 100, procurement_type: 'in_house',
+      drawing_file: null, drawing_filename: '', match_score: 0, match_status: 'missing',
+    }])
+  }
+  function assignDrawingToRow(rowId: string, file: File) {
+    setReviewRows(prev => prev.map(r =>
+      r._id === rowId
+        ? { ...r, drawing_file: file, drawing_filename: file.name, match_status: 'manual' }
+        : r
+    ))
+  }
 
-  if (step === 'upload') {
+  // ────────────────────────────────────────────────────────────────────────────
+  // RENDER: REVIEW STEP
+  // ────────────────────────────────────────────────────────────────────────────
+  if (step === 'review') {
+    const matched = reviewRows.filter(r => r.match_status === 'auto' || r.match_status === 'manual')
+    const missing = reviewRows.filter(r => r.match_status === 'missing')
+    const extra   = reviewRows.filter(r => r.match_status === 'extra')
+
     return (
-      <div className="space-y-5">
-        {/* How it works */}
-        <div className="flex items-start gap-3 p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-700">
-          <ScanSearch className="w-5 h-5 shrink-0 mt-0.5" />
+      <form onSubmit={submitReview} className="space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="font-semibold mb-0.5">Smart Upload — Manifest + Drawings</p>
-            <p>Upload a parts manifest (CSV/XLSX/PDF) and a folder of drawing files. AI automatically matches each drawing to its part, then you review and fill any gaps before starting the batch.</p>
+            <h3 className="text-sm font-semibold text-[#0f1729]">Review &amp; Edit Parts</h3>
+            <p className="text-xs text-[#9aa3b2] mt-0.5">
+              {matched.length} matched · {missing.length} missing drawing · {extra.length} extra
+            </p>
           </div>
+          <button type="button" onClick={() => setStep('upload')}
+            className="text-xs text-brand hover:underline flex items-center gap-1">
+            <ChevronLeft className="w-3 h-3" /> Back
+          </button>
         </div>
 
-        {/* Manifest upload */}
-        <div>
-          <p className="text-xs font-semibold text-[#4a5568] mb-2">1. Parts manifest <span className="font-normal text-[#9aa3b2]">(CSV, XLSX, or PDF)</span></p>
-          <div
-            onClick={() => manifestInputRef.current?.click()}
-            className={cn(
-              'border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors',
-              manifestFile ? 'border-green-300 bg-green-50/40' : 'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
-            )}
-          >
-            <input ref={manifestInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) setManifestFile(f); e.target.value = '' }} />
-            {manifestFile ? (
-              <div className="flex items-center justify-center gap-2">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-                <span className="text-sm font-medium text-[#0f1729]">{manifestFile.name}</span>
-                <button type="button" onClick={e => { e.stopPropagation(); setManifestFile(null) }} className="text-red-400 hover:text-red-600">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-2 text-[#4a5568]">
-                <FileText className="w-5 h-5 text-[#c8cdd8]" />
-                <span className="text-sm">Drop manifest or click to browse</span>
-              </div>
-            )}
-          </div>
+        {/* Summary chips */}
+        <div className="flex flex-wrap gap-2">
+          {matched.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs font-semibold">
+              <CheckSquare className="w-3 h-3" />{matched.length} matched
+            </span>
+          )}
+          {missing.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold">
+              <AlertTriangle className="w-3 h-3" />{missing.length} missing drawing
+            </span>
+          )}
+          {extra.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold">
+              <Plus className="w-3 h-3" />{extra.length} extra
+            </span>
+          )}
         </div>
 
-        {/* Drawings folder upload */}
-        <div>
-          <p className="text-xs font-semibold text-[#4a5568] mb-2">2. Drawing files folder <span className="font-normal text-[#9aa3b2]">(optional — also accepts individual files)</span></p>
-          <div
-            onClick={() => drawingFolderRef.current?.click()}
-            className={cn(
-              'border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors',
-              drawingFiles.length > 0 ? 'border-blue-200 bg-blue-50/30' : 'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
-            )}
-          >
-            {/* webkitdirectory + multiple lets users pick a whole folder */}
-            <input
-              ref={drawingFolderRef}
-              type="file"
-              multiple
-              accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff"
-              className="hidden"
-              onChange={e => {
-                if (!e.target.files) return
-                const incoming = Array.from(e.target.files).filter(f => ACCEPTED_DRAWING_EXTS.has(f.name.split('.').pop()?.toLowerCase() ?? ''))
-                setDrawingFiles(incoming)
-                e.target.value = ''
-              }}
-            />
-            {drawingFiles.length > 0 ? (
-              <div className="flex items-center justify-center gap-2">
-                <FolderOpen className="w-5 h-5 text-blue-500" />
-                <span className="text-sm font-medium text-[#0f1729]">{drawingFiles.length} drawing file{drawingFiles.length !== 1 ? 's' : ''} selected</span>
-                <button type="button" onClick={e => { e.stopPropagation(); setDrawingFiles([]) }} className="text-red-400 hover:text-red-600">
-                  <X className="w-4 h-4" />
-                </button>
+        {/* Review table */}
+        <div className="space-y-2">
+          {reviewRows.map(row => {
+            const statusColor =
+              row.match_status === 'auto'   ? 'border-green-200 bg-green-50/20' :
+              row.match_status === 'manual' ? 'border-blue-200 bg-blue-50/20' :
+              row.match_status === 'extra'  ? 'border-indigo-200 bg-indigo-50/10' :
+              'border-amber-200 bg-amber-50/20'
+            return (
+              <div key={row._id} className={cn('rounded-xl border p-3 space-y-2.5', statusColor)}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <p className={LBL}>Part name *</p>
+                      <input value={row.part_name}
+                        onChange={e => updateRow(row._id, { part_name: e.target.value })}
+                        className={INP} placeholder="Required" />
+                    </div>
+                    <div>
+                      <p className={LBL}>Description</p>
+                      <input value={row.description}
+                        onChange={e => updateRow(row._id, { description: e.target.value })}
+                        className={INP} placeholder="Optional" />
+                    </div>
+                    <div>
+                      <p className={LBL}>Material</p>
+                      <input value={row.material}
+                        onChange={e => updateRow(row._id, { material: e.target.value })}
+                        className={INP} placeholder="Optional" />
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => removeRow(row._id)}
+                    className="text-red-400 hover:text-red-600 mt-1">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Drawing assignment */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {row.drawing_file ? (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-brand/10 text-brand text-xs font-medium">
+                      <FileText className="w-3 h-3" />{row.drawing_filename}
+                      <button type="button"
+                        onClick={() => updateRow(row._id, { drawing_file: null, drawing_filename: '', match_status: 'missing' })}
+                        className="text-brand/60 hover:text-red-500 ml-0.5">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-[#9aa3b2]">No drawing —</span>
+                  )}
+                  <button type="button"
+                    onClick={() => rowFileRefs.current[row._id]?.click()}
+                    className="text-xs text-brand hover:underline flex items-center gap-1">
+                    <Upload className="w-3 h-3" />{row.drawing_file ? 'Change' : 'Attach drawing'}
+                  </button>
+                  <input
+                    ref={el => { rowFileRefs.current[row._id] = el }}
+                    type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0]
+                      if (f) assignDrawingToRow(row._id, f)
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
+
+                {/* Params row */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div>
+                    <p className={LBL}>Country</p>
+                    <input value={row.supplier_country}
+                      onChange={e => updateRow(row._id, { supplier_country: e.target.value })}
+                      className={INP} placeholder="DE" maxLength={3} />
+                  </div>
+                  <div>
+                    <p className={LBL}>Annual volume</p>
+                    <input type="number" min={1} value={row.annual_volume}
+                      onChange={e => updateRow(row._id, { annual_volume: Number(e.target.value) || 1 })}
+                      className={NUM} />
+                  </div>
+                  <div>
+                    <p className={LBL}>Lot size</p>
+                    <input type="number" min={1} value={row.lot_size}
+                      onChange={e => updateRow(row._id, { lot_size: Number(e.target.value) || 1 })}
+                      className={NUM} />
+                  </div>
+                  <div>
+                    <p className={LBL}>Procurement</p>
+                    <select value={row.procurement_type}
+                      onChange={e => updateRow(row._id, { procurement_type: e.target.value })}
+                      className={SEL}>
+                      <option value="in_house">In-house</option>
+                      <option value="purchased">Purchased</option>
+                      <option value="sub_contracted">Sub-contracted</option>
+                    </select>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="flex items-center justify-center gap-2 text-[#4a5568]">
-                <FolderOpen className="w-5 h-5 text-[#c8cdd8]" />
-                <span className="text-sm">Select drawings folder or individual files</span>
-              </div>
-            )}
-          </div>
+            )
+          })}
         </div>
 
-        <Button
-          type="button"
-          variant="primary"
-          size="lg"
-          disabled={!manifestFile}
-          loading={isParsing}
-          iconLeft={<ScanSearch className="w-4 h-4" />}
-          onClick={parseAndMatch}
-          className="w-full"
-        >
-          {isParsing ? 'Parsing & Matching…' : 'Parse Manifest & Match Drawings'}
+        <button type="button" onClick={addManualRow}
+          className="text-xs text-brand hover:underline flex items-center gap-1">
+          <Plus className="w-3 h-3" /> Add part manually
+        </button>
+
+        <Button type="submit" variant="primary" size="lg" className="w-full"
+          disabled={!reviewRows.some(r => r.part_name.trim())} loading={batchMut.isPending}
+          iconLeft={<Play className="w-4 h-4" />}>
+          Start Batch Costing — {reviewRows.filter(r => r.part_name.trim()).length} parts
         </Button>
-      </div>
+      </form>
     )
   }
 
-  // ─── Step 2: Review table ─────────────────────────────────────────────────
-
-  const matched  = reviewRows.filter(r => r.match_status === 'auto' || r.match_status === 'manual')
-  const missing  = reviewRows.filter(r => r.match_status === 'missing')
-  const extra    = reviewRows.filter(r => r.match_status === 'extra')
+  // ────────────────────────────────────────────────────────────────────────────
+  // RENDER: UPLOAD STEP
+  // ────────────────────────────────────────────────────────────────────────────
+  const hasAIData = analyzed && analyzed.some(a => !a.error)
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Review header */}
-      <div className="flex items-center justify-between gap-3">
+    <div className="space-y-4">
+      {/* ── Two drop zones ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Drawing files */}
         <div>
-          <h3 className="text-sm font-semibold text-[#0f1729]">Review & Edit Parts</h3>
-          <p className="text-xs text-[#9aa3b2] mt-0.5">
-            {matched.length} matched · {missing.length} missing drawing · {extra.length} extra
+          <p className="text-xs font-semibold text-[#4a5568] mb-1.5">
+            Drawing files <span className="font-normal text-[#9aa3b2]">PDF · PNG · JPG · WEBP</span>
           </p>
+          <div
+            onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={e => { e.preventDefault(); setIsDragging(false); addFiles(Array.from(e.dataTransfer.files)) }}
+            onClick={() => drawingInputRef.current?.click()}
+            className={cn(
+              'border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors min-h-[90px] flex flex-col items-center justify-center gap-1.5',
+              isDragging  ? 'border-brand bg-brand/5' :
+              hasDrawings ? 'border-brand/30 bg-brand/5' :
+              'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
+            )}
+          >
+            <input ref={drawingInputRef} type="file" multiple
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff" className="hidden"
+              onChange={e => { if (e.target.files) addFiles(Array.from(e.target.files)); e.target.value = '' }} />
+            {hasDrawings ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 bg-brand/10 text-brand text-xs font-semibold px-3 py-1 rounded-full">
+                  <Layers className="w-3 h-3" />
+                  {drawingFiles.length} file{drawingFiles.length !== 1 ? 's' : ''}
+                </span>
+                <span className="text-[11px] text-[#9aa3b2]">Click to add more</span>
+              </>
+            ) : (
+              <>
+                <Upload className="w-6 h-6 text-[#c8cdd8]" />
+                <p className="text-xs text-[#4a5568]">Drop drawings or click to browse</p>
+              </>
+            )}
+          </div>
         </div>
-        <button type="button" onClick={() => setStep('upload')} className="text-xs text-brand hover:underline flex items-center gap-1">
-          <ChevronLeft className="w-3 h-3" /> Back
-        </button>
-      </div>
 
-      {/* Summary chips */}
-      <div className="flex flex-wrap gap-2">
-        {matched.length > 0  && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs font-semibold"><CheckSquare className="w-3 h-3" /> {matched.length} matched</span>}
-        {missing.length > 0  && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold"><AlertTriangle className="w-3 h-3" /> {missing.length} missing drawing</span>}
-        {extra.length > 0    && <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold"><Plus className="w-3 h-3" /> {extra.length} extra (no manifest entry)</span>}
-      </div>
-
-      {/* Review table */}
-      <div className="space-y-2">
-        {reviewRows.map(row => {
-          const statusColor =
-            row.match_status === 'auto'    ? 'border-green-200 bg-green-50/20' :
-            row.match_status === 'manual'  ? 'border-blue-200 bg-blue-50/20' :
-            row.match_status === 'extra'   ? 'border-indigo-200 bg-indigo-50/10' :
-            'border-amber-200 bg-amber-50/20'
-
-          return (
-            <div key={row._id} className={cn('rounded-xl border p-3 space-y-2.5', statusColor)}>
-              {/* Row header */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Part name *</p>
-                    <input value={row.part_name} onChange={e => updateRow(row._id, { part_name: e.target.value })} className={INP} placeholder="Required" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Description</p>
-                    <input value={row.description} onChange={e => updateRow(row._id, { description: e.target.value })} className={INP} placeholder="Optional" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-[#9aa3b2] mb-0.5">Material</p>
-                    <input value={row.material} onChange={e => updateRow(row._id, { material: e.target.value })} className={INP} placeholder="Optional" />
-                  </div>
-                </div>
-                <button type="button" onClick={() => removeRow(row._id)} className="shrink-0 text-[#c8cdd8] hover:text-red-500 p-1 rounded hover:bg-red-50 mt-4">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Params row */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                <select value={row.supplier_country} onChange={e => updateRow(row._id, { supplier_country: e.target.value })} className={SEL}>
-                  {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-                </select>
-                <select value={row.supplier_currency} onChange={e => updateRow(row._id, { supplier_currency: e.target.value })} className={SEL}>
-                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select value={row.procurement_type} onChange={e => updateRow(row._id, { procurement_type: e.target.value })} className={cn(SEL, 'col-span-2 sm:col-span-1')}>
-                  {PROCUREMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-                <input type="number" min={1} value={row.annual_volume} onChange={e => updateRow(row._id, { annual_volume: Number(e.target.value) })} className={NUM} />
-                <input type="number" min={1} value={row.lot_size} onChange={e => updateRow(row._id, { lot_size: Number(e.target.value) })} className={NUM} />
-              </div>
-
-              {/* Drawing assignment */}
-              <div className="flex items-center gap-2 text-xs">
-                {row.drawing_file ? (
-                  <span className="flex items-center gap-1 text-green-700 bg-green-50 border border-green-100 rounded-full px-2.5 py-0.5 font-medium">
-                    <CheckCircle className="w-3 h-3" />
-                    {row.drawing_filename}
-                    <button type="button" onClick={() => updateRow(row._id, { drawing_file: null, drawing_filename: '', match_status: 'missing', match_score: 0 })}
-                      className="text-green-400 hover:text-red-500 ml-0.5"><X className="w-3 h-3" /></button>
-                  </span>
-                ) : (
-                  <span className="text-amber-600 bg-amber-50 border border-amber-100 rounded-full px-2.5 py-0.5">
-                    No drawing file
+        {/* Manifest / parts list */}
+        <div>
+          <p className="text-xs font-semibold text-[#4a5568] mb-1.5">
+            Parts list / Manifest <span className="font-normal text-[#9aa3b2]">CSV · XLSX · PDF — optional</span>
+          </p>
+          <div
+            onClick={() => manifestInputRef.current?.click()}
+            className={cn(
+              'border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors min-h-[90px] flex flex-col items-center justify-center gap-1.5',
+              hasManifest
+                ? 'border-green-300 bg-green-50/40'
+                : 'border-[#c8cdd8] hover:border-brand hover:bg-brand/5',
+            )}
+          >
+            <input ref={manifestInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) selectManifest(f); e.target.value = '' }} />
+            {hasManifest ? (
+              <>
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <span className="text-xs font-medium text-[#0f1729]">{manifestFile!.name}</span>
+                {sheetRowCount !== null && (
+                  <span className="inline-flex items-center gap-1 bg-brand/10 text-brand text-[11px] font-semibold px-2 py-0.5 rounded-full">
+                    ~{sheetRowCount} parts
                   </span>
                 )}
-                <label className="flex items-center gap-1 cursor-pointer text-brand hover:underline">
-                  <Upload className="w-3 h-3" />
-                  {row.drawing_file ? 'Change' : 'Upload drawing'}
-                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff" className="hidden"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) assignDrawingToRow(row._id, f); e.target.value = '' }} />
-                </label>
-              </div>
-            </div>
-          )
-        })}
+                {manifestFile!.name.endsWith('.pdf') && (
+                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">
+                    AI will extract parts
+                  </span>
+                )}
+                <button type="button"
+                  onClick={e => { e.stopPropagation(); setManifest(null); setSheetRowCount(null) }}
+                  className="text-[11px] text-red-400 hover:text-red-600">Remove</button>
+              </>
+            ) : (
+              <>
+                <FileText className="w-6 h-6 text-[#c8cdd8]" />
+                <p className="text-xs text-[#4a5568]">Drop manifest or click to browse</p>
+                <p className="text-[11px] text-[#9aa3b2]">AI auto-matches drawings to parts</p>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      <button type="button" onClick={addManualRow}
-        className="flex items-center gap-1.5 text-xs text-brand hover:underline font-medium">
-        <Plus className="w-3.5 h-3.5" /> Add row manually
-      </button>
+      {/* ── Drawings only: per-item params ── */}
+      {uploadMode === 'drawings' && (
+        <form onSubmit={submitDrawings} className="space-y-4">
+          {hasAIData && analyzed && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-brand/5 border border-brand/10 text-xs">
+              <Wand2 className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+              <p className="text-[#4a5568]">
+                AI identified {analyzed.filter(a => !a.error).length} drawings — part names &amp; materials pre-filled
+              </p>
+            </div>
+          )}
 
-      <Button
-        type="submit"
-        variant="primary"
-        size="lg"
-        disabled={!reviewRows.some(r => r.part_name.trim() && r.drawing_file)}
-        loading={createMut.isPending}
-        iconLeft={<Play className="w-4 h-4" />}
-        className="w-full"
-      >
-        {`Start Batch Costing — ${reviewRows.filter(r => r.part_name.trim() && r.drawing_file).length} part${reviewRows.filter(r => r.part_name.trim() && r.drawing_file).length !== 1 ? 's' : ''}`}
-      </Button>
-    </form>
+          {/* Defaults bar */}
+          <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-[#f8f9fb] border border-[#e5e8ef]">
+            <span className="text-xs font-semibold text-[#4a5568] shrink-0">Batch defaults:</span>
+            <select value={defaults.supplier_country}
+              onChange={e => setDefaults(d => ({ ...d, supplier_country: e.target.value }))}
+              className={cn(SEL, 'w-20')}>
+              {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+            </select>
+            <select value={defaults.procurement_type}
+              onChange={e => setDefaults(d => ({ ...d, procurement_type: e.target.value }))}
+              className={cn(SEL, 'w-32')}>
+              {PROCUREMENT_TYPES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+            <input type="number" min={1} value={defaults.annual_volume}
+              onChange={e => setDefaults(d => ({ ...d, annual_volume: Number(e.target.value) || 1 }))}
+              className={cn(NUM, 'w-24')} placeholder="Volume" />
+            <input type="number" min={1} value={defaults.lot_size}
+              onChange={e => setDefaults(d => ({ ...d, lot_size: Number(e.target.value) || 1 }))}
+              className={cn(NUM, 'w-20')} placeholder="Lot" />
+            <button type="button" onClick={applyDefaultsToAll}
+              className="text-xs text-brand hover:underline shrink-0 ml-auto">
+              Apply to all
+            </button>
+          </div>
+
+          {/* Per-file rows */}
+          <div className="space-y-2">
+            {drawingFiles.map(f => {
+              const p  = itemParams[f.name] ?? defaults
+              const ai = analyzed?.find(a => a.filename === f.name)
+              return (
+                <div key={f.name} className="rounded-xl border border-[#e5e8ef] p-3 space-y-2 bg-white">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-brand shrink-0" />
+                    <span className="text-xs font-medium text-[#0f1729] flex-1 truncate">{f.name}</span>
+                    {ai && !ai.error && (
+                      <span className="text-[10px] bg-brand/10 text-brand px-1.5 py-0.5 rounded font-medium">
+                        {Math.round(ai.confidence * 100)}%
+                      </span>
+                    )}
+                    <button type="button" onClick={() => removeFile(f.name)}
+                      className="text-[#c8cdd8] hover:text-red-500">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <p className={LBL}>Country</p>
+                      <select value={p.supplier_country}
+                        onChange={e => setParam(f.name, 'supplier_country', e.target.value)}
+                        className={SEL}>
+                        {SUPPLIER_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className={LBL}>Procurement</p>
+                      <select value={p.procurement_type}
+                        onChange={e => setParam(f.name, 'procurement_type', e.target.value)}
+                        className={SEL}>
+                        {PROCUREMENT_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <p className={LBL}>Annual volume</p>
+                      <input type="number" min={1} value={p.annual_volume}
+                        onChange={e => setParam(f.name, 'annual_volume', Number(e.target.value) || 1)}
+                        className={NUM} />
+                    </div>
+                    <div>
+                      <p className={LBL}>Lot size</p>
+                      <input type="number" min={1} value={p.lot_size}
+                        onChange={e => setParam(f.name, 'lot_size', Number(e.target.value) || 1)}
+                        className={NUM} />
+                    </div>
+                  </div>
+                  {ai && !ai.error && (
+                    <p className="text-[11px] text-[#9aa3b2]">
+                      AI: <span className="text-[#0f1729]">{ai.part_name}</span>
+                      {ai.material && <> · {ai.material}</>}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="md"
+              onClick={runAIAnalysis} loading={isAnalyzing}
+              disabled={!drawingFiles.length}
+              iconLeft={<Wand2 className="w-4 h-4" />}>
+              Identify with AI
+            </Button>
+            <Button type="submit" variant="primary" size="md" className="flex-1"
+              disabled={!drawingFiles.length} loading={batchMut.isPending}
+              iconLeft={<Play className="w-4 h-4" />}>
+              Start Batch — {drawingFiles.length} drawing{drawingFiles.length !== 1 ? 's' : ''}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {/* ── Manifest only ── */}
+      {uploadMode === 'manifest' && (
+        <Button type="button" variant="primary" size="lg" className="w-full"
+          onClick={() => manifestFile && sheetMut.mutate(manifestFile)}
+          disabled={!manifestFile} loading={sheetMut.isPending}
+          iconLeft={<Play className="w-4 h-4" />}>
+          {sheetRowCount !== null
+            ? `Start Batch Costing — ~${sheetRowCount} parts`
+            : 'Start Batch Costing'}
+        </Button>
+      )}
+
+      {/* ── Both: parse & match ── */}
+      {uploadMode === 'both' && (
+        <Button type="button" variant="primary" size="lg" className="w-full"
+          onClick={parseAndMatch} loading={isParsing}
+          iconLeft={<ScanSearch className="w-4 h-4" />}>
+          {isParsing ? 'Parsing & Matching…' : 'Parse Manifest & Match Drawings →'}
+        </Button>
+      )}
+
+      {/* ── Empty hint ── */}
+      {uploadMode === 'empty' && (
+        <p className="text-center text-xs text-[#9aa3b2] py-1">
+          Drop drawings, a manifest, or both — the form adapts automatically.
+        </p>
+      )}
+
+      {/* CSV template */}
+      <div className="flex items-center justify-between text-xs text-[#9aa3b2]">
+        <span>Need a manifest template?</span>
+        <button type="button" onClick={downloadCSVTemplate}
+          className="text-brand hover:underline flex items-center gap-1">
+          <Download className="w-3 h-3" /> Download CSV template
+        </button>
+      </div>
+    </div>
   )
 }
 
 // ─── NEW BATCH TAB ────────────────────────────────────────────────────────────
 
 function NewBatchTab() {
-  const [batchMode, setBatchMode] = useState<BatchInputMode>('drawings')
-  const [, forceSwitch] = useState(0)
-
-  function handleCreated() {
-    forceSwitch(n => n + 1) // triggers re-render (TanStack Query invalidated upstream)
-  }
-
+  const queryClient = useQueryClient()
   return (
-    <div className="space-y-5">
-      {/* Mode toggle */}
-      <div className="flex gap-1 p-1 bg-[#f1f3f7] rounded-xl">
-        {([
-          { id: 'drawings',    label: 'Drawing Files',   icon: FileText },
-          { id: 'spreadsheet', label: 'Spreadsheet',     icon: Layers },
-          { id: 'smart',       label: 'Smart Upload',    icon: ScanSearch },
-        ] as const).map(m => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => setBatchMode(m.id)}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all',
-              batchMode === m.id ? 'bg-white text-[#0f1729] shadow-sm' : 'text-[#9aa3b2] hover:text-[#4a5568]',
-            )}
-          >
-            <m.icon className="w-3.5 h-3.5" />
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      {batchMode === 'drawings'    && <DrawingFilesMode onCreated={handleCreated} />}
-      {batchMode === 'spreadsheet' && <SpreadsheetMode  onCreated={handleCreated} />}
-      {batchMode === 'smart'       && <SmartUploadMode  onCreated={handleCreated} />}
-    </div>
+    <UnifiedUploadMode
+      onCreated={() => queryClient.invalidateQueries({ queryKey: ['batches'] })}
+    />
   )
 }
 
