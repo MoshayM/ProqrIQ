@@ -115,6 +115,7 @@ function AppRoutes() {
       <Route path="/quotes/new"    element={<ProtectedLayout><NewQuote /></ProtectedLayout>} />
       <Route path="/quotes/:id"    element={<ProtectedLayout><QuoteDetail /></ProtectedLayout>} />
       <Route path="/bulk"          element={<ProtectedLayout><BulkCosting /></ProtectedLayout>} />
+      <Route path="/bulk/:id"      element={<ProtectedLayout><BulkCosting /></ProtectedLayout>} />
       <Route path="/assemblies"    element={<ProtectedLayout><Assemblies /></ProtectedLayout>} />
       <Route path="/assemblies/:id" element={<ProtectedLayout><Assemblies /></ProtectedLayout>} />
       <Route path="/account"       element={<ProtectedLayout><Account /></ProtectedLayout>} />

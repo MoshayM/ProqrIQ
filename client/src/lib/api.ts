@@ -91,6 +91,8 @@ export const api = {
     softDelete: (id: string)                       => client.post(`/bulk-batches/${id}/soft-delete`).then(d),
     exportExcel:          (id: string)  => client.get(`/bulk-batches/${id}/export-excel`, { responseType: 'blob' }).then(r => r.data as Blob),
     createFromSpreadsheet:(file: File) => { const fd = new FormData(); fd.append('file', file); return client.post('/bulk-batches/from-spreadsheet', fd).then(d) },
+    analyzeDrawings: (files: File[]) => { const fd = new FormData(); files.forEach(f => fd.append('files', f)); return client.post('/bulk-batches/analyze-drawings', fd).then(d) },
+    parseManifest:  (file: File)  => { const fd = new FormData(); fd.append('file', file); return client.post('/bulk-batches/parse-manifest', fd).then(d) },
   },
   assemblies: {
     create:          (u: unknown)                           => client.post('/assemblies', u).then(d),

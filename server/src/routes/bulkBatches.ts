@@ -77,6 +77,126 @@ async function notifyCreator(userId: string, payload: {
   })
 }
 
+// ─── POST /bulk-batches/analyze-drawings ─────────────────────────────────────
+// Vision-AI analysis: extracts part metadata from each drawing file.
+// Must be registered BEFORE the /:id route group.
+router.post(
+  '/analyze-drawings',
+  bulkDrawingUpload,
+  async (req: Request, res: Response) => {
+    try {
+      const files = (req.files as Express.Multer.File[] | undefined) ?? []
+      if (!files.length) {
+        return res.status(400).json({ success: false, error: 'No files provided', error_code: 'VALIDATION_FAILED' })
+      }
+
+      const VISION_MIME: Record<string, 'image/png' | 'image/jpeg' | 'image/webp'> = {
+        'image/png':  'image/png',
+        'image/jpeg': 'image/jpeg',
+        'image/jpg':  'image/jpeg',
+        'image/webp': 'image/webp',
+      }
+
+      const PROMPT = `You are analyzing an engineering drawing or technical document.
+Extract part metadata from it. Output ONLY valid JSON. No markdown fences. No preamble.
+
+Format: {"part_name":"...","description":"...","material":"...","drawing_number":"...","confidence":0.85}
+
+Rules:
+- part_name: the main part identifier or title (required; derive from drawing if possible)
+- description: one-sentence description of the part function or geometry (or "")
+- material: material specification from title block or BOM notes (or "")
+- drawing_number: drawing or document number from title block (or "")
+- confidence: 0.0–1.0 how confident you are in the extraction`
+
+      type AIResult = { part_name: string; description: string; material: string; drawing_number: string; confidence: number }
+
+      const results = await Promise.allSettled(files.map(async (file) => {
+        try {
+          type ImageBlock = { type: 'image'; source: { type: 'base64'; media_type: 'image/png' | 'image/jpeg' | 'image/webp'; data: string } }
+          type TextBlock  = { type: 'text'; text: string }
+
+          let contentBlocks: Array<ImageBlock | TextBlock>
+          if (file.mimetype === 'application/pdf') {
+            // PDF: extract text with pdf-parse then send as text block
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>
+            const { text } = await pdfParse(file.buffer)
+            contentBlocks = [
+              { type: 'text', text: `Engineering document text (filename: ${file.originalname}):\n${text.slice(0, 5000)}` },
+              { type: 'text', text: PROMPT },
+            ]
+          } else {
+            const mt = VISION_MIME[file.mimetype] ?? 'image/jpeg'
+            contentBlocks = [
+              { type: 'image', source: { type: 'base64', media_type: mt, data: file.buffer.toString('base64') } },
+              { type: 'text', text: PROMPT },
+            ]
+          }
+
+          const msg = await anthropic.messages.create({
+            model: MODEL,
+            max_tokens: 300,
+            messages: [{ role: 'user', content: contentBlocks as any[] }],
+          })
+
+          const textBlock = msg.content[0]
+          if (textBlock.type !== 'text') throw new Error('Unexpected response type')
+          const parsed = parseAIJSON<AIResult>(textBlock.text)
+          if (!parsed.part_name?.trim()) {
+            parsed.part_name = file.originalname.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
+          }
+          return { filename: file.originalname, part_name: parsed.part_name, description: parsed.description ?? '', material: parsed.material ?? '', drawing_number: parsed.drawing_number ?? '', confidence: parsed.confidence ?? 0, error: null }
+        } catch (err) {
+          const fallback = file.originalname.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
+          return { filename: file.originalname, part_name: fallback, description: '', material: '', drawing_number: '', confidence: 0, error: (err as Error).message }
+        }
+      }))
+
+      const parts = results.map(r =>
+        r.status === 'fulfilled' ? r.value
+          : { filename: 'unknown', part_name: 'unknown', description: '', material: '', drawing_number: '', confidence: 0, error: 'Analysis failed' },
+      )
+
+      await db.insert(auditLog).values({
+        id: crypto.randomUUID(),
+        user_id: (req as any).user!.id,
+        action: 'READ',
+        entity_type: 'drawing_analysis',
+        entity_id: 'batch',
+        details: JSON.stringify({ file_count: files.length }),
+        created_at: new Date().toISOString(),
+      })
+
+      return res.json({ success: true, data: { parts } })
+    } catch (err) {
+      console.error('Analyze drawings error:', err)
+      return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
+    }
+  },
+)
+
+// ─── POST /bulk-batches/parse-manifest ───────────────────────────────────────
+// Parse a manifest file and return rows without creating a batch.
+// Supports the same formats as from-spreadsheet.
+router.post(
+  '/parse-manifest',
+  spreadsheetUpload,
+  async (req: Request, res: Response) => {
+    try {
+      const file = req.file
+      if (!file) {
+        return res.status(400).json({ success: false, error: 'No file provided', error_code: 'VALIDATION_FAILED' })
+      }
+      const rows = await parseSpreadsheet(file)
+      return res.json({ success: true, data: { rows, filename: file.originalname } })
+    } catch (err) {
+      console.error('Parse manifest error:', err)
+      return res.status(500).json({ success: false, error: 'Internal server error', error_code: 'INTERNAL_ERROR' })
+    }
+  },
+)
+
 // ─── POST /bulk-batches ───────────────────────────────────────────────────────
 // Accepts multipart (files + JSON fields) OR JSON { name, part_ids, shared_params, overrides }
 router.post(
