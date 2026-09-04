@@ -445,112 +445,180 @@ export default function Landing() {
           <FloatingCard delay={0.8} className="w-full">
             <div className="bg-white rounded-2xl border border-[#e5e8ef]
                             shadow-2xl shadow-[#1e2d4e]/15 overflow-hidden">
-              {/* mock browser chrome */}
-              <div className="flex items-center gap-2 px-5 py-3.5 bg-[#f4f6fb]
+              {/* mock browser chrome — slimmer on mobile */}
+              <div className="flex items-center gap-2 px-3 md:px-5 py-2 md:py-3.5 bg-[#f4f6fb]
                               border-b border-[#e5e8ef]">
                 <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
-                  <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
-                  <div className="w-3 h-3 rounded-full bg-[#28c840]" />
+                  <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#ff5f57]" />
+                  <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#febc2e]" />
+                  <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-[#28c840]" />
                 </div>
-                <div className="flex-1 mx-3 px-3 py-1 bg-white rounded-md
-                                text-[11px] text-[#9aa3b2] border border-[#e5e8ef] text-left
-                                flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+                <div className="flex-1 mx-2 md:mx-3 px-2.5 py-1 bg-white rounded-md
+                                text-[10px] md:text-[11px] text-[#9aa3b2] border border-[#e5e8ef]
+                                flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#22c55e] flex-shrink-0" />
                   app.proqriq.com/dashboard
                 </div>
-                <Logo size="sm" variant="full" />
+                <div className="hidden md:block"><Logo size="sm" variant="full" /></div>
               </div>
 
               {/* mock dashboard content */}
               <div className="p-3 md:p-5 bg-[#f4f6fb]">
-                {/* KPI row: 2-col on mobile, 4-col on desktop */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-3 md:mb-4">
-                  {[
-                    { label: 'Active Quotes',   value: '24',   delta: '+3 this week',  good: true  },
-                    { label: 'Avg Confidence',  value: '96%',  delta: 'Target: 98%',    good: true  },
-                    { label: 'Bulk Batches',    value: '8',    delta: '312 parts total', good: true  },
-                    { label: 'Pending Approval',value: '3',    delta: '2 urgent',       good: false },
-                  ].map(({ label, value, delta, good }) => (
-                    <div key={label}
-                      className="bg-white rounded-xl border border-[#e5e8ef] p-2.5 md:p-3.5">
-                      <p className="text-[9px] md:text-[10px] text-[#9aa3b2] font-medium mb-0.5 leading-tight">{label}</p>
-                      <p className="text-lg md:text-xl font-bold text-[#0f1729] font-mono">{value}</p>
-                      <p className={`text-[9px] md:text-[10px] mt-1 font-medium ${good ? 'text-[#22c55e]' : 'text-[#f5761a]'}`}>
-                        {delta}
-                      </p>
-                    </div>
-                  ))}
-                </div>
 
-                {/* cost breakdown + recent quotes */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-2 md:gap-3">
-                  {/* breakdown card */}
-                  <div className="md:col-span-3 bg-white rounded-xl border border-[#e5e8ef] p-3 md:p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="text-[12px] font-semibold text-[#0f1729]">
-                          AL6061 Sensor Housing — CNC
-                        </p>
-                        <p className="text-[10px] text-[#9aa3b2]">Cost Breakdown</p>
+                {/* ── MOBILE layout: 3 hero stats + full-width breakdown ── */}
+                <div className="block md:hidden space-y-2.5">
+
+                  {/* 3 large stat numbers */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { val: '24',  sub: 'Active Quotes', color: '#1e2d4e' },
+                      { val: '96%', sub: 'Avg Conf.',     color: '#2d6ac8' },
+                      { val: '3',   sub: 'Pending',       color: '#f5761a' },
+                    ].map(({ val, sub, color }) => (
+                      <div key={sub}
+                        className="bg-white rounded-xl border border-[#e5e8ef] py-3 px-2 text-center">
+                        <p className="text-[21px] font-black leading-none" style={{ color }}>{val}</p>
+                        <p className="text-[9px] text-[#9aa3b2] mt-1.5 font-medium leading-tight">{sub}</p>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                    ))}
+                  </div>
+
+                  {/* full-width cost breakdown — readable on mobile */}
+                  <div className="bg-white rounded-xl border border-[#e5e8ef] p-4">
+                    <div className="flex items-start justify-between gap-2 mb-4">
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-bold text-[#0f1729] leading-snug">
+                          AL6061 Sensor Housing
+                        </p>
+                        <p className="text-[11px] text-[#9aa3b2] mt-0.5">CNC · Cost Breakdown</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="px-2 py-0.5 bg-[#dcfce7] text-[#16a34a]
-                                         text-[9px] font-bold rounded-full">94% conf.</span>
+                                         text-[10px] font-bold rounded-full whitespace-nowrap">
+                          94% conf.
+                        </span>
                         <span className="px-2 py-0.5 bg-[#dbeafe] text-[#1d4ed8]
-                                         text-[9px] font-bold rounded-full">Tier 3</span>
+                                         text-[10px] font-bold rounded-full">
+                          Tier 3
+                        </span>
                       </div>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       {[
-                        { cat: 'Material',  val: '€18.40', pct: 38, col: '#1e2d4e' },
-                        { cat: 'Machining', val: '€22.10', pct: 46, col: '#2d6ac8' },
-                        { cat: 'Setup',     val: '€3.20',  pct: 7,  col: '#0d9e8a' },
-                        { cat: 'Overhead',  val: '€2.80',  pct: 6,  col: '#7c3aed' },
-                        { cat: 'Margin 16%',val: '€7.44',  pct: 16, col: '#e85c1a' },
+                        { cat: 'Material',   val: '€18.40', pct: 38, col: '#1e2d4e' },
+                        { cat: 'Machining',  val: '€22.10', pct: 46, col: '#2d6ac8' },
+                        { cat: 'Setup',      val: '€3.20',  pct: 7,  col: '#0d9e8a' },
+                        { cat: 'Overhead',   val: '€2.80',  pct: 6,  col: '#7c3aed' },
+                        { cat: 'Margin 16%', val: '€7.44',  pct: 16, col: '#e85c1a' },
                       ].map(({ cat, val, pct, col }) => (
                         <div key={cat} className="flex items-center gap-2">
-                          <span className="text-[10px] text-[#9aa3b2] w-16 flex-shrink-0">{cat}</span>
-                          <div className="flex-1 bg-[#f4f6fb] rounded-full h-1.5">
-                            <div className="h-1.5 rounded-full" style={{ width: `${pct * 2}%`, background: col }} />
+                          <span className="text-[11px] text-[#9aa3b2] w-[68px] flex-shrink-0 font-medium">
+                            {cat}
+                          </span>
+                          <div className="flex-1 bg-[#f4f6fb] rounded-full h-2">
+                            <div className="h-2 rounded-full"
+                              style={{ width: `${pct * 2}%`, background: col }} />
                           </div>
-                          <span className="text-[10px] font-bold text-[#0f1729] font-mono w-12 text-right">
+                          <span className="text-[11px] font-bold text-[#0f1729] font-mono w-[46px] text-right">
                             {val}
                           </span>
                         </div>
                       ))}
                     </div>
-                    <div className="mt-3 pt-3 border-t border-[#f4f6fb] flex justify-between">
-                      <span className="text-[11px] font-semibold text-[#0f1729]">Total</span>
-                      <span className="text-[13px] font-extrabold text-[#0f1729] font-mono">€53.94</span>
-                    </div>
-                  </div>
-
-                  {/* recent quotes — hidden on mobile (keeps card compact) */}
-                  <div className="hidden md:block md:col-span-2 bg-white rounded-xl border border-[#e5e8ef] p-4">
-                    <p className="text-[11px] font-semibold text-[#0f1729] mb-3">Recent Quotes</p>
-                    <div className="space-y-2">
-                      {[
-                        { name: 'M8 Cable Gland', status: 'approved', cost: '€12.30' },
-                        { name: 'Proximity Sensor Body', status: 'pending', cost: '€38.70' },
-                        { name: 'EMC Shield Plate', status: 'approved', cost: '€8.90' },
-                        { name: 'PCB Housing', status: 'costing', cost: '—' },
-                      ].map(({ name, status, cost }) => (
-                        <div key={name} className="flex items-center justify-between py-1">
-                          <div>
-                            <p className="text-[10px] font-medium text-[#0f1729]">{name}</p>
-                            <span className={cn('text-[9px] font-semibold rounded-full px-1.5 py-0.5',
-                              status === 'approved' ? 'bg-[#dcfce7] text-[#16a34a]' :
-                              status === 'pending'  ? 'bg-[#fef9c3] text-[#854d0e]' :
-                              'bg-[#dbeafe] text-[#1d4ed8]'
-                            )}>{status}</span>
-                          </div>
-                          <span className="text-[10px] font-bold text-[#0f1729] font-mono">{cost}</span>
-                        </div>
-                      ))}
+                    <div className="mt-4 pt-3 border-t border-[#f4f6fb] flex items-center justify-between">
+                      <span className="text-[12px] font-semibold text-[#6b7280]">Total Cost</span>
+                      <span className="text-[22px] font-black text-[#0f1729] font-mono leading-none">
+                        €53.94
+                      </span>
                     </div>
                   </div>
                 </div>
+
+                {/* ── DESKTOP layout: 4-col KPI + breakdown 3-col + quotes 2-col ── */}
+                <div className="hidden md:block">
+                  <div className="grid grid-cols-4 gap-3 mb-4">
+                    {[
+                      { label: 'Active Quotes',    value: '24',  delta: '+3 this week',   good: true  },
+                      { label: 'Avg Confidence',   value: '96%', delta: 'Target: 98%',    good: true  },
+                      { label: 'Bulk Batches',     value: '8',   delta: '312 parts total', good: true  },
+                      { label: 'Pending Approval', value: '3',   delta: '2 urgent',       good: false },
+                    ].map(({ label, value, delta, good }) => (
+                      <div key={label} className="bg-white rounded-xl border border-[#e5e8ef] p-3.5">
+                        <p className="text-[10px] text-[#9aa3b2] font-medium mb-0.5 leading-tight">{label}</p>
+                        <p className="text-xl font-bold text-[#0f1729] font-mono">{value}</p>
+                        <p className={`text-[10px] mt-1 font-medium ${good ? 'text-[#22c55e]' : 'text-[#f5761a]'}`}>
+                          {delta}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-5 gap-3">
+                    <div className="col-span-3 bg-white rounded-xl border border-[#e5e8ef] p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-[12px] font-semibold text-[#0f1729]">
+                            AL6061 Sensor Housing — CNC
+                          </p>
+                          <p className="text-[10px] text-[#9aa3b2]">Cost Breakdown</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 bg-[#dcfce7] text-[#16a34a]
+                                           text-[9px] font-bold rounded-full">94% conf.</span>
+                          <span className="px-2 py-0.5 bg-[#dbeafe] text-[#1d4ed8]
+                                           text-[9px] font-bold rounded-full">Tier 3</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {[
+                          { cat: 'Material',   val: '€18.40', pct: 38, col: '#1e2d4e' },
+                          { cat: 'Machining',  val: '€22.10', pct: 46, col: '#2d6ac8' },
+                          { cat: 'Setup',      val: '€3.20',  pct: 7,  col: '#0d9e8a' },
+                          { cat: 'Overhead',   val: '€2.80',  pct: 6,  col: '#7c3aed' },
+                          { cat: 'Margin 16%', val: '€7.44',  pct: 16, col: '#e85c1a' },
+                        ].map(({ cat, val, pct, col }) => (
+                          <div key={cat} className="flex items-center gap-2">
+                            <span className="text-[10px] text-[#9aa3b2] w-16 flex-shrink-0">{cat}</span>
+                            <div className="flex-1 bg-[#f4f6fb] rounded-full h-1.5">
+                              <div className="h-1.5 rounded-full"
+                                style={{ width: `${pct * 2}%`, background: col }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-[#0f1729] font-mono w-12 text-right">
+                              {val}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-[#f4f6fb] flex justify-between">
+                        <span className="text-[11px] font-semibold text-[#0f1729]">Total</span>
+                        <span className="text-[13px] font-extrabold text-[#0f1729] font-mono">€53.94</span>
+                      </div>
+                    </div>
+                    <div className="col-span-2 bg-white rounded-xl border border-[#e5e8ef] p-4">
+                      <p className="text-[11px] font-semibold text-[#0f1729] mb-3">Recent Quotes</p>
+                      <div className="space-y-2">
+                        {[
+                          { name: 'M8 Cable Gland',       status: 'approved', cost: '€12.30' },
+                          { name: 'Proximity Sensor Body', status: 'pending',  cost: '€38.70' },
+                          { name: 'EMC Shield Plate',      status: 'approved', cost: '€8.90'  },
+                          { name: 'PCB Housing',           status: 'costing',  cost: '—'      },
+                        ].map(({ name, status, cost }) => (
+                          <div key={name} className="flex items-center justify-between py-1">
+                            <div>
+                              <p className="text-[10px] font-medium text-[#0f1729]">{name}</p>
+                              <span className={cn('text-[9px] font-semibold rounded-full px-1.5 py-0.5',
+                                status === 'approved' ? 'bg-[#dcfce7] text-[#16a34a]' :
+                                status === 'pending'  ? 'bg-[#fef9c3] text-[#854d0e]' :
+                                'bg-[#dbeafe] text-[#1d4ed8]'
+                              )}>{status}</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-[#0f1729] font-mono">{cost}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
           </FloatingCard>
