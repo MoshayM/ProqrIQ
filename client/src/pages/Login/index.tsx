@@ -489,9 +489,9 @@ export default function Login() {
                 </button>
               </form>
 
-              {/* Passkey */}
+              {/* Passkey — touch/biometric devices only (mobile + tablet) */}
               {webAuthnSupported && (
-                <>
+                <div className="md:hidden">
                   <div className="flex items-center gap-3 my-5">
                     <div className="flex-1 h-px bg-[#e5e8ef]" />
                     <span className="text-[11px] text-[#b0b8c9] font-medium">or continue with</span>
@@ -521,7 +521,7 @@ export default function Login() {
                       </>
                     )}
                   </button>
-                </>
+                </div>
               )}
 
               {/* Footer links */}
