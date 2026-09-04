@@ -1,20 +1,46 @@
 {
-  "name": "ProqrIQ",
+  "name": "ProqrIQ — Cost Engineering",
   "short_name": "ProqrIQ",
-  "description": "B2B cost engineering and quotation platform",
-  "start_url": "/",
+  "description": "AI-powered cost engineering and quotation platform for B2B manufacturing. Upload drawings, get accurate cost breakdowns in minutes.",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "portrait-primary",
   "background_color": "#1e2d4e",
   "theme_color": "#1e2d4e",
-  "categories": ["business", "productivity"],
+  "categories": ["business", "productivity", "finance"],
+  "lang": "en",
+  "dir": "ltr",
   "icons": [
     { "src": "/favicon.svg",  "sizes": "any",     "type": "image/svg+xml", "purpose": "any" },
     { "src": "/icon-32.png",  "sizes": "32x32",   "type": "image/png",     "purpose": "any" },
     { "src": "/icon-180.png", "sizes": "180x180", "type": "image/png",     "purpose": "any" },
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png",     "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png",     "purpose": "maskable" }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png",     "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png",     "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Quote",
+      "short_name": "Quote",
+      "description": "Start a new cost quote",
+      "url": "/quotes/new",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Bulk Costing",
+      "short_name": "Bulk",
+      "description": "Cost a batch of up to 50 parts",
+      "url": "/bulk",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View your dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
   ],
   "screenshots": [
     {
@@ -24,5 +50,6 @@
       "form_factor": "wide",
       "label": "ProqrIQ — B2B Cost Engineering & Quotation Platform"
     }
-  ]
+  ],
+  "prefer_related_applications": false
 }

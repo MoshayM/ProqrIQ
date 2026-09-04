@@ -346,7 +346,7 @@ export default function Terms() {
                               bg-white/10 border border-white/15 text-[11px] font-semibold
                               text-[#8ba5c8] mb-3">
                 <Globe className="w-3 h-3" />
-                ProqrIQ.com · Legal
+                Legal · Terms of Service
               </div>
               <h1 className="text-3xl font-extrabold text-white tracking-tight">Terms of Service</h1>
               <p className="text-[#8ba5c8] text-[14px] mt-2">
@@ -390,7 +390,6 @@ export default function Terms() {
           <div className="flex items-center gap-4">
             <Link to="/privacy" className="hover:text-[#0f1729] transition-colors">Privacy Policy</Link>
             <Link to="/login"   className="hover:text-[#0f1729] transition-colors">Sign in</Link>
-            <span className="text-[#c2c8d6]">ProqrIQ.com <span className="text-[#d1d9e8]">(coming soon)</span></span>
           </div>
         </div>
       </div>

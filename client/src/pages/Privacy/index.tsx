@@ -316,7 +316,7 @@ export default function Privacy() {
                               bg-white/10 border border-white/15 text-[11px] font-semibold
                               text-[#8ba5c8] mb-3">
                 <Globe className="w-3 h-3" />
-                ProqrIQ.com · Privacy & Data
+                Privacy & Data Policy
               </div>
               <h1 className="text-3xl font-extrabold text-white tracking-tight">Privacy Policy</h1>
               <p className="text-[#8ba5c8] text-[14px] mt-2">
@@ -360,7 +360,6 @@ export default function Privacy() {
           <div className="flex items-center gap-4">
             <Link to="/terms"  className="hover:text-[#0f1729] transition-colors">Terms of Service</Link>
             <Link to="/login"  className="hover:text-[#0f1729] transition-colors">Sign in</Link>
-            <span className="text-[#c2c8d6]">ProqrIQ.com <span className="text-[#d1d9e8]">(coming soon)</span></span>
           </div>
         </div>
       </div>

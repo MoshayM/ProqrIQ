@@ -203,10 +203,6 @@ export default function Login() {
               style={{ background: 'rgba(232,92,26,0.18)', color: '#f0916a' }}>
               Powered by AI
             </span>
-            <span className="text-[10px] px-2 py-1 rounded-full font-semibold ml-auto"
-              style={{ background: 'rgba(245,166,35,0.15)', color: '#f5a623', border: '1px solid rgba(245,166,35,0.3)' }}>
-              ProqrIQ.com · Soon
-            </span>
           </motion.div>
 
           {/* Centre — hero copy + 3D logo mark */}
@@ -372,19 +368,11 @@ export default function Login() {
               transition={{ duration: 0.5, delay: 0.1 }}
             >
               {/* Badge */}
-              <div className="flex flex-wrap items-center gap-2 mb-5">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f0f4ff]
-                                border border-[#d8e3fa] rounded-full text-[11px] font-semibold
-                                text-[#2d6ac8]">
-                  <Zap className="w-3 h-3 text-[#e85c1a]" />
-                  AI-Powered Cost Engineering
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full
-                                bg-[#f5a623]/10 border border-[#f5a623]/30 text-[10px] font-semibold
-                                text-[#c27a10]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#f5a623] animate-pulse" />
-                  ProqrIQ.com · Coming Soon
-                </div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#f0f4ff]
+                              border border-[#d8e3fa] rounded-full text-[11px] font-semibold
+                              text-[#2d6ac8] mb-5">
+                <Zap className="w-3 h-3 text-[#e85c1a]" />
+                ProqrIQ — AI-Powered Cost Engineering
               </div>
 
               <h2 className="text-[1.6rem] font-extrabold text-[#0f1729] tracking-tight">
