@@ -1,21 +1,25 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
-export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
+export default defineConfig(async () => {
+  const plugins: Plugin[] = [react()]
+
+  // Dynamic import so the build doesn't hard-fail on platforms (e.g. Vercel)
+  // where npm workspace hoisting puts vite-plugin-pwa outside the ESM loader's
+  // resolution scope. PWA is fully enabled in local dev and any env where the
+  // package is locally resolvable.
+  try {
+    const { VitePWA } = await import('vite-plugin-pwa')
+    plugins.push(VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icon-*.png', 'og-image.png'],
       manifest: false, // we use our own public/manifest.json
       workbox: {
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MB — main bundle is ~2.1 MB
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            // API calls: network-first, fall back to cache
             urlPattern: /^https?:\/\/.*\/api\/.*/i,
             handler: 'NetworkFirst',
             options: {
@@ -25,7 +29,6 @@ export default defineConfig({
             },
           },
           {
-            // Google Fonts: cache-first
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
@@ -34,45 +37,49 @@ export default defineConfig({
             },
           },
         ],
-        // Navigate to index.html for all SPA routes
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/],
       },
       devOptions: { enabled: false },
-    }),
-  ],
-  define: {
-    // Leaflet CJS bundle uses `global` in some paths; map to globalThis in browser.
-    'global': 'globalThis',
-  },
-  resolve: {
-    dedupe: ['react', 'react-dom', 'leaflet', 'react-leaflet'],
-    alias: {
-      '@':       path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, '../shared'),
+    }) as Plugin)
+  } catch {
+    // vite-plugin-pwa unavailable — service worker skipped, manifest.json still served
+  }
+
+  return {
+    plugins,
+    define: {
+      'global': 'globalThis',
     },
-  },
-  optimizeDeps: {
-    include: ['leaflet', 'react-leaflet'],
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: (id) => {
-          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) {
-            return 'leaflet'
-          }
+    resolve: {
+      dedupe: ['react', 'react-dom', 'leaflet', 'react-leaflet'],
+      alias: {
+        '@':       path.resolve(__dirname, './src'),
+        '@shared': path.resolve(__dirname, '../shared'),
+      },
+    },
+    optimizeDeps: {
+      include: ['leaflet', 'react-leaflet'],
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) {
+              return 'leaflet'
+            }
+          },
         },
       },
     },
-  },
-  server: {
-    port: 5299,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3099',
-        changeOrigin: true,
+    server: {
+      port: 5299,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3099',
+          changeOrigin: true,
+        },
       },
     },
-  },
+  }
 })
