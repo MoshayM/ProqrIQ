@@ -150,6 +150,16 @@ export const api = {
     testLlmKey:      (provider: string, api_key?: string) => client.post(`/admin/llm-keys/${provider}/test`, { api_key }).then(d),
     getLlmPreference:()                           => client.get('/admin/llm-preference').then(d),
     setLlmPreference:(preferred_provider: string) => client.post('/admin/llm-preference', { preferred_provider }).then(d),
+    // Analytics
+    getAnalytics:           ()                   => client.get('/admin/analytics').then(d),
+    getSubscriptions:       ()                   => client.get('/admin/analytics/subscriptions').then(d),
+    patchSubscription:      (userId: string, data: unknown) => client.patch(`/admin/analytics/subscriptions/${userId}`, data).then(d),
+    getTransactions:        ()                   => client.get('/admin/analytics/transactions').then(d),
+    createTransaction:      (data: unknown)      => client.post('/admin/analytics/transactions', data).then(d),
+    // Plan config
+    getPlanConfig:          ()                   => client.get('/admin/plan-config').then(d),
+    getPlanConfigHistory:   (plan: string)       => client.get(`/admin/plan-config/history/${plan}`).then(d),
+    savePlanConfig:         (plan: string, data: unknown) => client.put(`/admin/plan-config/${plan}`, data).then(d),
   },
   passkey: {
     authOptions:     (email?: string) => client.post('/auth/passkey/auth/options', { email }).then(d),

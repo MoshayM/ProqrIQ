@@ -20,6 +20,8 @@ import { router as bulkBatchesRouter }  from './routes/bulkBatches'
 import { router as assembliesRouter }   from './routes/assemblies'
 import notificationsRouter              from './routes/notifications'
 import { router as adminConfigRouter }  from './routes/adminConfig'
+import { router as adminAnalyticsRouter } from './routes/adminAnalytics'
+import { router as planConfigRouter }    from './routes/planConfig'
 import { router as searchRouter }        from './routes/search'
 import { router as suppliersRouter }    from './routes/suppliers'
 import { router as subscriptionRouter } from './routes/subscription'
@@ -235,9 +237,12 @@ app.use('/api/bulk-batches',  bulkBatchesRouter)
 app.use('/api/assemblies',    assembliesRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/admin',        adminConfigRouter)
+app.use('/api/admin',        adminAnalyticsRouter)
+app.use('/api/admin',        planConfigRouter)
 app.use('/api/search',       searchRouter)
 app.use('/api/suppliers',    suppliersRouter)
 app.use('/api/help',         helpRouter)
+app.use('/api',              planConfigRouter)
 app.use('/api',              subscriptionRouter)
 
 // ─── Vercel cron: reset monthly usage counters (runs 1st of every month) ──────

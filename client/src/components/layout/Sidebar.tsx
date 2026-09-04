@@ -7,6 +7,7 @@ import {
   Package,
   LogOut,
   Bell,
+  BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn } from '../../lib/utils'
@@ -26,6 +27,9 @@ export function Sidebar() {
 
   const unread = notifs?.filter((n) => !n.is_read).length ?? 0
 
+  const ADMIN_ROLES = ['admin', 'developer', 'owner']
+  const isAdmin = ADMIN_ROLES.includes((user?.role ?? '') as string)
+
   const navItems = [
     { to: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
     { to: '/quotes',      label: 'All Quotes',   icon: FileText },
@@ -33,6 +37,10 @@ export function Sidebar() {
     { to: '/bulk',        label: 'Bulk Costing', icon: Layers },
     { to: '/assemblies',  label: 'Assemblies',   icon: Package },
   ]
+
+  const adminItems = isAdmin
+    ? [{ to: '/admin-analytics', label: 'Analytics', icon: BarChart3 }]
+    : []
 
 
   const handleLogout = async () => {
@@ -82,6 +90,28 @@ export function Sidebar() {
           </NavLink>
         ))}
 
+        {adminItems.length > 0 && (
+          <div className="pt-3 mt-3 border-t border-white/10">
+            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/30">Admin</p>
+            {adminItems.map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
+                    isActive
+                      ? 'bg-[#e85c1a] text-white'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white',
+                  )
+                }
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* Bottom section */}

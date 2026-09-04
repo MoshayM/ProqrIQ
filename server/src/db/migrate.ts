@@ -292,4 +292,46 @@ export async function runMigrations(client: Client): Promise<void> {
       value      TEXT NOT NULL,
       updated_at TEXT
     )`)
+
+  // ── Plan Configs (admin-versioned pricing + features) ─────────────────────
+  await exec(client, `
+    CREATE TABLE IF NOT EXISTS plan_configs (
+      id                TEXT PRIMARY KEY,
+      plan              TEXT NOT NULL,
+      display_name      TEXT NOT NULL,
+      monthly_price_inr INTEGER NOT NULL DEFAULT 0,
+      annual_price_inr  INTEGER NOT NULL DEFAULT 0,
+      monthly_price_usd INTEGER NOT NULL DEFAULT 0,
+      annual_price_usd  INTEGER NOT NULL DEFAULT 0,
+      trial_days        INTEGER NOT NULL DEFAULT 14,
+      features          TEXT NOT NULL,
+      effective_from    TEXT NOT NULL,
+      created_by        TEXT,
+      created_at        TEXT
+    )`)
+
+  // ── Billing Transactions (payment events) ─────────────────────────────────
+  await exec(client, `
+    CREATE TABLE IF NOT EXISTS billing_transactions (
+      id                 TEXT PRIMARY KEY,
+      user_id            TEXT REFERENCES users(id),
+      subscription_id    TEXT,
+      amount_inr         INTEGER DEFAULT 0,
+      amount_usd         INTEGER DEFAULT 0,
+      currency           TEXT NOT NULL DEFAULT 'INR',
+      type               TEXT NOT NULL DEFAULT 'payment',
+      status             TEXT NOT NULL DEFAULT 'succeeded',
+      gateway            TEXT NOT NULL DEFAULT 'manual',
+      gateway_payment_id TEXT,
+      plan               TEXT NOT NULL DEFAULT 'free',
+      billing_cycle      TEXT NOT NULL DEFAULT 'monthly',
+      period_start       TEXT,
+      period_end         TEXT,
+      notes              TEXT,
+      created_at         TEXT
+    )`)
+
+  await exec(client, `CREATE INDEX IF NOT EXISTS idx_billing_tx_user ON billing_transactions(user_id)`)
+  await exec(client, `CREATE INDEX IF NOT EXISTS idx_billing_tx_status ON billing_transactions(status)`)
+  await exec(client, `CREATE INDEX IF NOT EXISTS idx_plan_configs_plan ON plan_configs(plan)`)
 }

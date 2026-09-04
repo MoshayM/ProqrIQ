@@ -702,3 +702,41 @@ export const systemSettings = sqliteTable('system_settings', {
   value:      text('value').notNull(),
   updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
 })
+
+// ─── Plan Configs (admin-editable pricing + features, versioned) ──────────────
+
+export const planConfigs = sqliteTable('plan_configs', {
+  id:                text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  plan:              text('plan', { enum: ['free', 'pro', 'organization'] }).notNull(),
+  display_name:      text('display_name').notNull(),
+  monthly_price_inr: integer('monthly_price_inr').notNull().default(0),
+  annual_price_inr:  integer('annual_price_inr').notNull().default(0),
+  monthly_price_usd: integer('monthly_price_usd').notNull().default(0),
+  annual_price_usd:  integer('annual_price_usd').notNull().default(0),
+  trial_days:        integer('trial_days').notNull().default(14),
+  features:          text('features').notNull(), // JSON PlanFeatures
+  effective_from:    text('effective_from').notNull(),
+  created_by:        text('created_by'),
+  created_at:        text('created_at').$defaultFn(() => new Date().toISOString()),
+})
+
+// ─── Billing Transactions (payment events, used for MRR/ARR/cashflow) ─────────
+
+export const billingTransactions = sqliteTable('billing_transactions', {
+  id:                 text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  user_id:            text('user_id').references(() => users.id),
+  subscription_id:    text('subscription_id'),
+  amount_inr:         integer('amount_inr').default(0),
+  amount_usd:         integer('amount_usd').default(0),
+  currency:           text('currency').notNull().default('INR'),
+  type:               text('type', { enum: ['payment', 'refund', 'credit', 'chargeback'] }).notNull().default('payment'),
+  status:             text('status', { enum: ['succeeded', 'failed', 'pending', 'refunded'] }).notNull().default('succeeded'),
+  gateway:            text('gateway', { enum: ['stripe', 'razorpay', 'manual'] }).notNull().default('manual'),
+  gateway_payment_id: text('gateway_payment_id'),
+  plan:               text('plan').notNull().default('free'),
+  billing_cycle:      text('billing_cycle', { enum: ['monthly', 'annual'] }).notNull().default('monthly'),
+  period_start:       text('period_start'),
+  period_end:         text('period_end'),
+  notes:              text('notes'),
+  created_at:         text('created_at').$defaultFn(() => new Date().toISOString()),
+})
