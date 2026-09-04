@@ -1,14 +1,16 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform, useSpring, AnimatePresence } from 'framer-motion'
+import { motion, useScroll, useTransform, useSpring } from 'framer-motion'
 import {
   Brain, Layers, Package, MapPin, ShieldCheck, Cpu,
   ArrowRight, ChevronRight, Zap, Clock, Target, TrendingUp,
-  CheckCircle2, Star, FileText, BarChart2, Sparkles
+  CheckCircle2, Star, FileText, BarChart2, Sparkles,
+  Download, Smartphone, Monitor, Share2,
 } from 'lucide-react'
 import { Logo, LogoMark } from '../../components/ui/logo'
 import { cn } from '../../lib/utils'
+import { useInstallPrompt } from '../../hooks/useInstallPrompt'
 
 // ── animated counter ──────────────────────────────────────────────────────────
 function useCounter(target: number, duration = 1800, start = false) {
@@ -147,6 +149,10 @@ export default function Landing() {
   const statsRef = useRef<HTMLDivElement>(null)
   const [statsInView, setStatsInView] = useState(false)
   const [navScrolled, setNavScrolled] = useState(false)
+  const { canInstall, triggerInstall, showIOSInstructions, installed } = useInstallPrompt()
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  )
 
   // parallax transforms
   const heroY    = useTransform(scrollY, [0, 500], [0, 120])
@@ -163,6 +169,13 @@ export default function Landing() {
   useEffect(() => {
     return scrollY.on('change', v => setNavScrolled(v > 20))
   }, [scrollY])
+
+  // mobile detection
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // stats intersection
   useEffect(() => {
@@ -259,7 +272,7 @@ export default function Landing() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="hidden md:flex items-center gap-8 text-[13px] text-[#4a5568] font-medium"
           >
-            {[['#features','Features'],['#how-it-works','How it works'],['#stats','Results']].map(([h, l]) => (
+            {[['#features','Features'],['#how-it-works','How it works'],['#stats','Results'],['#install','Install']].map(([h, l]) => (
               <a key={h} href={h}
                 className="hover:text-[#1e2d4e] transition-colors relative group">
                 {l}
@@ -267,11 +280,6 @@ export default function Landing() {
                                  group-hover:w-full transition-all duration-300" />
               </a>
             ))}
-            <span className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full
-                             bg-[#f5a623]/10 border border-[#f5a623]/30 text-[#c27a10] font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#f5a623] animate-pulse" />
-              ProqrIQ.com · Coming Soon
-            </span>
           </motion.div>
 
           <motion.div
@@ -296,12 +304,12 @@ export default function Landing() {
 
       {/* ── HERO ────────────────────────────────────────────────────────── */}
       <section className="relative min-h-screen flex flex-col items-center justify-center
-                          pt-24 pb-16 px-6 overflow-hidden">
+                          pt-20 md:pt-24 pb-10 md:pb-16 px-4 md:px-6 overflow-hidden">
         {/* floating particles */}
         {particles.map((p, i) => <Particle key={i} {...p} />)}
 
         <motion.div
-          style={{ y: smoothHeroY, opacity: heroOpac }}
+          style={isMobile ? {} : { y: smoothHeroY, opacity: heroOpac }}
           className="relative z-10 text-center max-w-5xl mx-auto"
         >
           {/* badge */}
@@ -346,8 +354,8 @@ export default function Landing() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.3 }}
-            className="text-5xl md:text-7xl font-extrabold text-[#0f1729] leading-[1.06]
-                       tracking-tight mb-6"
+            className="text-4xl sm:text-5xl md:text-7xl font-extrabold text-[#0f1729] leading-[1.06]
+                       tracking-tight mb-4 md:mb-6"
           >
             Cost every part.<br />
             <span className="relative inline-block">
@@ -369,7 +377,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.45 }}
-            className="max-w-2xl mx-auto text-lg text-[#6b7280] leading-relaxed mb-10"
+            className="max-w-2xl mx-auto text-base md:text-lg text-[#6b7280] leading-relaxed mb-6 md:mb-10"
           >
             ProqrIQ analyses part drawings, queries your engineering knowledge base,
             and generates structured cost breakdowns with confidence scores —
@@ -381,10 +389,10 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.6 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20"
+            className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-10 md:mb-20 w-full sm:w-auto"
           >
             <Link to="/register"
-              className="group relative flex items-center gap-2.5 px-8 py-4
+              className="group relative w-full sm:w-auto flex items-center justify-center gap-2.5 px-8 py-4
                          bg-[#1e2d4e] text-white font-bold rounded-xl text-[15px]
                          overflow-hidden transition-all duration-300
                          shadow-lg shadow-[#1e2d4e]/30 hover:shadow-xl hover:shadow-[#1e2d4e]/40
@@ -399,7 +407,7 @@ export default function Landing() {
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link to="/login"
-              className="flex items-center gap-2 px-8 py-4 bg-white text-[#1e2d4e]
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-white text-[#1e2d4e]
                          font-semibold rounded-xl border border-[#d1d9e8] text-[15px]
                          hover:bg-[#f4f6fb] hover:border-[#1e2d4e]/30
                          transition-all duration-200 shadow-sm">
@@ -431,8 +439,8 @@ export default function Landing() {
 
         {/* ── 3D floating dashboard preview ─────────────────────────────── */}
         <motion.div
-          style={{ y: cardY }}
-          className="relative z-10 mt-16 w-full max-w-5xl mx-auto px-4"
+          style={isMobile ? {} : { y: cardY }}
+          className="relative z-10 mt-8 md:mt-16 w-full max-w-5xl mx-auto px-2 md:px-4"
         >
           <FloatingCard delay={0.8} className="w-full">
             <div className="bg-white rounded-2xl border border-[#e5e8ef]
@@ -455,9 +463,9 @@ export default function Landing() {
               </div>
 
               {/* mock dashboard content */}
-              <div className="p-5 bg-[#f4f6fb]">
-                {/* KPI row */}
-                <div className="grid grid-cols-4 gap-3 mb-4">
+              <div className="p-3 md:p-5 bg-[#f4f6fb]">
+                {/* KPI row: 2-col on mobile, 4-col on desktop */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-3 md:mb-4">
                   {[
                     { label: 'Active Quotes',   value: '24',   delta: '+3 this week',  good: true  },
                     { label: 'Avg Confidence',  value: '96%',  delta: 'Target: 98%',    good: true  },
@@ -465,10 +473,10 @@ export default function Landing() {
                     { label: 'Pending Approval',value: '3',    delta: '2 urgent',       good: false },
                   ].map(({ label, value, delta, good }) => (
                     <div key={label}
-                      className="bg-white rounded-xl border border-[#e5e8ef] p-3.5">
-                      <p className="text-[10px] text-[#9aa3b2] font-medium mb-0.5">{label}</p>
-                      <p className="text-xl font-bold text-[#0f1729] font-mono">{value}</p>
-                      <p className={`text-[10px] mt-1 font-medium ${good ? 'text-[#22c55e]' : 'text-[#f5761a]'}`}>
+                      className="bg-white rounded-xl border border-[#e5e8ef] p-2.5 md:p-3.5">
+                      <p className="text-[9px] md:text-[10px] text-[#9aa3b2] font-medium mb-0.5 leading-tight">{label}</p>
+                      <p className="text-lg md:text-xl font-bold text-[#0f1729] font-mono">{value}</p>
+                      <p className={`text-[9px] md:text-[10px] mt-1 font-medium ${good ? 'text-[#22c55e]' : 'text-[#f5761a]'}`}>
                         {delta}
                       </p>
                     </div>
@@ -476,9 +484,9 @@ export default function Landing() {
                 </div>
 
                 {/* cost breakdown + recent quotes */}
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-2 md:gap-3">
                   {/* breakdown card */}
-                  <div className="col-span-3 bg-white rounded-xl border border-[#e5e8ef] p-4">
+                  <div className="md:col-span-3 bg-white rounded-xl border border-[#e5e8ef] p-3 md:p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div>
                         <p className="text-[12px] font-semibold text-[#0f1729]">
@@ -518,8 +526,8 @@ export default function Landing() {
                     </div>
                   </div>
 
-                  {/* recent quotes */}
-                  <div className="col-span-2 bg-white rounded-xl border border-[#e5e8ef] p-4">
+                  {/* recent quotes — hidden on mobile (keeps card compact) */}
+                  <div className="hidden md:block md:col-span-2 bg-white rounded-xl border border-[#e5e8ef] p-4">
                     <p className="text-[11px] font-semibold text-[#0f1729] mb-3">Recent Quotes</p>
                     <div className="space-y-2">
                       {[
@@ -548,12 +556,12 @@ export default function Landing() {
           </FloatingCard>
         </motion.div>
 
-        {/* scroll indicator */}
+        {/* scroll indicator — desktop only */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 2 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1"
+          className="hidden md:flex absolute bottom-8 left-1/2 -translate-x-1/2 flex-col items-center gap-1"
         >
           <span className="text-[11px] text-[#9aa3b2] font-medium">Scroll to explore</span>
           <motion.div
@@ -871,6 +879,202 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── INSTALL / DOWNLOAD ──────────────────────────────────────────── */}
+      <section id="install" className="py-24 max-w-6xl mx-auto px-6 relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-14"
+        >
+          <p className="text-[12px] font-bold text-[#e85c1a] uppercase tracking-[0.15em] mb-3">
+            Install the App
+          </p>
+          <h2 className="text-4xl md:text-5xl font-extrabold text-[#0f1729] mb-4 tracking-tight">
+            Works on every device
+          </h2>
+          <p className="text-[#6b7280] max-w-xl mx-auto text-[16px]">
+            Install ProqrIQ as a native-feeling app on any device — no app store required.
+            Full offline support, fast launches, and home-screen shortcuts.
+          </p>
+        </motion.div>
+
+        <div className="grid md:grid-cols-3 gap-5 mb-10">
+          {/* Web / Desktop */}
+          <motion.div
+            initial={{ opacity: 0, y: 28 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0, duration: 0.6 }}
+            className="relative bg-white rounded-2xl border border-[#e5e8ef] p-6 shadow-sm
+                       hover:shadow-lg transition-shadow duration-300 overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 opacity-[0.04]"
+              style={{ background: 'radial-gradient(circle, #1e2d4e, transparent)' }} />
+            <div className="w-12 h-12 rounded-2xl bg-[#1e2d4e] flex items-center justify-center mb-4">
+              <Monitor className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="text-[15px] font-bold text-[#0f1729] mb-2">Web App (Desktop)</h3>
+            <p className="text-[13px] text-[#6b7280] leading-relaxed mb-5">
+              Chrome, Edge, or Brave on Windows/Mac will show an install button in the address bar.
+              Click it to install ProqrIQ as a desktop app — no browser chrome, instant launch.
+            </p>
+            <div className="space-y-2 text-[12px] text-[#374151]">
+              {['Click the ⊕ icon in your browser address bar', 'Click "Install" in the prompt', 'ProqrIQ appears in your taskbar & Start menu'].map((step, i) => (
+                <div key={i} className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#1e2d4e] text-white text-[10px] font-bold
+                                   flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</span>
+                  {step}
+                </div>
+              ))}
+            </div>
+            {canInstall && !installed && (
+              <button
+                onClick={triggerInstall}
+                className="mt-5 w-full flex items-center justify-center gap-2 py-3 px-4
+                           bg-[#1e2d4e] text-white font-semibold rounded-xl text-[13px]
+                           hover:bg-[#2d3e5c] transition-colors shadow-md shadow-[#1e2d4e]/20"
+              >
+                <Download className="w-4 h-4" />
+                Install ProqrIQ now
+              </button>
+            )}
+            {installed && (
+              <div className="mt-5 flex items-center gap-2 px-4 py-3 bg-[#dcfce7] rounded-xl text-[13px] font-semibold text-[#16a34a]">
+                <CheckCircle2 className="w-4 h-4" />
+                Already installed!
+              </div>
+            )}
+          </motion.div>
+
+          {/* Android */}
+          <motion.div
+            initial={{ opacity: 0, y: 28 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.08, duration: 0.6 }}
+            className="relative bg-white rounded-2xl border border-[#e5e8ef] p-6 shadow-sm
+                       hover:shadow-lg transition-shadow duration-300 overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 opacity-[0.04]"
+              style={{ background: 'radial-gradient(circle, #22c55e, transparent)' }} />
+            <div className="w-12 h-12 rounded-2xl bg-[#16a34a] flex items-center justify-center mb-4">
+              <Smartphone className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-[15px] font-bold text-[#0f1729]">Android</h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#dcfce7] text-[#16a34a]">Chrome</span>
+            </div>
+            <p className="text-[13px] text-[#6b7280] leading-relaxed mb-5">
+              Open the app in Chrome on Android. You'll see an "Add to Home screen" banner automatically,
+              or tap the menu and select "Add to Home screen".
+            </p>
+            <div className="space-y-2 text-[12px] text-[#374151]">
+              {[
+                'Open ProqrIQ in Chrome on Android',
+                'Tap the ⋮ menu → "Add to Home screen"',
+                'Tap "Add" — it installs instantly',
+                'Launch from your home screen like any app',
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#16a34a] text-white text-[10px] font-bold
+                                   flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</span>
+                  {step}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* iOS */}
+          <motion.div
+            initial={{ opacity: 0, y: 28 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.16, duration: 0.6 }}
+            className="relative bg-white rounded-2xl border border-[#e5e8ef] p-6 shadow-sm
+                       hover:shadow-lg transition-shadow duration-300 overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 opacity-[0.04]"
+              style={{ background: 'radial-gradient(circle, #2d6ac8, transparent)' }} />
+            <div className="w-12 h-12 rounded-2xl bg-[#2d6ac8] flex items-center justify-center mb-4">
+              <Smartphone className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-[15px] font-bold text-[#0f1729]">iPhone & iPad</h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#dbeafe] text-[#1d4ed8]">Safari</span>
+            </div>
+            <p className="text-[13px] text-[#6b7280] leading-relaxed mb-5">
+              Open ProqrIQ in Safari on your iPhone or iPad. Use the Share menu to add it to
+              your home screen — it runs fullscreen just like a native app.
+            </p>
+            <div className="space-y-2 text-[12px] text-[#374151]">
+              {[
+                'Open ProqrIQ in Safari (not Chrome)',
+                'Tap the Share icon (□ with arrow) at the bottom',
+                'Scroll down and tap "Add to Home Screen"',
+                'Tap "Add" — ProqrIQ is now on your home screen',
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-[#2d6ac8] text-white text-[10px] font-bold
+                                   flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</span>
+                  {step}
+                </div>
+              ))}
+            </div>
+            {showIOSInstructions && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-4 flex items-center gap-2.5 bg-[#eff6ff] border border-[#bfdbfe]
+                           rounded-xl px-4 py-3"
+              >
+                <Share2 className="w-4 h-4 text-[#2d6ac8] flex-shrink-0" />
+                <p className="text-[12px] text-[#1e40af] font-medium">
+                  Tap the <strong>Share</strong> icon below, then <strong>"Add to Home Screen"</strong>
+                </p>
+              </motion.div>
+            )}
+          </motion.div>
+        </div>
+
+        {/* Features of the installed app */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.2, duration: 0.6 }}
+          className="bg-gradient-to-br from-[#1e2d4e] to-[#2d3e5c] rounded-2xl p-6 md:p-8
+                     text-white flex flex-col md:flex-row items-center gap-8"
+        >
+          <div className="flex-1">
+            <p className="text-[12px] font-bold text-[#f5a623] uppercase tracking-widest mb-2">
+              PWA · Progressive Web App
+            </p>
+            <h3 className="text-2xl font-extrabold mb-3">Same app. Native feel.</h3>
+            <p className="text-[#8ba5c8] text-[14px] leading-relaxed">
+              ProqrIQ is built as a full Progressive Web App — one codebase, every device.
+              No app store approval needed. Updates are instant and silent.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 flex-shrink-0">
+            {[
+              { icon: Download,    label: 'Installable',   desc: 'Home screen shortcut' },
+              { icon: Zap,         label: 'Fast launch',   desc: 'Cached assets' },
+              { icon: ShieldCheck, label: 'Secure',        desc: 'HTTPS + JWT' },
+              { icon: Smartphone,  label: 'Responsive',    desc: 'Mobile-first UI' },
+            ].map(({ icon: Icon, label, desc }) => (
+              <div key={label}
+                className="bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+                <Icon className="w-4 h-4 text-[#f5a623] mb-1.5" />
+                <p className="text-[13px] font-semibold">{label}</p>
+                <p className="text-[11px] text-[#8ba5c8]">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </section>
+
       {/* ── CTA ─────────────────────────────────────────────────────────── */}
       <section className="py-28 max-w-6xl mx-auto px-6 relative z-10">
         <motion.div
@@ -951,10 +1155,6 @@ export default function Landing() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-5">
             <div className="flex items-center gap-3">
               <Logo size="sm" variant="full" />
-              <span className="text-[11px] px-2.5 py-1 rounded-full bg-[#f5a623]/10
-                               border border-[#f5a623]/30 text-[#c27a10] font-semibold">
-                ProqrIQ.com · Coming Soon
-              </span>
             </div>
             <div className="flex items-center gap-6 text-[12px] text-[#9aa3b2]">
               <Link to="/terms"   className="hover:text-[#4a5568] transition-colors">Terms</Link>
