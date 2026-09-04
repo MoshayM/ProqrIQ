@@ -71,11 +71,10 @@ function FloatingCard({ children, delay = 0, className = '' }: {
       style={{
         transform: `perspective(800px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
         transition: tilt.x === 0 ? 'transform 0.6s ease' : 'transform 0.1s ease',
-        transformStyle: 'preserve-3d',
       }}
       className={cn('cursor-default', className)}
     >
-      <div style={{ transform: 'translateZ(20px)', transformStyle: 'preserve-3d' }}>
+      <div>
         {children}
       </div>
     </motion.div>
