@@ -16,7 +16,7 @@ import { api } from '../../lib/api'
 import type { Notification } from '@shared/types'
 
 export function Sidebar() {
-  const { user, logout } = useAuth()
+  const { user, logout, hasRole } = useAuth()
   const navigate = useNavigate()
 
   const { data: notifs } = useQuery<Notification[]>({
@@ -27,8 +27,7 @@ export function Sidebar() {
 
   const unread = notifs?.filter((n) => !n.is_read).length ?? 0
 
-  const ADMIN_ROLES = ['admin', 'developer', 'owner']
-  const isAdmin = ADMIN_ROLES.includes((user?.role ?? '') as string)
+  const isAdmin = hasRole(['admin', 'developer', 'owner', 'ceo'])
 
   const navItems = [
     { to: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },

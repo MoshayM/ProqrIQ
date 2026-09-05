@@ -161,7 +161,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
 
     // ── Trials expiring in 7 days ─────────────────────────────────────────────
     const trialsRes = await client.execute(`
-      SELECT u.name, u.email, s.trial_ends_at, s.plan
+      SELECT u.full_name as name, u.email, s.trial_ends_at, s.plan
       FROM subscriptions s JOIN users u ON s.user_id = u.id
       WHERE s.status = 'trialing' AND s.trial_ends_at IS NOT NULL
         AND s.trial_ends_at <= date('now', '+7 days')
@@ -171,7 +171,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
 
     // ── Upcoming renewals (30 days) ───────────────────────────────────────────
     const renewalsRes = await client.execute(`
-      SELECT u.name, u.email, s.plan, s.billing_cycle, s.current_period_end
+      SELECT u.full_name as name, u.email, s.plan, s.billing_cycle, s.current_period_end
       FROM subscriptions s JOIN users u ON s.user_id = u.id
       WHERE s.status = 'active' AND s.current_period_end IS NOT NULL
         AND s.current_period_end <= date('now', '+30 days')
@@ -181,7 +181,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
 
     // ── Recent churn ──────────────────────────────────────────────────────────
     const churnListRes = await client.execute(`
-      SELECT u.name, u.email, s.plan, s.billing_cycle, s.canceled_at
+      SELECT u.full_name as name, u.email, s.plan, s.billing_cycle, s.canceled_at
       FROM subscriptions s JOIN users u ON s.user_id = u.id
       WHERE s.status = 'canceled' AND s.canceled_at >= date('now', '-30 days')
       ORDER BY s.canceled_at DESC LIMIT 20`)
@@ -205,7 +205,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
 
     // ── Top AI spenders ────────────────────────────────────────────────────────
     const topAiRes = await client.execute(`
-      SELECT u.name, u.email, SUM(uc.ai_tokens_used) as tokens
+      SELECT u.full_name as name, u.email, SUM(uc.ai_tokens_used) as tokens
       FROM usage_counters uc JOIN users u ON uc.user_id = u.id
       GROUP BY uc.user_id ORDER BY tokens DESC LIMIT 10`)
     const topAiSpend = topAiRes.rows.map(r => rowToObj(topAiRes.columns, r as unknown[]))
@@ -262,7 +262,7 @@ router.get('/analytics/subscriptions', requireAuth, requireRole(ADMIN_ROLES), as
              s.trial_ends_at, s.current_period_start, s.current_period_end,
              s.canceled_at, s.created_at,
              s.stripe_subscription_id, s.razorpay_subscription_id,
-             u.id as user_id, u.name, u.email, u.role
+             u.id as user_id, u.full_name as name, u.email, u.role
       FROM subscriptions s JOIN users u ON s.user_id = u.id
       ORDER BY s.created_at DESC LIMIT 200`)
     res.json({ success: true, data: result.rows.map(r => rowToObj(result.columns, r as unknown[])) })
@@ -325,7 +325,7 @@ router.patch('/analytics/subscriptions/:userId', requireAuth, requireRole(ADMIN_
 router.get('/analytics/transactions', requireAuth, requireRole(ADMIN_ROLES), async (_req: Request, res: Response) => {
   try {
     const result = await client.execute(`
-      SELECT bt.*, u.name, u.email FROM billing_transactions bt
+      SELECT bt.*, u.full_name as name, u.email FROM billing_transactions bt
       LEFT JOIN users u ON bt.user_id = u.id
       ORDER BY bt.created_at DESC LIMIT 200`)
     res.json({ success: true, data: result.rows.map(r => rowToObj(result.columns, r as unknown[])) })

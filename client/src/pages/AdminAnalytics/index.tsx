@@ -581,7 +581,7 @@ function PlanConfigTab() {
     queryKey: ['admin', 'plan-config'],
     queryFn: () => api.admin.getPlanConfig(),
   })
-  const configs: PlanConfig[] = configData?.data ?? []
+  const configs: PlanConfig[] = (configData as PlanConfig[] | undefined) ?? []
 
   const [editing, setEditing] = useState<Record<string, PlanConfig>>({})
 
@@ -793,10 +793,10 @@ function BillingTab() {
     queryFn: () => api.admin.getTransactions(),
   })
 
-  const subs: Subscription[] = (subsData?.data ?? []).filter((s: Subscription) =>
+  const subs: Subscription[] = ((subsData as Subscription[] | undefined) ?? []).filter((s: Subscription) =>
     !subFilter || s.email?.toLowerCase().includes(subFilter.toLowerCase()) || s.name?.toLowerCase().includes(subFilter.toLowerCase())
   )
-  const txs = txData?.data ?? []
+  const txs = (txData as unknown[] | undefined) ?? []
 
   const patchSub = useMutation({
     mutationFn: ({ userId, data }: { userId: string; data: unknown }) => api.admin.patchSubscription(userId, data),
@@ -1022,7 +1022,7 @@ export default function AdminAnalytics() {
     staleTime: 60_000,
   })
 
-  const analytics: Analytics | undefined = data?.data
+  const analytics: Analytics | undefined = data as Analytics | undefined
 
   if (!isAdmin) {
     return (
