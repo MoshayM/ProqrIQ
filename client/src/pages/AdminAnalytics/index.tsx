@@ -304,8 +304,8 @@ function RevenueTab({ data, loading }: { data: Analytics | undefined; loading: b
         <MetricCard loading={loading} label="MRR" value={data ? fmtInr(data.mrr) : '—'} color="#2d6ac8" sub="Monthly Recurring Revenue" />
         <MetricCard loading={loading} label="ARR" value={data ? fmtInr(data.arr) : '—'} color="#1e2d4e" sub="Annual Recurring Revenue" />
         <MetricCard loading={loading} label="Run Rate" value={data ? fmtInr(data.run_rate) : '—'} color="#7c3aed" sub="ARR = MRR × 12" />
-        <MetricCard loading={loading} label="New MRR" value={data ? fmtInr(data.new_mrr) : '—'} color="#0d9e8a" sub="Added this month" trend={data?.new_mrr > 0 ? 100 : 0} />
-        <MetricCard loading={loading} label="Churned MRR" value={data ? fmtInr(data.churned_mrr) : '—'} color="#e85c1a" sub="Lost this month" trend={data?.churned_mrr > 0 ? -100 : 0} />
+        <MetricCard loading={loading} label="New MRR" value={data ? fmtInr(data.new_mrr) : '—'} color="#0d9e8a" sub="Added this month" trend={(data?.new_mrr ?? 0) > 0 ? 100 : 0} />
+        <MetricCard loading={loading} label="Churned MRR" value={data ? fmtInr(data.churned_mrr) : '—'} color="#e85c1a" sub="Lost this month" trend={(data?.churned_mrr ?? 0) > 0 ? -100 : 0} />
         <MetricCard loading={loading} label="Net New MRR" value={data ? fmtInr(data.net_new_mrr) : '—'}
           color={data && data.net_new_mrr >= 0 ? '#0d9e8a' : '#ef4444'} sub="New − Churned"
           trend={data?.net_new_mrr !== undefined ? (data.net_new_mrr >= 0 ? 1 : -1) : undefined} />
@@ -546,10 +546,10 @@ function UnitEconTab({ data, loading }: { data: Analytics | undefined; loading: 
         <CardContent>
           <div className="space-y-4">
             {[
-              { label: 'LTV:CAC', value: ltvCac, target: 3, unit: 'x', good: v => v >= 3, warn: v => v >= 1 },
-              { label: 'Churn Rate', value: data?.churn_rate_pct ?? 0, target: 5, unit: '%', good: v => v < 2, warn: v => v < 5 },
-              { label: 'GRR', value: data?.grr_pct ?? 100, target: 85, unit: '%', good: v => v >= 90, warn: v => v >= 80 },
-              { label: 'Trial Conversion', value: data?.trial_conversion_rate_pct ?? 0, target: 25, unit: '%', good: v => v >= 20, warn: v => v >= 10 },
+              { label: 'LTV:CAC', value: ltvCac, target: 3, unit: 'x', good: (v: number) => v >= 3, warn: (v: number) => v >= 1 },
+              { label: 'Churn Rate', value: data?.churn_rate_pct ?? 0, target: 5, unit: '%', good: (v: number) => v < 2, warn: (v: number) => v < 5 },
+              { label: 'GRR', value: data?.grr_pct ?? 100, target: 85, unit: '%', good: (v: number) => v >= 90, warn: (v: number) => v >= 80 },
+              { label: 'Trial Conversion', value: data?.trial_conversion_rate_pct ?? 0, target: 25, unit: '%', good: (v: number) => v >= 20, warn: (v: number) => v >= 10 },
             ].map(({ label, value, target, unit, good, warn }) => {
               const isGood = good(value), isWarn = !isGood && warn(value)
               const color  = isGood ? '#22c55e' : isWarn ? '#f59e0b' : '#ef4444'
@@ -878,13 +878,13 @@ function BillingTab() {
                 <div key={field}>
                   <label className="text-[11px] text-[#9aa3b2] font-medium block mb-1">{label}</label>
                   {type === 'select' ? (
-                    <select value={(editSub as Record<string, string>)[field] ?? ''}
+                    <select value={(editSub as unknown as Record<string, string>)[field] ?? ''}
                       onChange={e => setEditSub(prev => prev ? { ...prev, [field]: e.target.value } : prev)}
                       className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#2d6ac8]/30">
                       {opts.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                   ) : (
-                    <input type="text" value={(editSub as Record<string, string>)[field] ?? ''}
+                    <input type="text" value={(editSub as unknown as Record<string, string>)[field] ?? ''}
                       onChange={e => setEditSub(prev => prev ? { ...prev, [field]: e.target.value } : prev)}
                       className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-[#2d6ac8]/30"
                       placeholder="YYYY-MM-DDTHH:mm:ss.000Z"
@@ -936,7 +936,7 @@ function BillingTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {txs.slice(0, 50).map((t: Record<string, unknown>, i: number) => (
+                  {(txs as Record<string, unknown>[]).slice(0, 50).map((t, i: number) => (
                     <tr key={i} className="border-b border-[#f4f6fb] hover:bg-[#f8fafc]">
                       <td className="px-4 py-2.5">
                         <p className="font-semibold text-[#0f1729]">{String(t.name ?? '—')}</p>
@@ -983,7 +983,7 @@ function BillingTab() {
               ].map(({ label, field, opts }) => (
                 <div key={field}>
                   <label className="text-[11px] text-[#9aa3b2] font-medium block mb-1">{label}</label>
-                  <select value={(txForm as Record<string, string>)[field]}
+                  <select value={(txForm as unknown as Record<string, string>)[field]}
                     onChange={e => setTxForm(p => ({ ...p, [field]: e.target.value }))}
                     className="w-full border border-[#e5e8ef] rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#2d6ac8]/30">
                     {opts.map(o => <option key={o} value={o}>{o}</option>)}
