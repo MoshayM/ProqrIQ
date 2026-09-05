@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   FileText,
@@ -18,6 +18,7 @@ import type { Notification } from '@shared/types'
 export function Sidebar() {
   const { user, logout, hasRole } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const { data: notifs } = useQuery<Notification[]>({
     queryKey: ['notifications'],
@@ -38,7 +39,7 @@ export function Sidebar() {
   ]
 
   const adminItems = isAdmin
-    ? [{ to: '/admin-analytics', label: 'Analytics', icon: BarChart3 }]
+    ? [{ to: '/account?tab=analytics', label: 'Analytics', icon: BarChart3 }]
     : []
 
 
@@ -92,23 +93,26 @@ export function Sidebar() {
         {adminItems.length > 0 && (
           <div className="pt-3 mt-3 border-t border-white/10">
             <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/30">Admin</p>
-            {adminItems.map(({ to, label, icon: Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  cn(
+            {adminItems.map(({ to, label, icon: Icon }) => {
+              const [toPath, toSearch] = to.split('?')
+              const isActive = location.pathname === toPath &&
+                (!toSearch || location.search === `?${toSearch}`)
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  className={cn(
                     'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                     isActive
                       ? 'bg-[#e85c1a] text-white'
                       : 'text-white/70 hover:bg-white/10 hover:text-white',
-                  )
-                }
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </NavLink>
-            ))}
+                  )}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {label}
+                </Link>
+              )
+            })}
           </div>
         )}
       </nav>

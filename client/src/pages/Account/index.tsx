@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Camera, Eye, EyeOff, Check, BookOpen, Globe, Users, Info, Plus, X, Loader2, LogOut,
-  CreditCard, Trash2, AlertTriangle, ShieldAlert, RotateCcw, Clock,
+  CreditCard, Trash2, AlertTriangle, ShieldAlert, RotateCcw, Clock, BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { api, extractApiError } from '../../lib/api'
@@ -20,6 +20,7 @@ import { usePageTitle } from '../../hooks/usePageTitle'
 import KBManager from '../KBManager'
 import RegionalRates from '../RegionalRates'
 import Billing from '../Billing'
+import AdminAnalytics from '../AdminAnalytics'
 import { UpgradeGate } from '../../components/ui/UpgradeGate'
 import { PlanBadge } from '../../components/ui/PlanBadge'
 import { useSubscription } from '../../hooks/useSubscription'
@@ -847,8 +848,9 @@ export default function Account() {
     { id: 'profile', label: 'Profile',        icon: null },
     ...(!isBypassRole ? [{ id: 'billing', label: 'Plans & Billing', icon: CreditCard }] : []),
     ...(isAdmin ? [
-      { id: 'kb',    label: 'Knowledge Base', icon: BookOpen },
-      { id: 'rates', label: 'Regional Rates', icon: Globe },
+      { id: 'kb',        label: 'Knowledge Base', icon: BookOpen },
+      { id: 'rates',     label: 'Regional Rates', icon: Globe },
+      { id: 'analytics', label: 'Analytics',      icon: BarChart3 },
     ] : []),
   ]
 
@@ -894,10 +896,11 @@ export default function Account() {
 
       {/* Content */}
       <div className={activeTab === 'profile' ? 'max-w-2xl mx-auto p-8' : ''}>
-        {activeTab === 'profile' && <ProfileTab />}
-        {activeTab === 'billing' && <Billing />}
-        {activeTab === 'kb'      && isAdmin && <UpgradeGate requiredPlan="organization" feature="Knowledge Base Manager"><KBManager /></UpgradeGate>}
-        {activeTab === 'rates'   && isAdmin && <UpgradeGate requiredPlan="organization" feature="Regional Rates"><RegionalRates /></UpgradeGate>}
+        {activeTab === 'profile'    && <ProfileTab />}
+        {activeTab === 'billing'    && <Billing />}
+        {activeTab === 'kb'         && isAdmin && <UpgradeGate requiredPlan="organization" feature="Knowledge Base Manager"><KBManager /></UpgradeGate>}
+        {activeTab === 'rates'      && isAdmin && <UpgradeGate requiredPlan="organization" feature="Regional Rates"><RegionalRates /></UpgradeGate>}
+        {activeTab === 'analytics'  && isAdmin && <AdminAnalytics />}
       </div>
     </div>
   )

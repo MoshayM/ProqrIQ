@@ -32,7 +32,6 @@ import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import Landing from './pages/Landing'
 import Checkout from './pages/Checkout'
-import AdminAnalytics from './pages/AdminAnalytics'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -128,7 +127,7 @@ function AppRoutes() {
       <Route path="/billing"         element={<Navigate to="/account?tab=billing" replace />} />
       <Route path="/organization"    element={<ProtectedLayout><Organization /></ProtectedLayout>} />
       <Route path="/search"          element={<ProtectedLayout><SearchPage /></ProtectedLayout>} />
-      <Route path="/admin-analytics" element={<ProtectedLayout><AdminAnalytics /></ProtectedLayout>} />
+      <Route path="/admin-analytics" element={<Navigate to="/account?tab=analytics" replace />} />
 
       {/* Legacy redirects */}
       <Route path="/kb"             element={<Navigate to="/account?tab=kb"    replace />} />
