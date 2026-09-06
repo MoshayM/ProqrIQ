@@ -409,7 +409,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="lg:hidden fixed inset-0 bg-black/50 z-30"
+            className="lg:hidden fixed inset-0 bg-black/50 z-[9998]"
             onClick={() => setMobileOpen(false)}
           />
         )}
@@ -654,7 +654,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', stiffness: 380, damping: 35 }}
-            className="lg:hidden fixed top-0 left-0 bottom-0 w-72 text-white z-50 flex flex-col overflow-hidden"
+            className="lg:hidden fixed top-0 left-0 bottom-0 w-72 text-white z-[9999] flex flex-col overflow-hidden"
             style={{ background: 'linear-gradient(170deg, #0b1525 0%, #1a2844 55%, #1e2d4e 100%)' }}
           >
             <div className="flex items-end h-topbar px-4 pb-2.5 border-b border-white/10 flex-shrink-0 gap-3">

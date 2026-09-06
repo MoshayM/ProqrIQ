@@ -72,33 +72,40 @@ export function OnboardingChecklist({ quoteCount, batchCount, assemblyCount }: O
       exit={{ opacity: 0, y: -8 }}
       className="bg-white border border-[#e5e8ef] rounded-2xl overflow-hidden"
     >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 cursor-pointer" onClick={() => setCollapsed(v => !v)}>
-        <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center flex-shrink-0">
-          <Sparkles className="w-4 h-4 text-brand" />
+      {/* Header — 2-row layout so title never wraps on mobile */}
+      <div className="px-5 pt-4 pb-3 cursor-pointer space-y-2.5" onClick={() => setCollapsed(v => !v)}>
+        {/* Row 1: icon + title + controls */}
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-brand" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#0f1729] truncate">Get started with ProqrIQ</p>
+            <p className="text-xs text-[#9aa3b2]">{doneCount} of {steps.length} steps complete</p>
+          </div>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <ChevronDown className={cn('w-4 h-4 text-[#9aa3b2] transition-transform', collapsed && 'rotate-180')} />
+            <button
+              onClick={e => { e.stopPropagation(); localStorage.setItem('onboarding_dismissed', 'true'); setDismissed(true) }}
+              className="p-1 rounded-lg hover:bg-surface-3 text-[#9aa3b2] hover:text-[#4a5568] transition-colors"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[#0f1729]">Get started with ProqrIQ</p>
-          <p className="text-xs text-[#9aa3b2]">{doneCount} of {steps.length} steps complete</p>
+        {/* Row 2: progress bar + percentage — full width, indented to align with title */}
+        <div className="flex items-center gap-2 pl-11">
+          <div className="flex-1 h-1.5 bg-surface-3 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="h-full bg-brand rounded-full"
+            />
+          </div>
+          <span className="text-xs font-mono text-[#9aa3b2] w-8 text-right flex-shrink-0">{pct}%</span>
         </div>
-        {/* Progress track */}
-        <div className="w-24 h-1.5 bg-surface-3 rounded-full overflow-hidden flex-shrink-0">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="h-full bg-brand rounded-full"
-          />
-        </div>
-        <span className="text-xs font-mono text-[#9aa3b2] w-7 text-right flex-shrink-0">{pct}%</span>
-        <ChevronDown className={cn('w-4 h-4 text-[#9aa3b2] flex-shrink-0 transition-transform', collapsed && 'rotate-180')} />
-        <button
-          onClick={e => { e.stopPropagation(); localStorage.setItem('onboarding_dismissed', 'true'); setDismissed(true) }}
-          className="p-1 rounded-lg hover:bg-surface-3 text-[#9aa3b2] hover:text-[#4a5568] transition-colors flex-shrink-0"
-          title="Dismiss"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       {/* Steps */}
@@ -122,7 +129,7 @@ export function OnboardingChecklist({ quoteCount, batchCount, assemblyCount }: O
                     : <Circle className="w-5 h-5 text-[#c8cdd8] flex-shrink-0" />
                   }
                   <div className="flex-1 min-w-0">
-                    <p className={cn('text-sm font-medium', step.done ? 'line-through text-[#9aa3b2]' : 'text-[#0f1729]')}>
+                    <p className={cn('text-sm font-medium line-clamp-1', step.done ? 'line-through text-[#9aa3b2]' : 'text-[#0f1729]')}>
                       {step.label}
                     </p>
                     <p className="text-xs text-[#9aa3b2] truncate">{step.desc}</p>
@@ -130,7 +137,7 @@ export function OnboardingChecklist({ quoteCount, batchCount, assemblyCount }: O
                   {!step.done && (
                     <button
                       onClick={() => navigate(step.actionTo)}
-                      className="text-xs font-medium text-brand hover:text-brand/80 transition-colors flex-shrink-0 px-3 py-1.5 rounded-lg hover:bg-brand/5"
+                      className="text-xs font-medium text-brand hover:text-brand/80 transition-colors flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-lg hover:bg-brand/5"
                     >
                       {step.action} →
                     </button>

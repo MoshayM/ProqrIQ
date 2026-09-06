@@ -1594,7 +1594,7 @@ export default function SupplierMap() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="page-content h-[calc(100dvh-3.5rem)] lg:h-[calc(100dvh-4rem)] flex flex-col gap-3 overflow-hidden"
+      className="page-content h-[calc(100dvh-var(--topbar-h,3.5rem))] lg:h-[calc(100dvh-4rem)] flex flex-col gap-3 overflow-hidden"
     >
       {/* Header */}
       <div className="flex-shrink-0 flex items-center justify-between flex-wrap gap-2">

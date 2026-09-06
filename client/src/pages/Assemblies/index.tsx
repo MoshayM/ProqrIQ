@@ -765,12 +765,12 @@ function AssembliesList() {
       transition={{ duration: 0.3 }}
       className="page-content space-y-6"
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[#0f1729]">Assemblies</h1>
+      <div className="flex items-start sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-[#0f1729]">Assemblies</h1>
           <p className="text-sm text-[#9aa3b2] mt-1">Manage multi-level assembly costing</p>
         </div>
-        <Button variant="primary" onClick={() => setShowNewModal(true)} iconLeft={<Plus className="w-4 h-4" />}>
+        <Button variant="primary" onClick={() => setShowNewModal(true)} iconLeft={<Plus className="w-4 h-4" />} className="flex-shrink-0">
           New Assembly
         </Button>
       </div>

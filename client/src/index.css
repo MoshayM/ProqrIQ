@@ -44,6 +44,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left:   env(safe-area-inset-left,   0px);
   --safe-right:  env(safe-area-inset-right,  0px);
+
+  /* Topbar height — 3.5rem base + notch inset, used for full-height page layouts */
+  --topbar-h: calc(3.5rem + var(--safe-top));
 }
 
 /* ─── Base resets ────────────────────────────────────────────────────────── */
@@ -195,6 +198,7 @@ a, button, [role="button"], label, select, summary {
 /* ─── Page content wrapper ───────────────────────────────────────────────── */
 .page-content {
   padding: 1rem;
+  padding-top: 1.25rem;   /* extra breathing room below fixed mobile top bar */
   max-width: 80rem;
   margin: 0 auto;
 }

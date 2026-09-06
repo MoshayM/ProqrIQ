@@ -88,9 +88,9 @@ export default function Notifications() {
       className="page-content space-y-6"
     >
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-[#0f1729]">Notifications</h1>
+      <div className="flex items-start sm:items-center justify-between flex-wrap gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-[#0f1729]">Notifications</h1>
           <p className="text-sm text-[#9aa3b2] mt-1">
             {unread > 0 ? `${unread} unread notification${unread !== 1 ? 's' : ''}` : 'All caught up'}
           </p>

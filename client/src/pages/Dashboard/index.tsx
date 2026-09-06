@@ -354,15 +354,15 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-        className="flex items-center justify-between"
+        className="flex items-start sm:items-center justify-between gap-3"
       >
-        <div>
-          <h1 className="text-2xl font-bold text-[#0f1729] tracking-tight">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-[#0f1729] tracking-tight truncate">
             {greeting}{firstName ? `, ${firstName}` : ''}
           </h1>
           <p className="text-sm text-[#9aa3b2] mt-0.5">{format(new Date(), 'EEEE, MMMM d, yyyy')}</p>
         </div>
-        <Button onClick={() => navigate('/quotes/new')} iconLeft={<Plus className="w-4 h-4" />}>
+        <Button onClick={() => navigate('/quotes/new')} iconLeft={<Plus className="w-4 h-4" />} className="flex-shrink-0">
           New Quote
         </Button>
       </motion.div>
