@@ -99,6 +99,52 @@ function DragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => voi
   )
 }
 
+function useWidthResize(initialPx: number, min: number, max: number, dir: 'right' | 'left' = 'right') {
+  const [width, setWidth] = useState(initialPx)
+  const widthRef = useRef(width)
+  widthRef.current = width
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = widthRef.current
+
+    const onMove = (me: MouseEvent) => {
+      const dx = me.clientX - startX
+      setWidth(Math.max(min, Math.min(max, startW + (dir === 'right' ? dx : -dx))))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [min, max, dir])
+
+  return [width, onMouseDown] as const
+}
+
+function HorizontalDragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      className="hidden lg:flex flex-shrink-0 w-4 items-center justify-center cursor-ew-resize group select-none relative z-10"
+      title="Drag to resize"
+    >
+      <div className="absolute inset-y-0 inset-x-0.5 rounded transition-colors group-hover:bg-brand/5" />
+      <div className="relative flex flex-col gap-[3px] items-center">
+        <div className="h-8 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+        <div className="h-5 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+        <div className="h-8 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+      </div>
+    </div>
+  )
+}
+
 function useResizablePanel(defaultW = 900, defaultH = 600) {
   const [rect, setRect] = useState(() => {
     const w = Math.min(defaultW, window.innerWidth - 32)
@@ -1376,6 +1422,10 @@ export default function SupplierMap() {
   // Left panel drag resize: AI Discovery (top) vs Filter (bottom)
   const [discoverHeight, handleDiscoverDrag] = useDragResize(260, 150, 520)
 
+  // Column width drag resize
+  const [leftW, handleLeftWidthDrag]   = useWidthResize(280, 180, 440, 'right')
+  const [rightW, handleRightWidthDrag] = useWidthResize(320, 220, 500, 'left')
+
   // Map view controls
   type MapSize = 'sm' | 'md' | 'lg' | 'full'
   const [mapSize, setMapSize] = useState<MapSize>('md')
@@ -1532,10 +1582,13 @@ export default function SupplierMap() {
       </div>
 
       {/* Three-panel layout */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-3">
+      <div className="flex-1 min-h-0 flex gap-0">
 
         {/* ── Panel 1: Filter + Discover ── */}
-        <div className={cn('flex-col min-h-0', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}>
+        <div
+          style={{ width: leftW }}
+          className={cn('flex-col min-h-0 flex-shrink-0 min-w-full lg:min-w-0', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}
+        >
           <div style={{ height: discoverHeight }} className="overflow-y-auto scroll-area flex-shrink-0">
           <Card>
             <CardHeader>
@@ -1703,8 +1756,10 @@ export default function SupplierMap() {
           </div>
         </div>
 
+        <HorizontalDragHandle onMouseDown={handleLeftWidthDrag} />
+
         {/* ── Panel 2: Map + Supplier List ── */}
-        <div className={cn('flex-col gap-3 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'map' ? 'flex' : 'hidden lg:flex')}>
+        <div className={cn('flex-1 min-w-0 flex-col gap-3 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'map' ? 'flex' : 'hidden lg:flex')}>
           {/* Map */}
           <Card className="overflow-hidden flex-shrink-0">
             {/* Map toolbar */}
@@ -1884,8 +1939,13 @@ export default function SupplierMap() {
           )}
         </div>
 
+        <HorizontalDragHandle onMouseDown={handleRightWidthDrag} />
+
         {/* ── Panel 3: Detail ── */}
-        <div className={cn('min-h-0 overflow-y-auto scroll-area', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}>
+        <div
+          style={{ width: rightW }}
+          className={cn('flex-shrink-0 min-w-full lg:min-w-0 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}
+        >
           <AnimatePresence mode="wait">
             {selectedSupplier ? (
               <SupplierDetailPanel
