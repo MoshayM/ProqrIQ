@@ -1267,15 +1267,17 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
           className="fixed z-[9201] flex flex-col"
           onClick={e => e.stopPropagation()}
         >
-          {/* Edge + corner resize handles */}
-          <div className="absolute top-0 left-4 right-4 h-2 z-20 cursor-n-resize"  onPointerDown={onResize('n')}  />
-          <div className="absolute bottom-0 left-4 right-4 h-2 z-20 cursor-s-resize" onPointerDown={onResize('s')} />
-          <div className="absolute left-0 top-4 bottom-4 w-2 z-20 cursor-w-resize"  onPointerDown={onResize('w')}  />
-          <div className="absolute right-0 top-4 bottom-4 w-2 z-20 cursor-e-resize" onPointerDown={onResize('e')} />
-          <div className="absolute top-0 left-0 w-4 h-4 z-20 cursor-nw-resize" onPointerDown={onResize('nw')} />
-          <div className="absolute top-0 right-0 w-4 h-4 z-20 cursor-ne-resize" onPointerDown={onResize('ne')} />
-          <div className="absolute bottom-0 left-0 w-4 h-4 z-20 cursor-sw-resize" onPointerDown={onResize('sw')} />
-          <div className="absolute bottom-0 right-0 w-4 h-4 z-20 cursor-se-resize" onPointerDown={onResize('se')} />
+          {/* Edge + corner resize handles.
+              Edges are 1 px (cursor-only) so they never overlap the scrollbar.
+              Corners are 24 px so they are easy to grab despite thin edges. */}
+          <div className="absolute top-0 left-6 right-6 h-px z-20 cursor-n-resize"  onPointerDown={onResize('n')}  />
+          <div className="absolute bottom-0 left-6 right-6 h-px z-20 cursor-s-resize" onPointerDown={onResize('s')} />
+          <div className="absolute left-0 top-6 bottom-6 w-px z-20 cursor-w-resize"  onPointerDown={onResize('w')}  />
+          <div className="absolute right-0 top-6 bottom-6 w-px z-20 cursor-e-resize" onPointerDown={onResize('e')} />
+          <div className="absolute top-0 left-0 w-6 h-6 z-20 cursor-nw-resize" onPointerDown={onResize('nw')} />
+          <div className="absolute top-0 right-0 w-6 h-6 z-20 cursor-ne-resize" onPointerDown={onResize('ne')} />
+          <div className="absolute bottom-0 left-0 w-6 h-6 z-20 cursor-sw-resize" onPointerDown={onResize('sw')} />
+          <div className="absolute bottom-0 right-0 w-6 h-6 z-20 cursor-se-resize" onPointerDown={onResize('se')} />
           {/* SE resize grip indicator */}
           <div className="absolute bottom-1.5 right-1.5 z-20 pointer-events-none opacity-40">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
