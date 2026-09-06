@@ -7,7 +7,7 @@ export const router = Router()
 
 const ADMIN_ROLES = ['admin', 'developer', 'owner']
 
-function rowToObj(columns: string[], row: unknown[]): Record<string, unknown> {
+function rowToObj(columns: string[], row: ArrayLike<unknown>): Record<string, unknown> {
   const obj: Record<string, unknown> = {}
   columns.forEach((col, i) => { obj[col] = row[i] })
   return obj
@@ -88,7 +88,7 @@ router.get('/plan-config', requireAuth, requireRole(ADMIN_ROLES), async (_req: R
       ) latest ON p.plan = latest.plan AND p.effective_from = latest.mef
       ORDER BY p.plan ASC`)
     const configs = result.rows
-      .map(r => rowToObj(result.columns, r as unknown[]))
+      .map(r => rowToObj(result.columns, r))
       .map(r => ({ ...r, features: parseFeatures(r.features) }))
     res.json({ success: true, data: configs })
   } catch (err) {
@@ -107,7 +107,7 @@ router.get('/plan-config/history/:plan', requireAuth, requireRole(ADMIN_ROLES), 
     res.json({
       success: true,
       data: result.rows
-        .map(r => rowToObj(result.columns, r as unknown[]))
+        .map(r => rowToObj(result.columns, r))
         .map(r => ({ ...r, features: parseFeatures(r.features) })),
     })
   } catch (err) {
@@ -176,7 +176,7 @@ router.get('/plan-config/public', async (_req: Request, res: Response) => {
         SELECT plan, MAX(effective_from) as mef FROM plan_configs GROUP BY plan
       ) latest ON p.plan = latest.plan AND p.effective_from = latest.mef`)
     const configs = result.rows
-      .map(r => rowToObj(result.columns, r as unknown[]))
+      .map(r => rowToObj(result.columns, r))
       .map(r => ({ ...r, features: parseFeatures(r.features) }))
     res.json({ success: true, data: configs })
   } catch (err) {

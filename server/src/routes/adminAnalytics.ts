@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express'
+import type { InValue } from '@libsql/client'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { db, client } from '../db'
 import { auditLog } from '../db/schema'
@@ -18,7 +19,7 @@ const DEFAULT_ANNUAL_INR: Record<string, number> = {
 function paise2inr(p: number) { return Math.round((p / 100) * 100) / 100 }
 
 // Converts a libsql row (array-like with column keys) to a plain object
-function rowToObj(columns: string[], row: unknown[]): Record<string, unknown> {
+function rowToObj(columns: string[], row: ArrayLike<unknown>): Record<string, unknown> {
   const obj: Record<string, unknown> = {}
   columns.forEach((col, i) => { obj[col] = row[i] })
   return obj
@@ -46,7 +47,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
     const subRes = await client.execute(`
       SELECT plan, billing_cycle, status, COUNT(*) as cnt
       FROM subscriptions GROUP BY plan, billing_cycle, status`)
-    const subRows = subRes.rows.map(r => rowToObj(subRes.columns, r as unknown[]))
+    const subRows = subRes.rows.map(r => rowToObj(subRes.columns, r))
 
     const activeRows   = subRows.filter(r => r.status === 'active' || r.status === 'trialing')
     const trialingRows = subRows.filter(r => r.status === 'trialing')
@@ -58,7 +59,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
       INNER JOIN (
         SELECT plan, MAX(effective_from) as mef FROM plan_configs GROUP BY plan
       ) latest ON p.plan = latest.plan AND p.effective_from = latest.mef`)
-    const priceRows = priceRes.rows.map(r => rowToObj(priceRes.columns, r as unknown[]))
+    const priceRows = priceRes.rows.map(r => rowToObj(priceRes.columns, r))
 
     const monthlyInr: Record<string, number> = { ...DEFAULT_MONTHLY_INR }
     const annualInr:  Record<string, number> = { ...DEFAULT_ANNUAL_INR }
@@ -167,7 +168,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
         AND s.trial_ends_at <= date('now', '+7 days')
       ORDER BY s.trial_ends_at ASC LIMIT 20`)
     const trialsExpiringSoon = trialsRes.rows.map(r =>
-      rowToObj(trialsRes.columns, r as unknown[]))
+      rowToObj(trialsRes.columns, r))
 
     // ── Upcoming renewals (30 days) ───────────────────────────────────────────
     const renewalsRes = await client.execute(`
@@ -177,7 +178,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
         AND s.current_period_end <= date('now', '+30 days')
       ORDER BY s.current_period_end ASC LIMIT 20`)
     const upcomingRenewals = renewalsRes.rows.map(r =>
-      rowToObj(renewalsRes.columns, r as unknown[]))
+      rowToObj(renewalsRes.columns, r))
 
     // ── Recent churn ──────────────────────────────────────────────────────────
     const churnListRes = await client.execute(`
@@ -186,7 +187,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
       WHERE s.status = 'canceled' AND s.canceled_at >= date('now', '-30 days')
       ORDER BY s.canceled_at DESC LIMIT 20`)
     const recentChurn = churnListRes.rows.map(r =>
-      rowToObj(churnListRes.columns, r as unknown[]))
+      rowToObj(churnListRes.columns, r))
 
     // ── Total billing revenue ──────────────────────────────────────────────────
     const totalRevRes = await client.execute(`
@@ -208,7 +209,7 @@ router.get('/analytics', requireAuth, requireRole(ADMIN_ROLES), async (_req: Req
       SELECT u.full_name as name, u.email, SUM(uc.ai_tokens_used) as tokens
       FROM usage_counters uc JOIN users u ON uc.user_id = u.id
       GROUP BY uc.user_id ORDER BY tokens DESC LIMIT 10`)
-    const topAiSpend = topAiRes.rows.map(r => rowToObj(topAiRes.columns, r as unknown[]))
+    const topAiSpend = topAiRes.rows.map(r => rowToObj(topAiRes.columns, r))
 
     res.json({
       success: true,
@@ -265,7 +266,7 @@ router.get('/analytics/subscriptions', requireAuth, requireRole(ADMIN_ROLES), as
              u.id as user_id, u.full_name as name, u.email, u.role
       FROM subscriptions s JOIN users u ON s.user_id = u.id
       ORDER BY s.created_at DESC LIMIT 200`)
-    res.json({ success: true, data: result.rows.map(r => rowToObj(result.columns, r as unknown[])) })
+    res.json({ success: true, data: result.rows.map(r => rowToObj(result.columns, r)) })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })
   }
@@ -295,7 +296,7 @@ router.patch('/analytics/subscriptions/:userId', requireAuth, requireRole(ADMIN_
       })
     } else {
       const sets: string[] = []
-      const vals: unknown[] = []
+      const vals: InValue[] = []
       if (plan !== undefined)               { sets.push('plan = ?');               vals.push(plan) }
       if (status !== undefined)             { sets.push('status = ?');             vals.push(status) }
       if (billing_cycle !== undefined)      { sets.push('billing_cycle = ?');      vals.push(billing_cycle) }
@@ -328,7 +329,7 @@ router.get('/analytics/transactions', requireAuth, requireRole(ADMIN_ROLES), asy
       SELECT bt.*, u.full_name as name, u.email FROM billing_transactions bt
       LEFT JOIN users u ON bt.user_id = u.id
       ORDER BY bt.created_at DESC LIMIT 200`)
-    res.json({ success: true, data: result.rows.map(r => rowToObj(result.columns, r as unknown[])) })
+    res.json({ success: true, data: result.rows.map(r => rowToObj(result.columns, r)) })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })
   }
