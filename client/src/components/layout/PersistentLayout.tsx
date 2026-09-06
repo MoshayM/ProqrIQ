@@ -724,7 +724,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       </AnimatePresence>
 
       {/* ── Main content ────────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto pt-topbar lg:pt-0 relative scroll-area pb-safe">
+      <main className="flex-1 overflow-y-auto relative scroll-area pb-safe">
         <ScrollToTop />
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -735,6 +735,10 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
             transition={{ duration: 0.15, ease: 'easeOut' }}
             className="min-h-full"
           >
+            {/* Spacer that pushes all page content below the fixed mobile top bar.
+                Using a DOM element (not CSS padding) makes this immune to cascade
+                layer conflicts between custom CSS and Tailwind utilities. */}
+            <div className="lg:hidden h-topbar flex-shrink-0" aria-hidden="true" />
             <PaymentPendingBanner />
             <UsageBanner />
             {children}
