@@ -372,9 +372,9 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
   })
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-surface-2">
-      {/* ── Mobile top bar (hidden on lg+) ──────────────────────────────────── */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-topbar bg-navy z-40 flex items-end px-4 pb-2.5 gap-3">
+    <div className="flex flex-col lg:flex-row h-[100dvh] overflow-hidden bg-surface-2">
+      {/* ── Mobile top bar (in layout flow on mobile, hidden on lg+) ─────────── */}
+      <div className="lg:hidden flex-shrink-0 h-topbar bg-navy flex items-end px-4 pb-2.5 gap-3">
         <button
           onClick={() => setMobileOpen(v => !v)}
           className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white"
@@ -735,10 +735,6 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
             transition={{ duration: 0.15, ease: 'easeOut' }}
             className="min-h-full"
           >
-            {/* Spacer that pushes all page content below the fixed mobile top bar.
-                Using a DOM element (not CSS padding) makes this immune to cascade
-                layer conflicts between custom CSS and Tailwind utilities. */}
-            <div className="lg:hidden h-topbar flex-shrink-0" aria-hidden="true" />
             <PaymentPendingBanner />
             <UsageBanner />
             {children}
