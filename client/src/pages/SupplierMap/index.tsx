@@ -87,23 +87,31 @@ function useDragResize(initialPx: number, min: number, max: number) {
   return [size, onPointerDown] as const
 }
 
-// Thin in-flow separator between two sections. h-1 (4px) so it is nearly
-// invisible and rarely lands under a scrolling cursor. Forwards wheel events
-// to the previous sibling so scroll is never swallowed by the handle.
+// Thin 4 px in-flow separator. Forwards wheel events to the adjacent scrollable
+// section so scroll is never dropped. Shows a ↕ icon badge on hover only.
 function DragHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
   return (
     <div
       onPointerDown={onPointerDown}
       onWheel={(e) => {
-        const prev = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null
-        const next = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null
+        e.stopPropagation()
+        const h = e.currentTarget as HTMLElement
+        const prev = h.previousElementSibling as HTMLElement | null
+        const next = h.nextElementSibling as HTMLElement | null
         const target = e.deltaY < 0 ? prev : next
         if (target) target.scrollTop += e.deltaY
       }}
-      className="flex-shrink-0 h-1 cursor-row-resize touch-none z-10 group flex items-center justify-center select-none"
+      className="flex-shrink-0 h-1 cursor-row-resize touch-none z-10 group flex items-center justify-center select-none relative overflow-visible"
       title="Drag to resize"
     >
-      <div className="w-8 h-px bg-[#d1d5de] group-hover:bg-brand/50 rounded-full transition-colors" />
+      <div className="absolute inset-0 bg-[#e5e8ef] group-hover:bg-brand/20 transition-colors" />
+      <div className="absolute opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none z-30 bg-white rounded-lg border border-[#e5e8ef] shadow-md p-1.5">
+        <svg width="12" height="22" viewBox="0 0 12 22" fill="none">
+          <path d="M6 8V2M6 2L3 5M6 2L9 5" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <line x1="1" y1="11" x2="11" y2="11" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M6 14V20M6 20L3 17M6 20L9 17" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
     </div>
   )
 }
@@ -139,9 +147,8 @@ function useWidthResize(initialPx: number, min: number, max: number, dir: 'right
   return [width, onPointerDown] as const
 }
 
-// Absolute-positioned at the left or right edge of its relative parent.
-// Lives INSIDE the panel so wheel-scroll events bubble to the panel's
-// scroll container instead of being dropped by a between-panel element.
+// 4 px in-flow column splitter. Forwards wheel events to Panel 2 (the centre
+// scrollable panel) so scroll is never dropped. Shows a ←|→ badge on hover.
 function HorizontalDragHandle({ onPointerDown, side = 'right' }: {
   onPointerDown: (e: React.PointerEvent) => void
   side?: 'left' | 'right'
@@ -149,13 +156,26 @@ function HorizontalDragHandle({ onPointerDown, side = 'right' }: {
   return (
     <div
       onPointerDown={onPointerDown}
-      className={cn(
-        'absolute top-0 bottom-0 w-2 cursor-ew-resize touch-none z-20 group hidden lg:flex items-center justify-center',
-        side === 'right' ? 'right-0' : 'left-0',
-      )}
+      onWheel={(e) => {
+        e.stopPropagation()
+        const h = e.currentTarget as HTMLElement
+        // Panel 2 (centre, overflow-y-auto) is always the sibling toward centre
+        const panel2 = side === 'right'
+          ? h.nextElementSibling as HTMLElement | null
+          : h.previousElementSibling as HTMLElement | null
+        if (panel2) panel2.scrollTop += e.deltaY
+      }}
+      className="hidden lg:flex flex-shrink-0 w-1 items-center justify-center cursor-ew-resize touch-none z-10 group select-none relative overflow-visible"
       title="Drag to resize"
     >
-      <div className="h-12 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+      <div className="absolute inset-0 bg-[#e5e8ef] group-hover:bg-brand/20 transition-colors" />
+      <div className="absolute opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-150 pointer-events-none z-30 bg-white rounded-lg border border-[#e5e8ef] shadow-md p-1.5">
+        <svg width="22" height="12" viewBox="0 0 22 12" fill="none">
+          <path d="M8 6H2M2 6L5 3M2 6L5 9" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <line x1="11" y1="1" x2="11" y2="11" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M14 6H20M20 6L17 3M20 6L17 9" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
     </div>
   )
 }
@@ -1609,7 +1629,7 @@ export default function SupplierMap() {
         {/* ── Panel 1: Filter + Discover ── */}
         <div
           style={{ width: leftW }}
-          className={cn('flex-col min-h-0 flex-shrink-0 min-w-full lg:min-w-0 relative', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}
+          className={cn('flex-col min-h-0 flex-shrink-0 min-w-full lg:min-w-0', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}
         >
           <div style={{ height: discoverHeight }} className="overflow-y-auto scroll-area flex-shrink-0">
           <Card>
@@ -1776,8 +1796,9 @@ export default function SupplierMap() {
             </CardContent>
           </Card>
           </div>
-          <HorizontalDragHandle onPointerDown={handleLeftWidthDrag} side="right" />
         </div>
+
+        <HorizontalDragHandle onPointerDown={handleLeftWidthDrag} side="right" />
 
         {/* ── Panel 2: Map + Supplier List ── */}
         <div className={cn('flex-1 min-w-0 flex-col gap-3 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'map' ? 'flex' : 'hidden lg:flex')}>
@@ -1960,12 +1981,13 @@ export default function SupplierMap() {
           )}
         </div>
 
+        <HorizontalDragHandle onPointerDown={handleRightWidthDrag} side="left" />
+
         {/* ── Panel 3: Detail ── */}
         <div
           style={{ width: rightW }}
-          className={cn('flex-shrink-0 min-w-full lg:min-w-0 min-h-0 overflow-hidden relative', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}
+          className={cn('flex-shrink-0 min-w-full lg:min-w-0 min-h-0 overflow-hidden', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}
         >
-          <HorizontalDragHandle onPointerDown={handleRightWidthDrag} side="left" />
           <AnimatePresence mode="wait">
             {selectedSupplier ? (
               <SupplierDetailPanel
