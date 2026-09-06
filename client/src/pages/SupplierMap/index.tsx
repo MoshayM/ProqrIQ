@@ -87,18 +87,20 @@ function useDragResize(initialPx: number, min: number, max: number) {
   return [size, onPointerDown] as const
 }
 
+// Absolute-positioned at the bottom of its relative parent.
+// Lives INSIDE the scrollable container so wheel-scroll events bubble to the
+// scrollable parent instead of being silently swallowed by a flow element.
 function DragHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
   return (
     <div
       onPointerDown={onPointerDown}
-      className="flex-shrink-0 flex items-center justify-center h-4 cursor-ns-resize group select-none relative z-10 touch-none"
+      className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize touch-none z-10 group flex items-center justify-center"
       title="Drag to resize"
     >
-      <div className="absolute inset-x-0 inset-y-0.5 rounded transition-colors group-hover:bg-brand/5" />
-      <div className="relative flex flex-col gap-[3px] items-center">
-        <div className="w-8 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-        <div className="w-5 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-        <div className="w-8 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+      <div className="flex gap-1 items-center">
+        <div className="w-6 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+        <div className="w-4 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+        <div className="w-6 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
       </div>
     </div>
   )
@@ -135,19 +137,23 @@ function useWidthResize(initialPx: number, min: number, max: number, dir: 'right
   return [width, onPointerDown] as const
 }
 
-function HorizontalDragHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
+// Absolute-positioned at the left or right edge of its relative parent.
+// Lives INSIDE the panel so wheel-scroll events bubble to the panel's
+// scroll container instead of being dropped by a between-panel element.
+function HorizontalDragHandle({ onPointerDown, side = 'right' }: {
+  onPointerDown: (e: React.PointerEvent) => void
+  side?: 'left' | 'right'
+}) {
   return (
     <div
       onPointerDown={onPointerDown}
-      className="hidden lg:flex flex-shrink-0 w-4 items-center justify-center cursor-ew-resize group select-none relative z-10 touch-none"
+      className={cn(
+        'absolute top-0 bottom-0 w-2 cursor-ew-resize touch-none z-20 group hidden lg:flex items-center justify-center',
+        side === 'right' ? 'right-0' : 'left-0',
+      )}
       title="Drag to resize"
     >
-      <div className="absolute inset-y-0 inset-x-0.5 rounded transition-colors group-hover:bg-brand/5" />
-      <div className="relative flex flex-col gap-[3px] items-center">
-        <div className="h-8 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-        <div className="h-5 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-        <div className="h-8 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-      </div>
+      <div className="h-12 w-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
     </div>
   )
 }
@@ -802,7 +808,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
       </div>
 
       {/* ── Always-visible info section ─────────────────────────────────────── */}
-      <div style={{ height: infoHeight }} className="flex-shrink-0 overflow-y-auto scroll-area p-4 space-y-3">
+      <div style={{ height: infoHeight }} className="flex-shrink-0 overflow-y-auto scroll-area p-4 space-y-3 relative">
         {/* Capabilities */}
         {caps.length > 0 && (
           <div>
@@ -960,8 +966,8 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
             Add Quote
           </Button>
         </div>
+        <DragHandle onPointerDown={handleInfoDrag} />
       </div>
-      <DragHandle onPointerDown={handleInfoDrag} />
       {/* Tabs — Quotes / Customers / Compare / Negotiate */}
       <div className="flex overflow-x-auto border-b border-[#e5e8ef] flex-shrink-0 scrollbar-none">
         {TABS.map(t => (
@@ -1601,9 +1607,9 @@ export default function SupplierMap() {
         {/* ── Panel 1: Filter + Discover ── */}
         <div
           style={{ width: leftW }}
-          className={cn('flex-col min-h-0 flex-shrink-0 min-w-full lg:min-w-0', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}
+          className={cn('flex-col min-h-0 flex-shrink-0 min-w-full lg:min-w-0 relative', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}
         >
-          <div style={{ height: discoverHeight }} className="overflow-y-auto scroll-area flex-shrink-0">
+          <div style={{ height: discoverHeight }} className="overflow-y-auto scroll-area flex-shrink-0 relative">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1654,8 +1660,8 @@ export default function SupplierMap() {
               </Button>
             </CardContent>
           </Card>
-          </div>
           <DragHandle onPointerDown={handleDiscoverDrag} />
+          </div>
           <div className="flex-1 overflow-y-auto scroll-area min-h-0">
           {/* ── Supplier Filter ── */}
           <Card>
@@ -1768,9 +1774,8 @@ export default function SupplierMap() {
             </CardContent>
           </Card>
           </div>
+          <HorizontalDragHandle onPointerDown={handleLeftWidthDrag} side="right" />
         </div>
-
-        <HorizontalDragHandle onPointerDown={handleLeftWidthDrag} />
 
         {/* ── Panel 2: Map + Supplier List ── */}
         <div className={cn('flex-1 min-w-0 flex-col gap-3 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'map' ? 'flex' : 'hidden lg:flex')}>
@@ -1953,13 +1958,12 @@ export default function SupplierMap() {
           )}
         </div>
 
-        <HorizontalDragHandle onPointerDown={handleRightWidthDrag} />
-
         {/* ── Panel 3: Detail ── */}
         <div
           style={{ width: rightW }}
-          className={cn('flex-shrink-0 min-w-full lg:min-w-0 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}
+          className={cn('flex-shrink-0 min-w-full lg:min-w-0 min-h-0 overflow-y-auto scroll-area relative', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}
         >
+          <HorizontalDragHandle onPointerDown={handleRightWidthDrag} side="left" />
           <AnimatePresence mode="wait">
             {selectedSupplier ? (
               <SupplierDetailPanel
