@@ -99,6 +99,60 @@ function DragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => voi
   )
 }
 
+function useResizablePanel(defaultW = 900, defaultH = 600) {
+  const [rect, setRect] = useState(() => {
+    const w = Math.min(defaultW, window.innerWidth - 32)
+    const h = Math.min(defaultH, window.innerHeight - 32)
+    return { x: (window.innerWidth - w) / 2, y: (window.innerHeight - h) / 2, w, h }
+  })
+  const rectRef = useRef(rect)
+  rectRef.current = rect
+
+  const onResize = useCallback((dir: ResizeDir) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    const s = { ...rectRef.current }
+    const MIN_W = 360, MIN_H = 300
+
+    const onMove = (me: MouseEvent) => {
+      const dx = me.clientX - startX
+      const dy = me.clientY - startY
+      const MAX_W = window.innerWidth - 8
+      const MAX_H = window.innerHeight - 8
+      let { x, y, w, h } = s
+
+      if (dir === 'move') {
+        setRect({ w, h, x: Math.max(0, Math.min(MAX_W - w, x + dx)), y: Math.max(0, Math.min(MAX_H - h, y + dy)) })
+        return
+      }
+      if (dir === 'e'  || dir === 'ne' || dir === 'se') w = Math.max(MIN_W, Math.min(MAX_W - x, s.w + dx))
+      if (dir === 'w'  || dir === 'nw' || dir === 'sw') { const nw = Math.max(MIN_W, s.w - dx); x = s.x + s.w - nw; w = nw }
+      if (dir === 's'  || dir === 'se' || dir === 'sw') h = Math.max(MIN_H, Math.min(MAX_H - y, s.h + dy))
+      if (dir === 'n'  || dir === 'ne' || dir === 'nw') { const nh = Math.max(MIN_H, s.h - dy); y = s.y + s.h - nh; h = nh }
+      setRect({ x, y, w, h })
+    }
+
+    const CURSORS: Record<ResizeDir, string> = {
+      n: 'n-resize', ne: 'ne-resize', e: 'e-resize', se: 'se-resize',
+      s: 's-resize', sw: 'sw-resize', w: 'w-resize', nw: 'nw-resize', move: 'move',
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = CURSORS[dir]
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
+
+  return [rect, onResize] as const
+}
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
 const COUNTRY_COORDS: Record<string, [number, number]> = {
@@ -196,6 +250,7 @@ interface SupplierCustomer {
 }
 
 type RightPanelTab = 'quotes' | 'compare' | 'negotiate' | 'customers'
+type ResizeDir = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw' | 'move'
 
 // ─── TIER STARS ──────────────────────────────────────────────────────────────
 
@@ -571,6 +626,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
   })()
 
   const [infoHeight, handleInfoDrag] = useDragResize(260, 100, 480)
+  const [panelRect, onResize] = useResizablePanel(900, 600)
 
   const { data: quotes = [], isLoading: quotesLoading } = useQuery<SupplierQuote[]>({
     queryKey: ['supplier-quotes', supplier.id],
@@ -650,13 +706,14 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
       transition={{ duration: 0.25 }}
       className={cn(
         'flex flex-col bg-white border border-[#e5e8ef] shadow-sm overflow-hidden',
-        expanded
-          ? 'rounded-2xl w-full max-w-5xl max-h-[90vh] mx-auto shadow-2xl'
-          : 'h-full rounded-2xl',
+        expanded ? 'rounded-2xl h-full shadow-2xl' : 'h-full rounded-2xl',
       )}
     >
       {/* Header */}
-      <div className="p-4 border-b border-[#e5e8ef] flex-shrink-0">
+      <div
+        className={cn('p-4 border-b border-[#e5e8ef] flex-shrink-0', expanded && 'cursor-move select-none')}
+        onMouseDown={expanded ? onResize('move') : undefined}
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h3 className="font-semibold text-[#0f1729] truncate">{supplier.name}</h3>
@@ -1110,11 +1167,34 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+        className="fixed inset-0 z-[9200] bg-black/50 backdrop-blur-sm"
         onClick={(e) => { if (e.target === e.currentTarget) onToggleExpand() }}
       >
-        <div className="w-full max-w-5xl max-h-[90vh] flex flex-col">
-          {panelContent}
+        {/* Resizable floating panel */}
+        <div
+          style={{ left: panelRect.x, top: panelRect.y, width: panelRect.w, height: panelRect.h }}
+          className="fixed z-[9201] flex flex-col"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Edge + corner resize handles */}
+          <div className="absolute top-0 left-4 right-4 h-2 z-20 cursor-n-resize"  onMouseDown={onResize('n')}  />
+          <div className="absolute bottom-0 left-4 right-4 h-2 z-20 cursor-s-resize" onMouseDown={onResize('s')} />
+          <div className="absolute left-0 top-4 bottom-4 w-2 z-20 cursor-w-resize"  onMouseDown={onResize('w')}  />
+          <div className="absolute right-0 top-4 bottom-4 w-2 z-20 cursor-e-resize" onMouseDown={onResize('e')} />
+          <div className="absolute top-0 left-0 w-4 h-4 z-20 cursor-nw-resize" onMouseDown={onResize('nw')} />
+          <div className="absolute top-0 right-0 w-4 h-4 z-20 cursor-ne-resize" onMouseDown={onResize('ne')} />
+          <div className="absolute bottom-0 left-0 w-4 h-4 z-20 cursor-sw-resize" onMouseDown={onResize('sw')} />
+          <div className="absolute bottom-0 right-0 w-4 h-4 z-20 cursor-se-resize" onMouseDown={onResize('se')} />
+          {/* SE resize grip indicator */}
+          <div className="absolute bottom-1.5 right-1.5 z-20 pointer-events-none opacity-40">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M2 10L10 2M6 10L10 6" stroke="#9aa3b2" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+          {/* Content fills the panel */}
+          <div className="absolute inset-0">
+            {panelContent}
+          </div>
         </div>
       </motion.div>
     )
