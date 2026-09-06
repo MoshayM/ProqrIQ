@@ -45,8 +45,8 @@
   --safe-left:   env(safe-area-inset-left,   0px);
   --safe-right:  env(safe-area-inset-right,  0px);
 
-  /* Topbar height — 3.5rem base + notch inset, used for full-height page layouts */
-  --topbar-h: calc(3.5rem + var(--safe-top));
+  /* Topbar height — 4rem base + notch inset, used for full-height page layouts */
+  --topbar-h: calc(4rem + var(--safe-top));
 }
 
 /* ─── Base resets ────────────────────────────────────────────────────────── */
@@ -136,8 +136,8 @@ a, button, [role="button"], label, select, summary {
 .py-safe   { padding-top:    var(--safe-top);    padding-bottom: var(--safe-bottom); }
 
 /* Mobile topbar height accounts for iOS status-bar notch */
-.h-topbar  { height: calc(3.5rem + var(--safe-top)); }
-.pt-topbar { padding-top: calc(3.5rem + var(--safe-top)); }
+.h-topbar  { height: calc(4rem + var(--safe-top)); }
+.pt-topbar { padding-top: calc(4rem + var(--safe-top)); }
 
 /* Fixed bottom elements that need to clear the home indicator */
 .bottom-safe-6  { bottom: calc(1.5rem + var(--safe-bottom)); }

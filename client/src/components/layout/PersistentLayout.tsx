@@ -374,7 +374,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
   return (
     <div className="flex flex-col lg:flex-row h-[100dvh] overflow-hidden bg-surface-2">
       {/* ── Mobile top bar (in layout flow on mobile, hidden on lg+) ─────────── */}
-      <div className="lg:hidden flex-shrink-0 h-topbar bg-navy flex pt-[var(--safe-top)] items-center px-4 gap-3">
+      <div className="lg:hidden flex-shrink-0 h-topbar bg-navy flex pt-[var(--safe-top)] items-center px-4 gap-3 shadow-[0_1px_0_0_rgba(255,255,255,0.06)]">
         <button
           onClick={() => setMobileOpen(v => !v)}
           className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white"
