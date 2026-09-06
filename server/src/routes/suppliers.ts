@@ -557,6 +557,7 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
           city:         s.city,
           capabilities: s.capabilities ? JSON.stringify(s.capabilities) : undefined,
           tier_rating:  s.tier_rating,
+          notes:        s.reasoning ?? null,
           origin:       'ai_suggested',
           source_tier:  5,
           is_active:    true,

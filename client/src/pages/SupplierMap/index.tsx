@@ -7,7 +7,7 @@ import {
   Star, ChevronRight, X, Upload, BarChart3, MessageSquare, RefreshCw,
   CheckCircle, Zap, AlertTriangle, Users, Trash2, Filter,
   Maximize2, Minimize2, Layers, MousePointer2, ScanLine,
-  Mail, Phone, Link2,
+  Mail, Phone, Link2, ExternalLink, Navigation,
 } from 'lucide-react'
 import type { TileStyle } from './MapView'
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer } from 'recharts'
@@ -650,6 +650,14 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
           </div>
         )}
 
+        {/* AI recommendation reasoning */}
+        {supplier.origin === 'ai_suggested' && supplier.notes && (
+          <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3">
+            <p className="text-[10px] font-semibold text-purple-600 uppercase tracking-wide mb-1">Why Recommended</p>
+            <p className="text-xs text-[#4a5568] leading-relaxed">{supplier.notes}</p>
+          </div>
+        )}
+
         {/* Contact details */}
         <div className="rounded-xl border border-[#e5e8ef] p-3 space-y-2">
           <p className="text-[10px] font-semibold text-[#9aa3b2] uppercase tracking-wide">Contact Details</p>
@@ -675,8 +683,13 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Mail className="w-3.5 h-3.5 text-[#e5e8ef] flex-shrink-0" />
+              <Mail className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
               <span className="text-xs text-[#9aa3b2] italic">No email on file</span>
+              <a
+                href={`https://www.google.com/search?q=${encodeURIComponent(`${supplier.name} ${supplier.city ?? ''} contact email`)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="ml-auto text-[10px] text-brand hover:underline flex items-center gap-0.5 flex-shrink-0"
+              >Find <ExternalLink className="w-2.5 h-2.5" /></a>
             </div>
           )}
           {supplier.contact_phone ? (
@@ -698,14 +711,36 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
                 className="text-xs text-brand hover:underline truncate">{supplier.website}</a>
             </div>
           )}
-          {(supplier.full_address || supplier.city) && (
-            <div className="flex items-start gap-2">
-              <MapPin className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-[#4a5568]">
-                {supplier.full_address || [supplier.city, COUNTRY_NAMES[supplier.country_code] ?? supplier.country_code].filter(Boolean).join(', ')}
-              </p>
-            </div>
-          )}
+          {(supplier.full_address || supplier.city) && (() => {
+            const addrText = supplier.full_address || [supplier.city, COUNTRY_NAMES[supplier.country_code] ?? supplier.country_code].filter(Boolean).join(', ')
+            const mapsQuery = supplier.lat && supplier.lng
+              ? `${supplier.lat},${supplier.lng}`
+              : encodeURIComponent(`${supplier.name} ${addrText}`)
+            const mapsUrl      = supplier.lat && supplier.lng
+              ? `https://www.google.com/maps?q=${mapsQuery}`
+              : `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`
+            const streetViewUrl = supplier.lat && supplier.lng
+              ? `https://www.google.com/maps?q=${mapsQuery}&layer=c`
+              : `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`
+            return (
+              <div className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 text-[#9aa3b2] mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-[#4a5568]">{addrText}</p>
+                  <div className="flex gap-2.5 mt-1">
+                    <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-brand hover:underline flex items-center gap-0.5">
+                      <ExternalLink className="w-2.5 h-2.5" /> Maps
+                    </a>
+                    <a href={streetViewUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-brand hover:underline flex items-center gap-0.5">
+                      <Navigation className="w-2.5 h-2.5" /> Street View
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Company profile */}
