@@ -87,21 +87,23 @@ function useDragResize(initialPx: number, min: number, max: number) {
   return [size, onPointerDown] as const
 }
 
-// Absolute-positioned at the bottom of its relative parent.
-// Lives INSIDE the scrollable container so wheel-scroll events bubble to the
-// scrollable parent instead of being silently swallowed by a flow element.
+// Thin in-flow separator between two sections. h-1 (4px) so it is nearly
+// invisible and rarely lands under a scrolling cursor. Forwards wheel events
+// to the previous sibling so scroll is never swallowed by the handle.
 function DragHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
   return (
     <div
       onPointerDown={onPointerDown}
-      className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize touch-none z-10 group flex items-center justify-center"
+      onWheel={(e) => {
+        const prev = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null
+        const next = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null
+        const target = e.deltaY < 0 ? prev : next
+        if (target) target.scrollTop += e.deltaY
+      }}
+      className="flex-shrink-0 h-1 cursor-row-resize touch-none z-10 group flex items-center justify-center select-none"
       title="Drag to resize"
     >
-      <div className="flex gap-1 items-center">
-        <div className="w-6 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-        <div className="w-4 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-        <div className="w-6 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
-      </div>
+      <div className="w-8 h-px bg-[#d1d5de] group-hover:bg-brand/50 rounded-full transition-colors" />
     </div>
   )
 }
@@ -808,7 +810,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
       </div>
 
       {/* ── Always-visible info section ─────────────────────────────────────── */}
-      <div style={{ height: infoHeight }} className="flex-shrink-0 overflow-y-auto scroll-area p-4 space-y-3 relative">
+      <div style={{ height: infoHeight }} className="flex-shrink-0 overflow-y-auto scroll-area p-4 space-y-3">
         {/* Capabilities */}
         {caps.length > 0 && (
           <div>
@@ -966,8 +968,8 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
             Add Quote
           </Button>
         </div>
-        <DragHandle onPointerDown={handleInfoDrag} />
       </div>
+      <DragHandle onPointerDown={handleInfoDrag} />
       {/* Tabs — Quotes / Customers / Compare / Negotiate */}
       <div className="flex overflow-x-auto border-b border-[#e5e8ef] flex-shrink-0 scrollbar-none">
         {TABS.map(t => (
@@ -1609,7 +1611,7 @@ export default function SupplierMap() {
           style={{ width: leftW }}
           className={cn('flex-col min-h-0 flex-shrink-0 min-w-full lg:min-w-0 relative', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}
         >
-          <div style={{ height: discoverHeight }} className="overflow-y-auto scroll-area flex-shrink-0 relative">
+          <div style={{ height: discoverHeight }} className="overflow-y-auto scroll-area flex-shrink-0">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1660,8 +1662,8 @@ export default function SupplierMap() {
               </Button>
             </CardContent>
           </Card>
-          <DragHandle onPointerDown={handleDiscoverDrag} />
           </div>
+          <DragHandle onPointerDown={handleDiscoverDrag} />
           <div className="flex-1 overflow-y-auto scroll-area min-h-0">
           {/* ── Supplier Filter ── */}
           <Card>
@@ -1961,7 +1963,7 @@ export default function SupplierMap() {
         {/* ── Panel 3: Detail ── */}
         <div
           style={{ width: rightW }}
-          className={cn('flex-shrink-0 min-w-full lg:min-w-0 min-h-0 overflow-y-auto scroll-area relative', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}
+          className={cn('flex-shrink-0 min-w-full lg:min-w-0 min-h-0 overflow-hidden relative', mobilePanel === 'detail' ? 'block' : 'hidden lg:block')}
         >
           <HorizontalDragHandle onPointerDown={handleRightWidthDrag} side="left" />
           <AnimatePresence mode="wait">
