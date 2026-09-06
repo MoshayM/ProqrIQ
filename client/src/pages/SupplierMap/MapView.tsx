@@ -122,5 +122,17 @@ export default function MapView({ pins, onPinClick, tileStyle = 'light', scrollW
     })
   }, [pins])
 
+  // Notify Leaflet whenever the container is resized (e.g. panel drag-resize).
+  // Without this the tile grid mis-aligns after column width changes.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      if (mapRef.current) mapRef.current.invalidateSize()
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   return <div ref={containerRef} style={{ height: '100%', width: '100%' }} />
 }

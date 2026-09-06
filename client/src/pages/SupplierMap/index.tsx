@@ -34,16 +34,19 @@ class MapErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { failed: boolean }
 > {
-  constructor(props: { children: React.ReactNode }) {
-    super(props)
-    this.state = { failed: false }
-  }
+  state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
   render() {
     if (this.state.failed) {
       return (
-        <div className="h-full flex items-center justify-center bg-surface-2 rounded-xl">
+        <div className="h-full flex flex-col items-center justify-center gap-2 bg-surface-2 rounded-xl">
           <p className="text-xs text-[#9aa3b2]">Map unavailable — use the supplier list below.</p>
+          <button
+            className="text-xs text-brand hover:underline"
+            onClick={() => this.setState({ failed: false })}
+          >
+            Retry
+          </button>
         </div>
       )
     }
