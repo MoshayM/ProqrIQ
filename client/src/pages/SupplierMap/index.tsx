@@ -121,6 +121,8 @@ interface Supplier {
   company_size:       string | null
   annual_revenue_usd: number | null
   licenses:           string | null
+  lat:                number | null
+  lng:                number | null
 }
 
 interface SupplierQuote {
@@ -1313,8 +1315,10 @@ export default function SupplierMap() {
   }
 
   const mapPins = filteredSuppliers.map(s => ({
-    code: s.country_code,
-    coords: COUNTRY_COORDS[s.country_code] ?? [0, 0] as [number, number],
+    code: s.id,
+    coords: (s.lat != null && s.lng != null)
+      ? [s.lat, s.lng] as [number, number]
+      : COUNTRY_COORDS[s.country_code] ?? [0, 0] as [number, number],
     label: s.name,
     supplier: { name: s.name, country: COUNTRY_NAMES[s.country_code] ?? s.country_code, country_code: s.country_code, specialisation: '', estimated_lead_time_days: 0, cost_index: s.tier_rating ?? 3, notes: s.notes ?? '' },
     selected: selectedSupplier?.id === s.id,
@@ -1598,7 +1602,7 @@ export default function SupplierMap() {
                     tileStyle={tileStyle}
                     scrollWheelZoom={scrollWheelZoom}
                     onPinClick={(code) => {
-                      const match = filteredSuppliers.find(s => s.country_code === code)
+                      const match = filteredSuppliers.find(s => s.id === code)
                       if (match) {
                         setSelectedSupplier(match === selectedSupplier ? null : match)
                         if (window.innerWidth < 1024) setMobilePanel('detail')
@@ -1653,7 +1657,7 @@ export default function SupplierMap() {
                         tileStyle={tileStyle}
                         scrollWheelZoom={true}
                         onPinClick={(code) => {
-                          const match = filteredSuppliers.find(s => s.country_code === code)
+                          const match = filteredSuppliers.find(s => s.id === code)
                           if (match) { setSelectedSupplier(match === selectedSupplier ? null : match); setMapSize('md') }
                         }}
                       />

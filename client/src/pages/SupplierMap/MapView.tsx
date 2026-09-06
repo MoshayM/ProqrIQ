@@ -18,9 +18,11 @@ interface MapViewProps {
   scrollWheelZoom?: boolean
 }
 
+const CARTO_API_KEY = 'cb1_2z76_1_85025d5d76fb59c2114e4601'
+
 const TILE_URLS: Record<TileStyle, string> = {
-  light:     'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-  dark:      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  light:     `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`,
+  dark:      `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`,
   satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
 }
 
