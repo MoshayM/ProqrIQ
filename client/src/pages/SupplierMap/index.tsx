@@ -52,41 +52,46 @@ class MapErrorBoundary extends React.Component<
 }
 
 // ─── DRAG RESIZE ─────────────────────────────────────────────────────────────
+// All resize hooks use pointer capture: events stay pinned to the handle element
+// during drag so scroll containers never receive competing pointer events.
+// A 4 px movement threshold prevents accidental drags on click.
 
 function useDragResize(initialPx: number, min: number, max: number) {
   const [size, setSize] = useState(initialPx)
   const sizeRef = useRef(size)
   sizeRef.current = size
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
     const startY = e.clientY
     const startSize = sizeRef.current
+    let active = false
 
-    const onMove = (me: MouseEvent) => {
+    const onMove = (me: PointerEvent) => {
       const delta = me.clientY - startY
+      if (!active && Math.abs(delta) < 4) return
+      if (!active) { active = true; document.body.style.cursor = 'ns-resize'; document.body.style.userSelect = 'none' }
       setSize(Math.max(min, Math.min(max, startSize + delta)))
     }
     const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-    document.body.style.cursor = 'ns-resize'
-    document.body.style.userSelect = 'none'
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
   }, [min, max])
 
-  return [size, onMouseDown] as const
+  return [size, onPointerDown] as const
 }
 
-function DragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+function DragHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
   return (
     <div
-      onMouseDown={onMouseDown}
-      className="flex-shrink-0 flex items-center justify-center h-4 cursor-ns-resize group select-none relative z-10"
+      onPointerDown={onPointerDown}
+      className="flex-shrink-0 flex items-center justify-center h-4 cursor-ns-resize group select-none relative z-10 touch-none"
       title="Drag to resize"
     >
       <div className="absolute inset-x-0 inset-y-0.5 rounded transition-colors group-hover:bg-brand/5" />
@@ -104,35 +109,37 @@ function useWidthResize(initialPx: number, min: number, max: number, dir: 'right
   const widthRef = useRef(width)
   widthRef.current = width
 
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
     const startX = e.clientX
     const startW = widthRef.current
+    let active = false
 
-    const onMove = (me: MouseEvent) => {
+    const onMove = (me: PointerEvent) => {
       const dx = me.clientX - startX
+      if (!active && Math.abs(dx) < 4) return
+      if (!active) { active = true; document.body.style.cursor = 'ew-resize'; document.body.style.userSelect = 'none' }
       setWidth(Math.max(min, Math.min(max, startW + (dir === 'right' ? dx : -dx))))
     }
     const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-    document.body.style.cursor = 'ew-resize'
-    document.body.style.userSelect = 'none'
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
   }, [min, max, dir])
 
-  return [width, onMouseDown] as const
+  return [width, onPointerDown] as const
 }
 
-function HorizontalDragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+function HorizontalDragHandle({ onPointerDown }: { onPointerDown: (e: React.PointerEvent) => void }) {
   return (
     <div
-      onMouseDown={onMouseDown}
-      className="hidden lg:flex flex-shrink-0 w-4 items-center justify-center cursor-ew-resize group select-none relative z-10"
+      onPointerDown={onPointerDown}
+      className="hidden lg:flex flex-shrink-0 w-4 items-center justify-center cursor-ew-resize group select-none relative z-10 touch-none"
       title="Drag to resize"
     >
       <div className="absolute inset-y-0 inset-x-0.5 rounded transition-colors group-hover:bg-brand/5" />
@@ -154,17 +161,30 @@ function useResizablePanel(defaultW = 900, defaultH = 600) {
   const rectRef = useRef(rect)
   rectRef.current = rect
 
-  const onResize = useCallback((dir: ResizeDir) => (e: React.MouseEvent) => {
-    e.preventDefault()
+  const onResize = useCallback((dir: ResizeDir) => (e: React.PointerEvent) => {
     e.stopPropagation()
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
     const startX = e.clientX
     const startY = e.clientY
     const s = { ...rectRef.current }
     const MIN_W = 360, MIN_H = 300
+    let active = false
 
-    const onMove = (me: MouseEvent) => {
+    const CURSORS: Record<ResizeDir, string> = {
+      n: 'n-resize', ne: 'ne-resize', e: 'e-resize', se: 'se-resize',
+      s: 's-resize', sw: 'sw-resize', w: 'w-resize', nw: 'nw-resize', move: 'move',
+    }
+
+    const onMove = (me: PointerEvent) => {
       const dx = me.clientX - startX
       const dy = me.clientY - startY
+      const dist = (dir === 'n' || dir === 's') ? Math.abs(dy)
+                 : (dir === 'e' || dir === 'w') ? Math.abs(dx)
+                 : Math.max(Math.abs(dx), Math.abs(dy))
+      if (!active && dist < 4) return
+      if (!active) { active = true; document.body.style.cursor = CURSORS[dir]; document.body.style.userSelect = 'none' }
+
       const MAX_W = window.innerWidth - 8
       const MAX_H = window.innerHeight - 8
       let { x, y, w, h } = s
@@ -180,20 +200,14 @@ function useResizablePanel(defaultW = 900, defaultH = 600) {
       setRect({ x, y, w, h })
     }
 
-    const CURSORS: Record<ResizeDir, string> = {
-      n: 'n-resize', ne: 'ne-resize', e: 'e-resize', se: 'se-resize',
-      s: 's-resize', sw: 'sw-resize', w: 'w-resize', nw: 'nw-resize', move: 'move',
-    }
     const onUp = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', onUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-    document.body.style.cursor = CURSORS[dir]
-    document.body.style.userSelect = 'none'
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', onUp)
   }, [])
 
   return [rect, onResize] as const
@@ -757,8 +771,8 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
     >
       {/* Header */}
       <div
-        className={cn('p-4 border-b border-[#e5e8ef] flex-shrink-0', expanded && 'cursor-move select-none')}
-        onMouseDown={expanded ? onResize('move') : undefined}
+        className={cn('p-4 border-b border-[#e5e8ef] flex-shrink-0', expanded && 'cursor-move select-none touch-none')}
+        onPointerDown={expanded ? onResize('move') : undefined}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -947,7 +961,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
           </Button>
         </div>
       </div>
-      <DragHandle onMouseDown={handleInfoDrag} />
+      <DragHandle onPointerDown={handleInfoDrag} />
       {/* Tabs — Quotes / Customers / Compare / Negotiate */}
       <div className="flex overflow-x-auto border-b border-[#e5e8ef] flex-shrink-0 scrollbar-none">
         {TABS.map(t => (
@@ -1223,14 +1237,14 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
           onClick={e => e.stopPropagation()}
         >
           {/* Edge + corner resize handles */}
-          <div className="absolute top-0 left-4 right-4 h-2 z-20 cursor-n-resize"  onMouseDown={onResize('n')}  />
-          <div className="absolute bottom-0 left-4 right-4 h-2 z-20 cursor-s-resize" onMouseDown={onResize('s')} />
-          <div className="absolute left-0 top-4 bottom-4 w-2 z-20 cursor-w-resize"  onMouseDown={onResize('w')}  />
-          <div className="absolute right-0 top-4 bottom-4 w-2 z-20 cursor-e-resize" onMouseDown={onResize('e')} />
-          <div className="absolute top-0 left-0 w-4 h-4 z-20 cursor-nw-resize" onMouseDown={onResize('nw')} />
-          <div className="absolute top-0 right-0 w-4 h-4 z-20 cursor-ne-resize" onMouseDown={onResize('ne')} />
-          <div className="absolute bottom-0 left-0 w-4 h-4 z-20 cursor-sw-resize" onMouseDown={onResize('sw')} />
-          <div className="absolute bottom-0 right-0 w-4 h-4 z-20 cursor-se-resize" onMouseDown={onResize('se')} />
+          <div className="absolute top-0 left-4 right-4 h-2 z-20 cursor-n-resize"  onPointerDown={onResize('n')}  />
+          <div className="absolute bottom-0 left-4 right-4 h-2 z-20 cursor-s-resize" onPointerDown={onResize('s')} />
+          <div className="absolute left-0 top-4 bottom-4 w-2 z-20 cursor-w-resize"  onPointerDown={onResize('w')}  />
+          <div className="absolute right-0 top-4 bottom-4 w-2 z-20 cursor-e-resize" onPointerDown={onResize('e')} />
+          <div className="absolute top-0 left-0 w-4 h-4 z-20 cursor-nw-resize" onPointerDown={onResize('nw')} />
+          <div className="absolute top-0 right-0 w-4 h-4 z-20 cursor-ne-resize" onPointerDown={onResize('ne')} />
+          <div className="absolute bottom-0 left-0 w-4 h-4 z-20 cursor-sw-resize" onPointerDown={onResize('sw')} />
+          <div className="absolute bottom-0 right-0 w-4 h-4 z-20 cursor-se-resize" onPointerDown={onResize('se')} />
           {/* SE resize grip indicator */}
           <div className="absolute bottom-1.5 right-1.5 z-20 pointer-events-none opacity-40">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -1641,7 +1655,7 @@ export default function SupplierMap() {
             </CardContent>
           </Card>
           </div>
-          <DragHandle onMouseDown={handleDiscoverDrag} />
+          <DragHandle onPointerDown={handleDiscoverDrag} />
           <div className="flex-1 overflow-y-auto scroll-area min-h-0">
           {/* ── Supplier Filter ── */}
           <Card>
@@ -1756,7 +1770,7 @@ export default function SupplierMap() {
           </div>
         </div>
 
-        <HorizontalDragHandle onMouseDown={handleLeftWidthDrag} />
+        <HorizontalDragHandle onPointerDown={handleLeftWidthDrag} />
 
         {/* ── Panel 2: Map + Supplier List ── */}
         <div className={cn('flex-1 min-w-0 flex-col gap-3 min-h-0 overflow-y-auto scroll-area', mobilePanel === 'map' ? 'flex' : 'hidden lg:flex')}>
@@ -1939,7 +1953,7 @@ export default function SupplierMap() {
           )}
         </div>
 
-        <HorizontalDragHandle onMouseDown={handleRightWidthDrag} />
+        <HorizontalDragHandle onPointerDown={handleRightWidthDrag} />
 
         {/* ── Panel 3: Detail ── */}
         <div
