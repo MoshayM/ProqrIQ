@@ -1,4 +1,4 @@
-import React, { useState, useMemo, Suspense } from 'react'
+import React, { useState, useMemo, Suspense, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -49,6 +49,54 @@ class MapErrorBoundary extends React.Component<
     }
     return this.props.children
   }
+}
+
+// ─── DRAG RESIZE ─────────────────────────────────────────────────────────────
+
+function useDragResize(initialPx: number, min: number, max: number) {
+  const [size, setSize] = useState(initialPx)
+  const sizeRef = useRef(size)
+  sizeRef.current = size
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startY = e.clientY
+    const startSize = sizeRef.current
+
+    const onMove = (me: MouseEvent) => {
+      const delta = me.clientY - startY
+      setSize(Math.max(min, Math.min(max, startSize + delta)))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [min, max])
+
+  return [size, onMouseDown] as const
+}
+
+function DragHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      className="flex-shrink-0 flex items-center justify-center h-4 cursor-ns-resize group select-none relative z-10"
+      title="Drag to resize"
+    >
+      <div className="absolute inset-x-0 inset-y-0.5 rounded transition-colors group-hover:bg-brand/5" />
+      <div className="relative flex flex-col gap-[3px] items-center">
+        <div className="w-8 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+        <div className="w-5 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+        <div className="w-8 h-px bg-[#d1d5de] group-hover:bg-brand/60 rounded-full transition-colors" />
+      </div>
+    </div>
+  )
 }
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
@@ -522,6 +570,8 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
     try { return JSON.parse(supplier.capabilities ?? '[]') } catch { return [] }
   })()
 
+  const [infoHeight, handleInfoDrag] = useDragResize(260, 100, 480)
+
   const { data: quotes = [], isLoading: quotesLoading } = useQuery<SupplierQuote[]>({
     queryKey: ['supplier-quotes', supplier.id],
     queryFn: () => api.suppliers.getQuotesBySupplier(supplier.id) as Promise<SupplierQuote[]>,
@@ -635,7 +685,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
       </div>
 
       {/* ── Always-visible info section ─────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-b border-[#e5e8ef] overflow-y-auto max-h-72 p-4 space-y-3">
+      <div style={{ height: infoHeight }} className="flex-shrink-0 overflow-y-auto scroll-area p-4 space-y-3">
         {/* Capabilities */}
         {caps.length > 0 && (
           <div>
@@ -794,7 +844,7 @@ function SupplierDetailPanel({ supplier, quotationId, onClose, expanded, onToggl
           </Button>
         </div>
       </div>
-
+      <DragHandle onMouseDown={handleInfoDrag} />
       {/* Tabs — Quotes / Customers / Compare / Negotiate */}
       <div className="flex overflow-x-auto border-b border-[#e5e8ef] flex-shrink-0 scrollbar-none">
         {TABS.map(t => (
@@ -1243,6 +1293,9 @@ export default function SupplierMap() {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [mobilePanel, setMobilePanel] = useState<'discover' | 'map' | 'detail'>('map')
 
+  // Left panel drag resize: AI Discovery (top) vs Filter (bottom)
+  const [discoverHeight, handleDiscoverDrag] = useDragResize(260, 150, 520)
+
   // Map view controls
   type MapSize = 'sm' | 'md' | 'lg' | 'full'
   const [mapSize, setMapSize] = useState<MapSize>('md')
@@ -1402,7 +1455,8 @@ export default function SupplierMap() {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-3">
 
         {/* ── Panel 1: Filter + Discover ── */}
-        <div className={cn('flex-col gap-3 overflow-y-auto scroll-area', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}>
+        <div className={cn('flex-col min-h-0', mobilePanel === 'discover' ? 'flex' : 'hidden lg:flex')}>
+          <div style={{ height: discoverHeight }} className="overflow-y-auto scroll-area flex-shrink-0">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
@@ -1453,7 +1507,9 @@ export default function SupplierMap() {
               </Button>
             </CardContent>
           </Card>
-
+          </div>
+          <DragHandle onMouseDown={handleDiscoverDrag} />
+          <div className="flex-1 overflow-y-auto scroll-area min-h-0">
           {/* ── Supplier Filter ── */}
           <Card>
             <CardHeader>
@@ -1564,6 +1620,7 @@ export default function SupplierMap() {
               )}
             </CardContent>
           </Card>
+          </div>
         </div>
 
         {/* ── Panel 2: Map + Supplier List ── */}
