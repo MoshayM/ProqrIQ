@@ -198,7 +198,7 @@ a, button, [role="button"], label, select, summary {
 /* ─── Page content wrapper ───────────────────────────────────────────────── */
 .page-content {
   padding: 1rem;
-  padding-top: 1.25rem;   /* extra breathing room below fixed mobile top bar */
+  padding-top: 0.75rem;
   max-width: 80rem;
   margin: 0 auto;
 }
