@@ -238,6 +238,14 @@ a, button, [role="button"], label, select, summary {
   .page-content .font-mono { font-size: inherit; }
 }
 
+/* ─── Leaflet map stacking isolation ─────────────────────────────────────── */
+/* Confines Leaflet's internal z-indexes (tile/overlay/marker panes use
+   transform: translate3d which can otherwise form GPU compositing layers
+   that bleed above fixed overlays like the mobile sidebar on some browsers) */
+.leaflet-container {
+  isolation: isolate;
+}
+
 /* ─── Sonner toast custom styles ─────────────────────────────────────────── */
 [data-sonner-toast] {
   font-family: 'Inter', system-ui, sans-serif !important;
