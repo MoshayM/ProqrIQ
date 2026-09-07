@@ -27,6 +27,8 @@ import { BULK_MAX_ITEMS } from '../config'
 
 const router = Router()
 
+const ADMIN_ROLES = ['admin', 'developer', 'ceo', 'owner']
+
 router.use(requireAuth, requireRole(['engineer', 'admin', 'developer']), requirePlan('pro'))
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -590,6 +592,11 @@ router.get('/:id', async (req: Request, res: Response) => {
       })
     }
 
+    const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivileged && batch.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+
     // Auto-recover: if the batch has been processing for >25 min, the Vercel
     // function that ran the runner has been killed. Fail stuck items and close.
     if (batch.status === 'processing') {
@@ -653,6 +660,12 @@ router.post('/:id/retry', validate(retrySchema), async (req: Request, res: Respo
         error_code: 'BATCH_NOT_FOUND',
       })
     }
+
+    const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivileged && batch.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+
     if (batch.status === 'processing') {
       return res.status(409).json({
         success: false,
@@ -745,6 +758,11 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
         error: 'Batch not found',
         error_code: 'BATCH_NOT_FOUND',
       })
+    }
+
+    const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivileged && batch.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
     }
 
     // Cancel all non-terminal items (queued + any stuck in-flight states)
@@ -851,6 +869,11 @@ router.get('/:id/export-excel', requirePlan('pro'), async (req: Request, res: Re
       })
     }
 
+    const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivileged && batch.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+
     const buffer = await exportBatchToExcel(req.params.id)
     const filename = `batch-${req.params.id.slice(0, 8)}.xlsx`
 
@@ -879,6 +902,11 @@ router.patch('/:id/items/:itemId', validate(itemEditSchema), async (req: Request
     const [batch] = await db.select().from(costingBatches)
       .where(and(eq(costingBatches.id, req.params.id), isNull(costingBatches.deleted_at)))
     if (!batch) return res.status(404).json({ success: false, error: 'Batch not found' })
+
+    const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivileged && batch.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
 
     const [item] = await db.select().from(batchItems)
       .where(and(eq(batchItems.id, req.params.itemId), eq(batchItems.batch_id, req.params.id)))

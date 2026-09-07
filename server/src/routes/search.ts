@@ -4,6 +4,8 @@ import { db } from '../db/index'
 import { quotations, parts, costingBatches, suppliers, assemblyComponents } from '../db/schema'
 import { and, isNull, like, or, eq } from 'drizzle-orm'
 
+const ADMIN_ROLES = ['admin', 'developer', 'ceo', 'owner']
+
 export const router = Router()
 
 router.use(requireAuth)
@@ -19,7 +21,10 @@ router.get('/', async (req: Request, res: Response) => {
       return res.json({ success: true, data: { quotations: [], suppliers: [], batches: [] } })
     }
 
-    const pattern = `%${q}%`
+    // Escape LIKE special chars to prevent quadratic-scan DoS
+    const escaped = q.replace(/[%_\\]/g, '\\$&')
+    const pattern = `%${escaped}%`
+    const isAdmin = ADMIN_ROLES.includes(req.user!.role)
 
     // Search parts → quotations
     const matchedParts = await db
@@ -56,6 +61,7 @@ router.get('/', async (req: Request, res: Response) => {
           .where(
             and(
               isNull(quotations.deleted_at),
+              isAdmin ? undefined : eq(quotations.created_by, req.user!.id),
             )
           )
           .limit(limit)
@@ -109,6 +115,7 @@ router.get('/', async (req: Request, res: Response) => {
         and(
           isNull(costingBatches.deleted_at),
           like(costingBatches.name, pattern),
+          isAdmin ? undefined : eq(costingBatches.created_by, req.user!.id),
         )
       )
       .limit(10)
@@ -123,6 +130,6 @@ router.get('/', async (req: Request, res: Response) => {
       },
     })
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as Error).message })
+    res.status(500).json({ success: false, error: 'Internal server error' })
   }
 })

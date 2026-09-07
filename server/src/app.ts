@@ -43,7 +43,6 @@ app.use(cors({
     ? [
         'https://proqriq-kappa.vercel.app',
         'https://proqriq.vercel.app',
-        /\.vercel\.app$/,
       ]
     : [
         'http://localhost:5173',
@@ -249,7 +248,7 @@ app.use('/api',              subscriptionRouter)
 app.post('/api/cron/reset-usage', async (req: Request, res: Response) => {
   // Vercel cron requests include a bearer token — verify it
   const authHeader = req.headers.authorization
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     res.status(401).json({ error: 'Unauthorized' })
     return
   }
@@ -295,7 +294,9 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     console.error('[GlobalError]', err)
   }
 
-  const message = err instanceof Error ? err.message : 'An unexpected error occurred'
+  const message = NODE_ENV === 'production'
+    ? 'An unexpected error occurred'
+    : (err instanceof Error ? err.message : 'An unexpected error occurred')
 
   res.status(500).json({
     success:    false,

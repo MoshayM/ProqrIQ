@@ -228,18 +228,24 @@ router.post('/subscription/razorpay/verify', requireAuth, async (req: Request, r
       razorpay_payment_id,
       razorpay_subscription_id,
       razorpay_signature,
-      plan,
-      billing,
     } = req.body as {
       razorpay_payment_id:      string
       razorpay_subscription_id: string
       razorpay_signature:       string
-      plan:    string
-      billing: string
     }
 
     if (!verifyPaymentSignature(razorpay_payment_id, razorpay_subscription_id, razorpay_signature)) {
       res.status(400).json({ success: false, error: 'Invalid payment signature' })
+      return
+    }
+
+    // Fetch plan/billing from the subscription record server-side — never trust client body
+    const rzp  = getRazorpayClient()
+    const sub  = await rzp.subscriptions.fetch(razorpay_subscription_id) as { notes?: Record<string, string> }
+    const plan    = sub.notes?.plan
+    const billing = sub.notes?.billing
+    if (!plan || !billing) {
+      res.status(400).json({ success: false, error: 'Subscription metadata missing plan or billing' })
       return
     }
 
@@ -344,18 +350,24 @@ router.post('/subscription/razorpay/verify-order', requireAuth, async (req: Requ
       razorpay_payment_id,
       razorpay_order_id,
       razorpay_signature,
-      plan,
-      billing,
     } = req.body as {
       razorpay_payment_id: string
       razorpay_order_id:   string
       razorpay_signature:  string
-      plan:    string
-      billing: string
     }
 
     if (!verifyOrderSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
       res.status(400).json({ success: false, error: 'Invalid payment signature' })
+      return
+    }
+
+    // Fetch plan/billing from the order record server-side — never trust client body
+    const rzp   = getRazorpayClient()
+    const order = await rzp.orders.fetch(razorpay_order_id) as { notes?: Record<string, string> }
+    const plan    = order.notes?.plan
+    const billing = order.notes?.billing
+    if (!plan || !billing) {
+      res.status(400).json({ success: false, error: 'Order metadata missing plan or billing' })
       return
     }
 

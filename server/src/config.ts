@@ -1,6 +1,10 @@
 export const PORT = Number(process.env.PORT) || 3099
-export const JWT_SECRET = process.env.JWT_SECRET || 'autoquote-dev-secret-32-chars-min'
 export const NODE_ENV = process.env.NODE_ENV || 'development'
+
+if (!process.env.JWT_SECRET && NODE_ENV === 'production') {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set in production')
+}
+export const JWT_SECRET = process.env.JWT_SECRET || 'autoquote-dev-secret-32-chars-min'
 export const BULK_CONCURRENCY = 4
 export const BULK_MAX_ITEMS = 50
 export const BULK_AI_BUDGET_PER_HOUR = 300

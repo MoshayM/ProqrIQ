@@ -22,6 +22,8 @@ import { MAX_ASSEMBLY_DEPTH } from '../config'
 
 const router = Router()
 
+const ADMIN_ROLES = ['admin', 'developer', 'ceo', 'owner']
+
 router.use(requireAuth, requirePlan('pro'))
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -206,6 +208,11 @@ router.post(
         })
       }
 
+      const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+      if (!isPrivileged && quote.created_by !== (req as any).user!.id) {
+        return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+      }
+
       const now = new Date().toISOString()
       await db.update(quotations).set({
         quote_type: 'assembly',
@@ -245,6 +252,11 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     if (!assembly || assembly.quote_type !== 'assembly') {
       return res.status(404).json({ success: false, error: 'Assembly not found', error_code: 'QUOTE_NOT_FOUND' })
+    }
+
+    const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivileged && assembly.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
     }
 
     const edges = await db.select().from(assemblyComponents)
@@ -308,6 +320,11 @@ router.post(
 
       if (!assembly || assembly.quote_type !== 'assembly') {
         return res.status(404).json({ success: false, error: 'Assembly not found', error_code: 'QUOTE_NOT_FOUND' })
+      }
+
+      const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+      if (!isPrivileged && assembly.created_by !== (req as any).user!.id) {
+        return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
       }
 
       const body = req.body
@@ -466,6 +483,12 @@ router.patch(
         })
       }
 
+      const [assembly] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+      const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+      if (!isPrivileged && assembly?.created_by !== (req as any).user!.id) {
+        return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+      }
+
       await db.update(assemblyComponents).set(req.body).where(eq(assemblyComponents.id, req.params.componentId))
 
       await db.insert(auditLog).values({
@@ -535,6 +558,12 @@ router.delete(
         })
       }
 
+      const [assembly] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+      const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+      if (!isPrivileged && assembly?.created_by !== (req as any).user!.id) {
+        return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+      }
+
       await db.delete(assemblyComponents).where(eq(assemblyComponents.id, req.params.componentId))
 
       // If child quote is no longer used by any assembly → revert to 'individual', margin_applied=true
@@ -590,6 +619,11 @@ router.post('/:id/cost-children', requireRole(['engineer', 'admin', 'developer']
 
     if (!assembly || assembly.quote_type !== 'assembly') {
       return res.status(404).json({ success: false, error: 'Assembly not found', error_code: 'QUOTE_NOT_FOUND' })
+    }
+
+    const isPrivilegedCostChildren = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivilegedCostChildren && assembly.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
     }
 
     // Find uncosted non-purchased child quotations
@@ -715,6 +749,11 @@ router.post('/:id/rollup', requireRole(['engineer', 'admin', 'developer']), asyn
 
     if (!assembly || assembly.quote_type !== 'assembly') {
       return res.status(404).json({ success: false, error: 'Assembly not found', error_code: 'QUOTE_NOT_FOUND' })
+    }
+
+    const isPrivileged = ADMIN_ROLES.includes((req as any).user!.role)
+    if (!isPrivileged && assembly.created_by !== (req as any).user!.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
     }
 
     const rollupResult = await rollupAssembly(req.params.id)

@@ -23,6 +23,8 @@ import { exportQuoteToExcel } from '../services/excelExport'
 
 const router = Router()
 
+const ADMIN_ROLES = ['admin', 'developer', 'ceo', 'owner']
+
 const createQuotationSchema = z.object({
   part_id: z.string().nullable().optional(),
   quote_type: z.enum(['individual', 'assembly', 'component']).optional().default('individual'),
@@ -231,6 +233,11 @@ router.get('/:id', requireAuth, async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Quotation not found', error_code: 'QUOTE_NOT_FOUND' })
     }
 
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+
     const lines = await db.select().from(costLines).where(eq(costLines.quotation_id, quote.id))
     const steps = await db.select().from(cycleTimeSteps).where(eq(cycleTimeSteps.quotation_id, quote.id))
     const materials = await db.select().from(materialBreakdowns).where(eq(materialBreakdowns.quotation_id, quote.id))
@@ -283,6 +290,11 @@ router.patch('/:id', requireAuth, requireRole(['engineer', 'admin', 'developer']
       return res.status(403).json({ success: false, error: 'CEO-approved quotation cannot be edited', error_code: 'QUOTE_APPROVED_IMMUTABLE' })
     }
 
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+
     const now = new Date().toISOString()
     const updates = { ...req.body, updated_at: now }
 
@@ -313,6 +325,7 @@ router.patch('/:id', requireAuth, requireRole(['engineer', 'admin', 'developer']
 // POST /quotations/:id/submit
 router.post('/:id/submit', requireAuth, requireRole(['engineer', 'admin', 'developer']), async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user
     const [quote] = await db.select().from(quotations).where(and(
       eq(quotations.id, req.params.id),
       isNull(quotations.deleted_at),
@@ -321,6 +334,12 @@ router.post('/:id/submit', requireAuth, requireRole(['engineer', 'admin', 'devel
     if (!quote) {
       return res.status(404).json({ success: false, error: 'Quotation not found', error_code: 'QUOTE_NOT_FOUND' })
     }
+
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+
     if (quote.quote_type === 'component') {
       return res.status(403).json({
         success: false,
@@ -523,14 +542,12 @@ router.post('/:id/soft-delete', requireAuth, validate(softDeleteSchema), async (
       return res.status(403).json({ success: false, error: 'Cannot delete a CEO-approved quotation', error_code: 'QUOTE_APPROVED_IMMUTABLE' })
     }
 
-    // Engineer: can only delete own drafts
-    if (user.role === 'engineer') {
-      if (quote.created_by !== user.id) {
-        return res.status(403).json({ success: false, error: 'You can only delete your own quotations', error_code: 'QUOTE_NOT_OWNER' })
-      }
-      if (quote.status !== 'draft') {
-        return res.status(403).json({ success: false, error: 'Engineers can only delete draft quotations', error_code: 'QUOTE_NOT_DRAFT' })
-      }
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+    if (!isPrivileged && quote.status !== 'draft') {
+      return res.status(403).json({ success: false, error: 'Engineers can only delete draft quotations', error_code: 'QUOTE_NOT_DRAFT' })
     }
 
     const now = new Date().toISOString()
@@ -627,6 +644,11 @@ router.get('/:id/versions', requireAuth, async (req: Request, res: Response) => 
       return res.status(404).json({ success: false, error: 'Quotation not found', error_code: 'QUOTE_NOT_FOUND' })
     }
 
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
+
     let versionsQuery = db.select().from(quoteVersions)
       .where(eq(quoteVersions.quotation_id, req.params.id))
 
@@ -686,6 +708,15 @@ router.get('/:id/export-excel', requireAuth, requirePlan('pro'), async (req: Req
 // GET /quotations/:id/cost-lines
 router.get('/:id/cost-lines', requireAuth, async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user
+    const [quote] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+    if (!quote) {
+      return res.status(404).json({ success: false, error: 'Quotation not found', error_code: 'QUOTE_NOT_FOUND' })
+    }
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
     const lines = await db.select().from(costLines).where(eq(costLines.quotation_id, req.params.id))
     return res.json({ success: true, data: lines })
   } catch (err) {
@@ -696,6 +727,15 @@ router.get('/:id/cost-lines', requireAuth, async (req: Request, res: Response) =
 // GET /quotations/:id/cycle-time-steps
 router.get('/:id/cycle-time-steps', requireAuth, async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user
+    const [quote] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+    if (!quote) {
+      return res.status(404).json({ success: false, error: 'Quotation not found', error_code: 'QUOTE_NOT_FOUND' })
+    }
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
     const steps = await db.select().from(cycleTimeSteps).where(eq(cycleTimeSteps.quotation_id, req.params.id))
     return res.json({ success: true, data: steps })
   } catch (err) {
@@ -706,6 +746,15 @@ router.get('/:id/cycle-time-steps', requireAuth, async (req: Request, res: Respo
 // GET /quotations/:id/material-breakdowns
 router.get('/:id/material-breakdowns', requireAuth, async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user
+    const [quote] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+    if (!quote) {
+      return res.status(404).json({ success: false, error: 'Quotation not found', error_code: 'QUOTE_NOT_FOUND' })
+    }
+    const isPrivileged = ADMIN_ROLES.includes(user.role)
+    if (!isPrivileged && quote.created_by !== user.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+    }
     const mats = await db.select().from(materialBreakdowns).where(eq(materialBreakdowns.quotation_id, req.params.id))
     return res.json({ success: true, data: mats })
   } catch (err) {
@@ -728,9 +777,22 @@ router.get('/:id/assumptions', requireAuth, async (req: Request, res: Response) 
 // but we can also handle it here for convenience
 router.patch('/assumptions/:assumptionId/confirm', requireAuth, requireRole(['engineer', 'admin', 'developer']), async (req: Request, res: Response) => {
   try {
+    const user = (req as any).user
     const { value } = req.body
     const now = new Date().toISOString()
-    const userId = (req as any).user.id
+    const userId = user.id
+
+    const [assumption] = await db.select().from(assumptions).where(eq(assumptions.id, req.params.assumptionId))
+    if (assumption?.quotation_id) {
+      const [parentQuote] = await db.select().from(quotations).where(eq(quotations.id, assumption.quotation_id))
+      if (parentQuote) {
+        const isPrivileged = ADMIN_ROLES.includes(user.role)
+        if (!isPrivileged && parentQuote.created_by !== userId) {
+          return res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+        }
+      }
+    }
+
     await db.update(assumptions).set({
       status: 'confirmed',
       confirmed_by: userId,
