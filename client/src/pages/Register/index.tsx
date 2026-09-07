@@ -37,7 +37,7 @@ const PARTICLES = [
 const registerSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters'),
   email:     z.string().email('Please enter a valid email address'),
-  password:  z.string().min(6, 'Password must be at least 6 characters'),
+  password:  z.string().min(12, 'Password must be at least 12 characters'),
   confirm:   z.string(),
 }).refine(d => d.password === d.confirm, {
   message: "Passwords don't match",
@@ -348,7 +348,7 @@ export default function Register() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
-                  placeholder="At least 6 characters"
+                  placeholder="At least 12 characters"
                   {...register('password')}
                   className="w-full border border-[#e5e8ef] rounded-lg pl-10 pr-10 py-2.5 text-sm text-[#0f1729] placeholder:text-[#9aa3b2] focus:outline-none focus:ring-2 focus:ring-navy focus:border-transparent transition-all bg-white"
                 />
