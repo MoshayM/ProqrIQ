@@ -724,7 +724,7 @@ export default function PersistentLayout({ children }: { children: React.ReactNo
       </AnimatePresence>
 
       {/* ── Main content ────────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto relative scroll-area pb-safe">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative scroll-area pb-safe">
         <ScrollToTop />
         <AnimatePresence mode="wait" initial={false}>
           <motion.div

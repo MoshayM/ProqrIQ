@@ -548,7 +548,7 @@ function AssemblyDetail({ id }: { id: string }) {
       {/* Tabs */}
       <Card>
         <CardContent className="p-0">
-          <div className="flex border-b border-[#e5e8ef] relative">
+          <div className="flex border-b border-[#e5e8ef] relative overflow-x-auto tab-scroll-area">
             {TABS.map((tab) => (
               <button
                 key={tab.id}

@@ -431,7 +431,7 @@ export default function QuoteDetail() {
         transition={{ delay: 0.15, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       >
         {/* Tab bar */}
-        <div className="relative flex border-b border-[#e5e8ef] mb-6 gap-1">
+        <div className="relative flex border-b border-[#e5e8ef] mb-6 gap-1 overflow-x-auto tab-scroll-area">
           {TABS.map((tab, index) => (
             <button
               key={tab}

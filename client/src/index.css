@@ -206,6 +206,17 @@ a, button, [role="button"], label, select, summary {
 @media (min-width: 640px)  { .page-content { padding: 1.5rem; } }
 @media (min-width: 1024px) { .page-content { padding: 2rem;   } }
 
+/* ─── Scrollable tab bar / any no-scrollbar container ───────────────────── */
+.tab-scroll-area,
+.scrollbar-none {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;        /* Firefox */
+}
+.tab-scroll-area::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;                /* Chrome / Safari / WebKit */
+}
+
 /* ─── Touch targets — 44px minimum for coarse pointer (touch) devices ───── */
 @media (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]),
