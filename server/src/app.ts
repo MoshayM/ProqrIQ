@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
+import cookieParser from 'cookie-parser'
 import { rateLimit } from 'express-rate-limit'
 import path from 'path'
 import Stripe from 'stripe'
@@ -191,7 +192,8 @@ app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), as
   }
 })
 
-// ─── Body parsing ─────────────────────────────────────────────────────────────
+// ─── Cookie + body parsing ────────────────────────────────────────────────────
+app.use(cookieParser())
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 

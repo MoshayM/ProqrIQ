@@ -4,6 +4,7 @@ const client = axios.create({
   baseURL: (import.meta as any).env?.VITE_API_URL
     ? `${(import.meta as any).env.VITE_API_URL}/api`
     : '/api',
+  withCredentials: true, // send httpOnly auth cookie on every request
 })
 
 // Attach bearer token

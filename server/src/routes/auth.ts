@@ -11,7 +11,7 @@ import { requireAuth } from '../middleware/auth'
 import { avatarUpload, saveUploadedFile } from '../middleware/upload'
 import { db, users, auditLog, passkeyCredentials, passkeyChallenges, subscriptions } from '../db/index'
 import { eq, lt, and } from 'drizzle-orm'
-import { JWT_SECRET, RP_ID, RP_ORIGINS, RP_NAME } from '../config'
+import { JWT_SECRET, RP_ID, RP_ORIGINS, RP_NAME, NODE_ENV } from '../config'
 
 const router = Router()
 
@@ -26,6 +26,16 @@ function issueToken(user: { id: string; email: string; role: string; full_name: 
     JWT_SECRET,
     { expiresIn: '24h' },
   )
+}
+
+function setAuthCookie(res: Response, token: string) {
+  res.cookie('aq_token', token, {
+    httpOnly: true,
+    secure:   NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge:   24 * 60 * 60 * 1000, // 24 h — matches token expiry
+    path:     '/',
+  })
 }
 
 async function purgeExpiredChallenges() {
@@ -89,6 +99,7 @@ router.post('/register', async (req: Request, res: Response) => {
     })
 
     const token = issueToken({ id, email, role: 'engineer', full_name })
+    setAuthCookie(res, token)
     return res.status(201).json({
       success: true,
       data: {
@@ -131,6 +142,7 @@ router.post('/login', async (req: Request, res: Response) => {
     if (!valid) return res.status(401).json({ success: false, error: 'Invalid email or password', error_code: 'AUTH_INVALID' })
     await db.update(users).set({ last_login: new Date().toISOString() }).where(eq(users.id, user.id))
     const token = issueToken(user)
+    setAuthCookie(res, token)
     const { password_hash: _ph, ...profile } = user
     return res.json({
       success: true,
@@ -160,6 +172,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
 
 // POST /auth/logout
 router.post('/logout', requireAuth, (_req: Request, res: Response) => {
+  res.clearCookie('aq_token', { path: '/' })
   return res.json({ success: true })
 })
 

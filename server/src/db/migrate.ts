@@ -275,6 +275,11 @@ export async function runMigrations(client: Client): Promise<void> {
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_usage_user_period ON usage_counters(user_id, period_start)`)
   await exec(client, `CREATE INDEX IF NOT EXISTS idx_supplier_conv_supplier ON supplier_conversations(supplier_id)`)
 
+  // ── Backfill nullable source_tier columns ─────────────────────────────────
+  // Rows pre-dating NOT NULL enforcement are coerced to tier 5 (AI assumption).
+  await client.execute(`UPDATE cycle_time_steps SET source_tier = 5 WHERE source_tier IS NULL`)
+  await client.execute(`UPDATE material_breakdowns SET source_tier = 5 WHERE source_tier IS NULL`)
+
   // ── LLM API Keys + System Settings ────────────────────────────────────────
   await exec(client, `
     CREATE TABLE IF NOT EXISTS llm_api_keys (

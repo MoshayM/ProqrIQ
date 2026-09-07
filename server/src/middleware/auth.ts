@@ -18,9 +18,13 @@ declare module 'express-serve-static-core' {
 // ─── requireAuth ─────────────────────────────────────────────────────────────
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization
+  // Prefer httpOnly cookie; fall back to Authorization header for API clients
+  const cookieToken = (req as any).cookies?.aq_token as string | undefined
+  const authHeader   = req.headers.authorization
+  const token        = cookieToken
+    ?? (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined)
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!token) {
     res.status(401).json({
       success:    false,
       error:      'Authentication token missing',
@@ -28,8 +32,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     })
     return
   }
-
-  const token = authHeader.slice(7) // remove "Bearer "
 
   try {
     const payload = jwt.verify(token, JWT_SECRET) as {

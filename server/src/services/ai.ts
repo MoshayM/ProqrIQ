@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import { eq, and, isNull } from 'drizzle-orm'
 import {
@@ -53,6 +54,73 @@ const COMMODITY_TYPES = [
   'software_it',
   'other',
 ] as const
+
+// ─── Zod schema for AI cost-estimate response ────────────────────────────────
+// Validates structure before any DB write. Intentionally permissive on optional
+// fields (nullable/default) so minor AI deviations don't hard-fail.
+
+const costLineSchema = z.object({
+  category:    z.string(),
+  label:       z.string(),
+  value_eur:   z.number(),
+  source_tier: z.number().int().min(1).max(5).optional(),
+  source_ref:  z.string().nullish(),
+  is_one_time: z.boolean().optional().default(false),
+  notes:       z.string().nullish(),
+  sort_order:  z.number().optional(),
+})
+
+const cycleTimeStepSchema = z.object({
+  step_number:      z.number().int(),
+  process_name:     z.string(),
+  machine_model:    z.string().nullish(),
+  cycle_time_sec:   z.number().nullish(),
+  setup_time_min:   z.number().nullish(),
+  labour_cost_eur:  z.number().nullish(),
+  machine_cost_eur: z.number().nullish(),
+  notes:            z.string().nullish(),
+  source_tier:      z.number().int().min(1).max(5).optional(),
+})
+
+const materialBreakdownSchema = z.object({
+  material_name:     z.string(),
+  material_grade:    z.string().nullish(),
+  quantity_kg:       z.number().nullish(),
+  price_per_kg_eur:  z.number().nullish(),
+  scrap_pct:         z.number().nullish(),
+  total_cost_eur:    z.number().nullish(),
+  source_tier:       z.number().int().min(1).max(5).optional(),
+  source_ref:        z.string().nullish(),
+  notes:             z.string().nullish(),
+})
+
+const aiCostResponseSchema = z.object({
+  confidence_score:        z.number().min(0).max(100),
+  kb_coverage_pct:         z.number().min(0).max(100).optional().default(0),
+  overall_cost_eur:        z.number().min(0),
+  final_price_eur:         z.number().min(0),
+  one_time_cost_eur:       z.number().min(0).optional().default(0),
+  routing_path:            z.string().optional().default(''),
+  ai_reasoning:            z.string().optional().default(''),
+  cost_lines:              z.array(costLineSchema).optional().default([]),
+  cycle_time_steps:        z.array(cycleTimeStepSchema).optional().default([]),
+  material_breakdowns:     z.array(materialBreakdownSchema).optional().default([]),
+  assumptions:             z.array(z.object({
+    field_name:    z.string(),
+    assumed_value: z.string(),
+    impact_eur:    z.number().optional(),
+    notes:         z.string().nullish(),
+  })).optional().default([]),
+  value_engineering:       z.array(z.object({
+    suggestion: z.string(),
+    saving_eur: z.number().optional(),
+    saving_pct: z.number().optional(),
+    effort:     z.string().optional(),
+    category:   z.string().optional(),
+    notes:      z.string().nullish(),
+  })).optional().default([]),
+  clarification_questions: z.array(z.string()).optional().default([]),
+})
 
 // ─── Source-tier coercion helper ─────────────────────────────────────────────
 // Coerce instead of throw: if the AI omits or returns an invalid source_tier,
@@ -388,8 +456,14 @@ Required JSON structure:
     request: { systemPrompt, userPrompt, maxTokens: 8192, temperature: 0 },
   })
 
-  // ── Step 5: Parse JSON ───────────────────────────────────────────────────────
-  const aiResult = parseAIJSON<CostEstimateResult & { clarification_questions?: string[] }>(rawText)
+  // ── Step 5: Parse + validate JSON ───────────────────────────────────────────
+  const parsedRaw = parseAIJSON<Record<string, unknown>>(rawText)
+  const validated = aiCostResponseSchema.safeParse(parsedRaw)
+  if (!validated.success) {
+    console.error('[AI] costOnePart response failed schema validation', validated.error.flatten())
+    throw new Error(`AI response did not match expected schema: ${JSON.stringify(validated.error.flatten().fieldErrors)}`)
+  }
+  const aiResult = validated.data as CostEstimateResult & { clarification_questions?: string[] }
 
   // ── Step 6: Coerce source_tier on every line (invalid → tier 5) ─────────────
   for (const line of aiResult.cost_lines ?? []) {

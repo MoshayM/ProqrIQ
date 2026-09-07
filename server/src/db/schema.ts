@@ -215,7 +215,7 @@ export const cycleTimeSteps = sqliteTable('cycle_time_steps', {
   total_cost_per_part:        real('total_cost_per_part'),
   setup_difference_note:      text('setup_difference_note'),
   is_assembly_op:             integer('is_assembly_op', { mode: 'boolean' }).default(false),
-  source_tier:                integer('source_tier'),
+  source_tier:                integer('source_tier').notNull().default(5),
   source_label:               text('source_label'),
   notes:                      text('notes'),
 })
@@ -234,7 +234,7 @@ export const materialBreakdowns = sqliteTable('material_breakdowns', {
   scrap_factor:                real('scrap_factor').default(1.05),
   cost_per_part_eur:           real('cost_per_part_eur'),
   final_cost_per_part_eur:     real('final_cost_per_part_eur'),
-  source_tier:                 integer('source_tier'),
+  source_tier:                 integer('source_tier').notNull().default(5),
   source_label:                text('source_label'),
   commodity_benchmark_source:  text('commodity_benchmark_source'),
   benchmark_price_min:         real('benchmark_price_min'),
