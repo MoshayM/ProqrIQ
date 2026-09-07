@@ -427,6 +427,14 @@ router.patch('/llm-keys/:provider/enabled', async (req, res) => {
     const now = new Date().toISOString()
     await db.update(llmApiKeys).set({ enabled, updated_at: now }).where(eq(llmApiKeys.provider, provider))
     invalidateKeyCache(provider)
+    await db.insert(auditLog).values({
+      user_id:     (req as any).user?.id,
+      action:      'llm_key_toggle',
+      entity_type: 'llm_api_key',
+      entity_id:   provider,
+      details:     JSON.stringify({ provider, enabled }),
+      created_at:  now,
+    })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ success: false, error: (err as Error).message })

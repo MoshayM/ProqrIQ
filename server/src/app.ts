@@ -220,6 +220,22 @@ if (NODE_ENV === 'production') {
   app.use('/api', apiLimiter)
 }
 
+// ─── Tight auth rate limiter: active in all environments ──────────────────────
+const authLimiter = rateLimit({
+  windowMs:        15 * 60 * 1000,
+  max:             10,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message: {
+    success:    false,
+    error:      'Too many login attempts. Please try again in 15 minutes.',
+    error_code: 'AUTH_RATE_LIMITED',
+  },
+})
+// Applied only to login/register — not passkeys or token refresh
+app.use('/api/auth/login',    authLimiter)
+app.use('/api/auth/register', authLimiter)
+
 // ─── Health check (no auth, no rate limit) ────────────────────────────────────
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' })

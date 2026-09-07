@@ -666,6 +666,14 @@ Output ONLY valid JSON. No markdown fences. No preamble. No trailing text.
     // If a supplier_quote_id is provided, persist the extracted lines to DB so
     // the compare endpoint can find them without a separate save step.
     if (supplier_quote_id) {
+      await db.insert(auditLog).values({
+        user_id:     req.user!.id,
+        action:      'supplier_quote_lines_replace',
+        entity_type: 'supplier_quote',
+        entity_id:   supplier_quote_id,
+        details:     JSON.stringify({ line_count: lines.length }),
+        created_at:  new Date().toISOString(),
+      })
       await db.delete(supplierQuoteLines).where(eq(supplierQuoteLines.supplier_quote_id, supplier_quote_id))
       if (lines.length > 0) {
         await db.insert(supplierQuoteLines).values(

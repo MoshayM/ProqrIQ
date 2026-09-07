@@ -558,6 +558,17 @@ router.delete('/organization/members/:id', requireAuth, requirePlan('organizatio
       return
     }
 
+    // Verify caller owns the organization this member belongs to
+    const orgRows = await db
+      .select({ owner_id: organizations.owner_id })
+      .from(organizations)
+      .where(eq(organizations.id, memberRows[0].org_id!))
+      .limit(1)
+    if (!orgRows[0] || orgRows[0].owner_id !== userId) {
+      res.status(403).json({ success: false, error: 'Forbidden', error_code: 'FORBIDDEN' })
+      return
+    }
+
     await db.delete(organizationMembers).where(eq(organizationMembers.id, memberId))
 
     await db.insert(auditLog).values({

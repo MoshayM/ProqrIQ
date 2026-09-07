@@ -3,6 +3,7 @@ import type { InValue } from '@libsql/client'
 import { requireAuth, requireRole } from '../middleware/auth'
 import { db, client } from '../db'
 import { auditLog } from '../db/schema'
+import { z } from 'zod'
 
 export const router = Router()
 
@@ -274,10 +275,21 @@ router.get('/analytics/subscriptions', requireAuth, requireRole(ADMIN_ROLES), as
 
 // ─── PATCH /api/admin/analytics/subscriptions/:userId ────────────────────────
 
+const subscriptionPatchSchema = z.object({
+  plan:               z.enum(['free', 'pro', 'organization']).optional(),
+  status:             z.enum(['active', 'trialing', 'past_due', 'canceled', 'inactive']).optional(),
+  billing_cycle:      z.enum(['monthly', 'annual']).optional(),
+  current_period_end: z.string().datetime({ offset: true }).optional(),
+})
+
 router.patch('/analytics/subscriptions/:userId', requireAuth, requireRole(ADMIN_ROLES), async (req: Request, res: Response) => {
   try {
     const { userId } = req.params
-    const { plan, status, billing_cycle, current_period_end } = req.body
+    const parsed = subscriptionPatchSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: 'Invalid subscription fields', details: parsed.error.flatten() })
+    }
+    const { plan, status, billing_cycle, current_period_end } = parsed.data
 
     const existing = await client.execute({
       sql: 'SELECT id FROM subscriptions WHERE user_id = ?',

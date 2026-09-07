@@ -41,8 +41,8 @@ router.post('/register', async (req: Request, res: Response) => {
     if (!email || !password || !full_name) {
       return res.status(400).json({ success: false, error: 'email, password, and full_name are required', error_code: 'MISSING_FIELDS' })
     }
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters', error_code: 'WEAK_PASSWORD' })
+    if (password.length < 12) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 12 characters', error_code: 'WEAK_PASSWORD' })
     }
 
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email))
