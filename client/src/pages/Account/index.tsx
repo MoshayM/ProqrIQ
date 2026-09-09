@@ -868,14 +868,14 @@ export default function Account() {
 
       {/* Tab bar */}
       {tabs.length > 1 && (
-        <div className="bg-white border-b border-[#e5e8ef] px-8">
-          <nav className="relative flex gap-0.5 -mb-px">
+        <div className="bg-white border-b border-[#e5e8ef] px-4 sm:px-8">
+          <nav className="relative flex gap-0.5 -mb-px overflow-x-auto scrollbar-none">
             {tabs.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setSearchParams({ tab: id })}
                 className={cn(
-                  'relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap',
+                  'relative flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap shrink-0',
                   activeTab === id ? 'text-[#0f1729]' : 'text-[#9aa3b2] hover:text-[#4a5568]',
                 )}
               >
