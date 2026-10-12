@@ -20,9 +20,9 @@
     "test:report": "playwright show-report"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.64.0",
     "concurrently": "^8.2.2",
-    "drizzle-kit": "^0.27.0",
-    "tsx": "^4.19.0"
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15"
   }
 }
